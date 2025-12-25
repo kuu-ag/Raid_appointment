@@ -20,8 +20,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "";
 const RAID_OPTIONS = [
   { key: "deregie", label: "디레지에" },
   { key: "inaehyang", label: "이내향혼전" },
-  { key: "ozma", label: "오즈마" },
-  { key: "bakal", label: "바칼" },
+  { key: "ozma", label: "인공신-나벨" },
   { key: "custom1", label: "레이드1" },
   { key: "custom2", label: "레이드2" },
 ];
