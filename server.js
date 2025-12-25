@@ -12,7 +12,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Render/Node 환경
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
 
@@ -20,7 +19,8 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "";
 const RAID_OPTIONS = [
   { key: "deregie", label: "디레지에" },
   { key: "inaehyang", label: "이내향혼전" },
-  { key: "ozma", label: "인공신-나벨" },
+  { key: "ozma", label: "오즈마" },
+  { key: "bakal", label: "바칼" },
   { key: "custom1", label: "레이드1" },
   { key: "custom2", label: "레이드2" },
 ];
@@ -43,7 +43,6 @@ function esc(s) {
 }
 
 function todayKST() {
-  // KST(+09:00) 날짜(YYYY-MM-DD)
   const d = new Date();
   const utc = d.getTime() + d.getTimezoneOffset() * 60000;
   const kst = new Date(utc + 9 * 60 * 60000);
@@ -71,10 +70,11 @@ function layout(innerHtml, title = "DEVON RAID") {
     .btn:hover{filter:brightness(1.08)}
     .btnDanger{background:#3a1630;border-color:rgba(255,255,255,.14)}
     .btnGhost{background:transparent}
-    input,select{background:#0e1530;border:1px solid rgba(255,255,255,.16);color:#eaf0ff;border-radius:12px;padding:10px 12px;outline:none}
-    input::placeholder{color:rgba(234,240,255,.55)}
+    input,select,textarea{background:#0e1530;border:1px solid rgba(255,255,255,.16);color:#eaf0ff;border-radius:12px;padding:10px 12px;outline:none}
+    input::placeholder, textarea::placeholder{color:rgba(234,240,255,.55)}
+    textarea{resize:vertical}
     table{width:100%;border-collapse:collapse;margin-top:12px}
-    th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left;font-size:14px}
+    th,td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 8px;text-align:left;font-size:14px;vertical-align:top}
     th{color:rgba(234,240,255,.85);font-weight:700}
     .center{text-align:center}
     .muted{color:rgba(234,240,255,.7)}
@@ -84,6 +84,8 @@ function layout(innerHtml, title = "DEVON RAID") {
     .wait{color:#ffd27a}
     .bad{color:#ff8aa0}
     .divider{height:1px;background:rgba(255,255,255,.08);margin:14px 0}
+    .commentBox{min-width:220px;width:100%;max-width:360px}
+    .miniBtn{padding:8px 10px;border-radius:10px;font-size:13px}
   </style>
   <script>
     function submitOnChange(formId){ document.getElementById(formId).submit(); }
@@ -95,10 +97,6 @@ function layout(innerHtml, title = "DEVON RAID") {
       <div class="row">
         <div style="font-weight:800;letter-spacing:.6px">DEVON RAID</div>
         <span class="chip">KST ${esc(todayKST())}</span>
-      </div>
-      <div class="row">
-        <a class="btn btnGhost" href="/">시청자</a>
-        <a class="btn btnGhost" href="/admin">스트리머</a>
       </div>
     </div>
 
@@ -115,7 +113,7 @@ function layout(innerHtml, title = "DEVON RAID") {
 // ====== DB ======
 const db = new Database("data.sqlite");
 
-// 테이블 생성(없으면 자동 생성)
+// 테이블 생성
 db.exec(`
   CREATE TABLE IF NOT EXISTS day_codes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,11 +142,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_apps_date_raid ON applications(date_kst, raid_key);
 `);
 
+// ✅ DB 마이그레이션: comment 컬럼이 없으면 추가
+function ensureCommentColumn() {
+  const cols = db.prepare("PRAGMA table_info(applications)").all();
+  const hasComment = cols.some(c => String(c.name) === "comment");
+  if (!hasComment) {
+    db.exec(`ALTER TABLE applications ADD COLUMN comment TEXT NOT NULL DEFAULT ''`);
+  }
+}
+ensureCommentColumn();
+
 // ====== 관리자 인증 ======
 function requireAdmin(req, res, next) {
   const key = req.cookies.admin_key || "";
   if (!ADMIN_KEY) {
-    // 운영자가 환경변수 미설정한 경우
     return res.status(500).send(layout(`<div class="box">
       <div class="bad"><b>ADMIN_KEY</b>가 설정되지 않았습니다.</div>
       <div class="hint">Render Environment Variables에 ADMIN_KEY를 넣어주세요.</div>
@@ -227,7 +234,6 @@ app.post("/key", (req, res) => {
     `, "인증 실패"));
   }
 
-  // 인증 통과: cookie 저장(오늘/해당 레이드에 대해서만)
   res.cookie(`viewer_ok_${raid}_${todayKST()}`, "1", {
     httpOnly: true,
     sameSite: "lax",
@@ -261,7 +267,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           <h2 style="margin:0;">예약 신청</h2>
           <div class="muted"><b>${esc(raidObj.label)}</b> / ${esc(todayKST())}</div>
         </div>
-        <a class="btn btnGhost" href="/?">처음으로</a>
+        <a class="btn btnGhost" href="/">처음으로</a>
       </div>
 
       <div class="divider"></div>
@@ -289,7 +295,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
       </form>
 
       <div class="hint">
-        - 신청 후에는 스트리머가 수기로 배치하며, 확인되면 “등록완료”로 표시됩니다.
+        - 신청 후에는 스트리머가 수기로 배치하며, 확인되면 “등록완료”와 코멘트가 표시됩니다.
       </div>
     </div>
   `, "예약 신청"));
@@ -313,11 +319,10 @@ app.post("/reserve", requireViewerOk, (req, res) => {
 
   const info = db.prepare(`
     INSERT INTO applications
-    (date_kst, raid_key, chzzk_nickname, viewer_grade, adventure_name, dealer_count, buffer_count, confirmed, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+    (date_kst, raid_key, chzzk_nickname, viewer_grade, adventure_name, dealer_count, buffer_count, confirmed, comment, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, '', ?)
   `).run(todayKST(), raid, chzzk, grade, adv, dealer, buffer, Date.now());
 
-  // 시청자가 자기 상태를 쉽게 볼 수 있게 id 저장(쿠키)
   res.cookie(`viewer_last_id_${raid}_${todayKST()}`, String(info.lastInsertRowid), {
     httpOnly: true,
     sameSite: "lax",
@@ -334,8 +339,9 @@ app.get("/done", (req, res) => {
   const raidObj = RAID_OPTIONS.find(r => r.key === raid);
   if (!raidObj || !Number.isInteger(id)) return res.redirect("/");
 
-  const row = db.prepare("SELECT confirmed FROM applications WHERE id=?").get(id);
+  const row = db.prepare("SELECT confirmed, comment FROM applications WHERE id=?").get(id);
   const confirmed = row?.confirmed === 1;
+  const comment = String(row?.comment || "").trim();
 
   res.send(layout(`
     <div class="box">
@@ -344,14 +350,23 @@ app.get("/done", (req, res) => {
 
       <div class="divider"></div>
 
-      <div class="row">
+      <div class="row" style="margin-bottom:10px">
         <span class="chip">${confirmed ? `✅ <span class="ok">등록완료</span>` : `⏳ <span class="wait">대기중</span>`}</span>
-        <a class="btn" href="/status?raid=${encodeURIComponent(raid)}&id=${encodeURIComponent(id)}">내 신청 상태 보기</a>
-        <a class="btn btnGhost" href="/">처음으로</a>
       </div>
 
-      <div class="hint">
-        - 등록완료는 스트리머가 확인 처리한 경우에만 표시됩니다.
+      <div class="row" style="margin-bottom:10px">
+        <span class="chip">💬 스트리머 코멘트</span>
+      </div>
+
+      <div class="box" style="background:#0e1530;border-radius:12px;border:1px solid rgba(255,255,255,.10);">
+        ${comment ? esc(comment) : `<span class="muted">아직 코멘트가 없습니다.</span>`}
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row">
+        <a class="btn" href="/status?raid=${encodeURIComponent(raid)}&id=${encodeURIComponent(id)}">내 신청 상태 보기</a>
+        <a class="btn btnGhost" href="/">처음으로</a>
       </div>
     </div>
   `, "완료"));
@@ -380,6 +395,7 @@ app.get("/status", (req, res) => {
 
   const gradeLabel = GRADE_OPTIONS.find(g => g.key === a.viewer_grade)?.label || a.viewer_grade;
   const confirmed = a.confirmed === 1;
+  const comment = String(a.comment || "").trim();
 
   res.send(layout(`
     <div class="box">
@@ -400,6 +416,15 @@ app.get("/status", (req, res) => {
       </table>
 
       <div class="divider"></div>
+
+      <div class="row" style="margin-bottom:10px">
+        <span class="chip">💬 스트리머 코멘트</span>
+      </div>
+      <div class="box" style="background:#0e1530;border-radius:12px;border:1px solid rgba(255,255,255,.10);">
+        ${comment ? esc(comment) : `<span class="muted">아직 코멘트가 없습니다.</span>`}
+      </div>
+
+      <div class="divider"></div>
       <a class="btn" href="/">처음으로</a>
     </div>
   `, "상태"));
@@ -407,7 +432,6 @@ app.get("/status", (req, res) => {
 
 // ====== 관리자(스트리머) ======
 app.get("/admin", (req, res) => {
-  // 로그인 되어 있으면 레이드 선택으로
   const key = req.cookies.admin_key || "";
   if (ADMIN_KEY && key === ADMIN_KEY) return res.redirect("/admin/raid");
   return res.redirect("/admin/login");
@@ -529,7 +553,6 @@ app.get("/admin/list", requireAdmin, (req, res) => {
 
   let apps = [];
   if (sort === "grade") {
-    // 등급 정렬: 불타는 → 분홍 → 노란 → 일반 (동일 등급이면 오래된 순)
     const orderCase = `
       CASE viewer_grade
         WHEN 'burning' THEN 1
@@ -563,7 +586,6 @@ app.get("/admin/list", requireAdmin, (req, res) => {
           <div class="row">
             <a class="btn" href="/admin/raid">레이드 변경</a>
 
-            <!-- ✅ 일괄삭제 버튼 -->
             <form method="POST" action="/admin/clear"
                   onsubmit="return confirm('정말 이 레이드의 오늘 신청목록을 전부 삭제할까요? (되돌릴 수 없음)');"
                   style="margin:0;">
@@ -586,6 +608,7 @@ app.get("/admin/list", requireAdmin, (req, res) => {
             <th>모험단 이름</th>
             <th>딜러</th>
             <th>버퍼</th>
+            <th>코멘트</th>
             <th class="center">삭제</th>
           </tr>
 
@@ -597,6 +620,7 @@ app.get("/admin/list", requireAdmin, (req, res) => {
                     const checked = a.confirmed === 1 ? "checked" : "";
                     const gradeLabel =
                       GRADE_OPTIONS.find(g => g.key === a.viewer_grade)?.label || a.viewer_grade;
+                    const commentVal = String(a.comment || "");
 
                     return `
                       <tr>
@@ -614,6 +638,19 @@ app.get("/admin/list", requireAdmin, (req, res) => {
                         <td>${esc(a.adventure_name)}</td>
                         <td>${esc(a.dealer_count)}</td>
                         <td>${esc(a.buffer_count)}</td>
+
+                        <!-- ✅ 코멘트 칸 -->
+                        <td>
+                          <form method="POST" action="/admin/comment" style="margin:0;" class="row">
+                            <input type="hidden" name="id" value="${esc(a.id)}"/>
+                            <input type="hidden" name="raid" value="${esc(raid)}"/>
+                            <input type="hidden" name="sort" value="${esc(sort)}"/>
+                            <input class="commentBox" name="comment" placeholder="예) 3회차 가능 / 9딜 꽉참 / 디코 부탁"
+                                   value="${esc(commentVal)}"/>
+                            <button class="btn miniBtn" type="submit">저장</button>
+                          </form>
+                        </td>
+
                         <td class="center">
                           <form method="POST" action="/admin/delete"
                                 onsubmit="return confirm('정말 삭제하시겠습니까?');"
@@ -621,21 +658,21 @@ app.get("/admin/list", requireAdmin, (req, res) => {
                             <input type="hidden" name="id" value="${esc(a.id)}"/>
                             <input type="hidden" name="raid" value="${esc(raid)}"/>
                             <input type="hidden" name="sort" value="${esc(sort)}"/>
-                            <button class="btn btnDanger" type="submit">삭제</button>
+                            <button class="btn btnDanger miniBtn" type="submit">삭제</button>
                           </form>
                         </td>
                       </tr>
                     `;
                   })
                   .join("")
-              : `<tr><td colspan="7" style="text-align:center;color:#aab5ff;">오늘 신청이 없습니다.</td></tr>`
+              : `<tr><td colspan="8" style="text-align:center;color:#aab5ff;">오늘 신청이 없습니다.</td></tr>`
           }
         </table>
 
         <div class="hint">
           - 등록완료 체크는 “확인했음” 표시이며 시청자 화면에도 ✅ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - “시청자 등급” 클릭 시: 불타는 치즈 → 분홍색 치즈 → 노란색 치즈 → 일반 등급 정렬 (다시 클릭하면 시간순).<br/>
-          - “삭제”는 관리자만 가능하며 확인 후 즉시 제거됩니다.<br/>
+          - “코멘트”는 예약자에게 남기는 메모이며 시청자가 자기 상태 화면에서 확인할 수 있습니다.<br/>
           - “신청목록 일괄삭제”는 현재 선택한 레이드의 오늘 신청만 전부 삭제합니다.
         </div>
       </div>
@@ -660,7 +697,24 @@ app.post("/admin/confirm", requireAdmin, (req, res) => {
   return res.redirect("/admin/raid");
 });
 
-// ✅ 개별 삭제 유지
+// ✅ 코멘트 저장
+app.post("/admin/comment", requireAdmin, (req, res) => {
+  const id = Number(req.body.id);
+  const raid = String(req.body.raid || "");
+  const sort = String(req.body.sort || "time");
+  const comment = String(req.body.comment || "").slice(0, 200); // 200자 제한(안전)
+
+  if (Number.isInteger(id)) {
+    db.prepare("UPDATE applications SET comment=? WHERE id=?").run(comment, id);
+  }
+
+  if (RAID_OPTIONS.some(r => r.key === raid)) {
+    return res.redirect(`/admin/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  }
+  return res.redirect("/admin/raid");
+});
+
+// ✅ 개별 삭제
 app.post("/admin/delete", requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -676,7 +730,7 @@ app.post("/admin/delete", requireAdmin, (req, res) => {
   return res.redirect("/admin/raid");
 });
 
-// ✅ 일괄 삭제 (현재 레이드/오늘 신청 전부 삭제)
+// ✅ 일괄 삭제(오늘/선택 레이드)
 app.post("/admin/clear", requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "time");
@@ -690,7 +744,7 @@ app.post("/admin/clear", requireAdmin, (req, res) => {
   return res.redirect(`/admin/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
-// ====== 헬스체크 ======
+// 헬스체크
 app.get("/health", (req, res) => res.json({ ok: true, kst: todayKST() }));
 
 app.listen(PORT, "0.0.0.0", () => {
