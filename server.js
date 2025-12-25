@@ -208,7 +208,7 @@ app.get("/reserve", requireViewer, (req, res) => {
   const raidObj = RAID_OPTIONS.find(r => r.key === raid);
   if (!raidObj) return res.redirect("/raid");
 
-  // ✅ confirmed 포함해서 가져오기
+  //  confirmed 포함해서 가져오기
   const apps = db.prepare(`
     SELECT viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed
     FROM applications
@@ -483,7 +483,7 @@ app.get("/admin/list", requireAdmin, (req, res) => {
   `));
 });
 
-// ✅ 등록완료 토글 (시청자 화면 상태 표시와 연동됨)
+// 등록완료 토글 (시청자 화면 상태 표시와 연동됨)
 app.post("/admin/confirm", requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -518,4 +518,23 @@ app.post("/admin/delete", requireAdmin, (req, res) => {
 
 app.listen(PORT, () => {
   console.log("Server running on http://localhost:" + PORT);
+});
+
+// 어드민: 특정 레이드 신청목록 "일괄 삭제"
+app.delete("/api/admin/reservations", (req, res) => {
+  const adminKey = req.headers["x-admin-key"];
+  if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ ok: false, message: "Unauthorized" });
+  }
+
+  const raid = req.query.raid;
+  if (!raid) {
+    return res.status(400).json({ ok: false, message: "raid is required" });
+  }
+
+  const before = reservations.length;
+  reservations = reservations.filter((r) => r.raid !== raid);
+  const deleted = before - reservations.length;
+
+  return res.json({ ok: true, deleted });
 });
