@@ -10,6 +10,7 @@ dotenv.config();
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json()); // ✅ API용 JSON 파싱 (추가)
 app.use(cookieParser());
 
 const PORT = Number(process.env.PORT || 3000);
@@ -49,7 +50,9 @@ function ensureConfirmedColumn() {
   const cols = db.prepare(`PRAGMA table_info(applications)`).all();
   const hasConfirmed = cols.some((c) => c.name === "confirmed");
   if (!hasConfirmed) {
-    db.exec(`ALTER TABLE applications ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0;`);
+    db.exec(
+      `ALTER TABLE applications ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 0;`
+    );
   }
 }
 ensureConfirmedColumn();
@@ -58,21 +61,21 @@ const RAID_OPTIONS = [
   { key: "diregie", label: "디레지에" },
   { key: "twilight", label: "이내황혼전" },
   { key: "nabel", label: "인공신: 나벨" },
-  { key: "mist", label: "안개신" }
+  { key: "mist", label: "안개신" },
 ];
 
 const GRADE_OPTIONS = [
   { key: "FIRE", label: "불타는 치즈" },
   { key: "PINK", label: "분홍색 치즈" },
   { key: "YELLOW", label: "노란색 치즈" },
-  { key: "NORMAL", label: "일반 등급" }
+  { key: "NORMAL", label: "일반 등급" },
 ];
 
 const GRADE_PRIORITY = {
   FIRE: 1,
   PINK: 2,
   YELLOW: 3,
-  NORMAL: 4
+  NORMAL: 4,
 };
 
 function todayKST() {
@@ -148,15 +151,18 @@ function requireAdmin(req, res, next) {
 ========================= */
 
 app.get("/", (req, res) => {
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <a class="btn" href="/auth">시작</a>
     </div>
-  `));
+  `)
+  );
 });
 
 app.get("/auth", (req, res) => {
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <form method="POST" action="/auth">
         <div class="row">
@@ -167,11 +173,14 @@ app.get("/auth", (req, res) => {
       </form>
       <div class="hint">시청자가 인증에 필요한 인증키 등록</div>
     </div>
-  `));
+  `)
+  );
 });
 
 app.post("/auth", (req, res) => {
-  const row = db.prepare("SELECT code_hash FROM access_codes WHERE date=?").get(todayKST());
+  const row = db
+    .prepare("SELECT code_hash FROM access_codes WHERE date=?")
+    .get(todayKST());
   const code = String(req.body.code || "");
   if (!row || !bcrypt.compareSync(code, row.code_hash)) {
     return res.redirect("/auth");
@@ -181,42 +190,50 @@ app.post("/auth", (req, res) => {
 });
 
 app.get("/raid", requireViewer, (req, res) => {
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <div class="row">
-        ${RAID_OPTIONS.map(r => `
+        ${RAID_OPTIONS.map(
+          (r) => `
           <form method="POST" action="/raid" style="display:inline;">
             <input type="hidden" name="raid" value="${esc(r.key)}"/>
             <button class="btn" type="submit">${esc(r.label)}</button>
           </form>
-        `).join("")}
+        `
+        ).join("")}
       </div>
       <div class="hint">&lt;4개중 하나를 선택해서 다음으로 진행&gt;</div>
     </div>
-  `));
+  `)
+  );
 });
 
 app.post("/raid", requireViewer, (req, res) => {
   const raid = String(req.body.raid || "");
-  if (!RAID_OPTIONS.some(r => r.key === raid)) return res.redirect("/raid");
+  if (!RAID_OPTIONS.some((r) => r.key === raid)) return res.redirect("/raid");
   res.cookie("raid", raid, { httpOnly: true, sameSite: "lax" });
   return res.redirect("/reserve");
 });
 
 app.get("/reserve", requireViewer, (req, res) => {
   const raid = req.cookies.raid;
-  const raidObj = RAID_OPTIONS.find(r => r.key === raid);
+  const raidObj = RAID_OPTIONS.find((r) => r.key === raid);
   if (!raidObj) return res.redirect("/raid");
 
-  //  confirmed 포함해서 가져오기
-  const apps = db.prepare(`
+  const apps = db
+    .prepare(
+      `
     SELECT viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed
     FROM applications
     WHERE date=? AND raid=?
     ORDER BY id DESC
-  `).all(todayKST(), raid);
+  `
+    )
+    .all(todayKST(), raid);
 
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <div class="hint">
         선택 레이드: <b>${esc(raidObj.label)}</b> / 시청자가 등록한 내용을 볼 수 있음.<br/>
@@ -228,21 +245,31 @@ app.get("/reserve", requireViewer, (req, res) => {
           <th class="center">상태</th>
           <th>시청자 등급</th><th>치지직 닉</th><th>모험단</th><th>딜러</th><th>버퍼</th>
         </tr>
-        ${apps.length ? apps.map(a => {
-          const status = a.confirmed === 1
-            ? `<span class="ok">✅ 등록완료</span>`
-            : `⏳ 대기중`;
-          return `
+        ${
+          apps.length
+            ? apps
+                .map((a) => {
+                  const status =
+                    a.confirmed === 1
+                      ? `<span class="ok">✅ 등록완료</span>`
+                      : `⏳ 대기중`;
+                  return `
             <tr>
               <td class="center">${status}</td>
-              <td>${esc(GRADE_OPTIONS.find(g=>g.key===a.viewer_grade)?.label || a.viewer_grade)}</td>
+              <td>${esc(
+                GRADE_OPTIONS.find((g) => g.key === a.viewer_grade)?.label ||
+                  a.viewer_grade
+              )}</td>
               <td>${esc(a.chzzk_nickname)}</td>
               <td>${esc(a.adventure_name)}</td>
               <td>${esc(a.dealer_count)}</td>
               <td>${esc(a.buffer_count)}</td>
             </tr>
           `;
-        }).join("") : `<tr><td colspan="6" style="text-align:center;color:#666;">아직 신청이 없습니다.</td></tr>`}
+                })
+                .join("")
+            : `<tr><td colspan="6" style="text-align:center;color:#666;">아직 신청이 없습니다.</td></tr>`
+        }
       </table>
     </div>
 
@@ -251,7 +278,9 @@ app.get("/reserve", requireViewer, (req, res) => {
         <div class="row">
           <div style="min-width:110px;">시청자 등급</div>
           <select name="viewer_grade" required>
-            ${GRADE_OPTIONS.map(g=>`<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
+            ${GRADE_OPTIONS.map(
+              (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
+            ).join("")}
           </select>
         </div>
 
@@ -283,12 +312,13 @@ app.get("/reserve", requireViewer, (req, res) => {
 
       <div class="hint">※ 회차/배정 결과는 표시되지 않습니다. 배치는 스트리머가 수기로 진행합니다.</div>
     </div>
-  `));
+  `)
+  );
 });
 
 app.post("/reserve", requireViewer, (req, res) => {
   const raid = req.cookies.raid;
-  if (!RAID_OPTIONS.some(r => r.key === raid)) return res.redirect("/raid");
+  if (!RAID_OPTIONS.some((r) => r.key === raid)) return res.redirect("/raid");
 
   const viewer_grade = String(req.body.viewer_grade || "");
   const chzzk = String(req.body.chzzk_nickname || "").trim();
@@ -296,17 +326,20 @@ app.post("/reserve", requireViewer, (req, res) => {
   const dealer = Number(req.body.dealer_count);
   const buffer = Number(req.body.buffer_count);
 
-  if (!GRADE_OPTIONS.some(g => g.key === viewer_grade)) return res.redirect("/reserve");
+  if (!GRADE_OPTIONS.some((g) => g.key === viewer_grade))
+    return res.redirect("/reserve");
   if (!chzzk || !adv) return res.redirect("/reserve");
   if (!Number.isInteger(dealer) || dealer < 0) return res.redirect("/reserve");
   if (!Number.isInteger(buffer) || buffer < 0) return res.redirect("/reserve");
 
   try {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO applications
       (date, raid, viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, created_at, confirmed)
       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), 0)
-    `).run(todayKST(), raid, viewer_grade, chzzk, adv, dealer, buffer);
+    `
+    ).run(todayKST(), raid, viewer_grade, chzzk, adv, dealer, buffer);
   } catch {}
 
   return res.redirect("/reserve");
@@ -317,7 +350,8 @@ app.post("/reserve", requireViewer, (req, res) => {
 ========================= */
 
 app.get("/admin", (req, res) => {
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <form method="POST" action="/admin">
         <div class="row">
@@ -328,7 +362,8 @@ app.get("/admin", (req, res) => {
       </form>
       <div class="hint">※ 로그인 대신 관리자 키로 보호됩니다.</div>
     </div>
-  `));
+  `)
+  );
 });
 
 app.post("/admin", (req, res) => {
@@ -340,7 +375,8 @@ app.post("/admin", (req, res) => {
 });
 
 app.get("/admin/code", requireAdmin, (req, res) => {
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <form method="POST" action="/admin/code">
         <div class="row">
@@ -352,52 +388,63 @@ app.get("/admin/code", requireAdmin, (req, res) => {
       </form>
       <div class="hint">시청자가 인증에 필요한 인증키 등록</div>
     </div>
-  `));
+  `)
+  );
 });
 
 app.post("/admin/code", requireAdmin, (req, res) => {
   const hash = bcrypt.hashSync(String(req.body.code || ""), 10);
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO access_codes(date, code_hash, updated_at)
     VALUES (?, ?, datetime('now'))
     ON CONFLICT(date) DO UPDATE SET code_hash=excluded.code_hash, updated_at=excluded.updated_at
-  `).run(todayKST(), hash);
+  `
+  ).run(todayKST(), hash);
 
   return res.redirect("/admin/code");
 });
 
 app.get("/admin/raid", requireAdmin, (req, res) => {
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <div class="row">
-        ${RAID_OPTIONS.map(r => `
+        ${RAID_OPTIONS.map(
+          (r) => `
           <form method="GET" action="/admin/list" style="display:inline;">
             <input type="hidden" name="raid" value="${esc(r.key)}"/>
             <button class="btn" type="submit">${esc(r.label)}</button>
           </form>
-        `).join("")}
+        `
+        ).join("")}
       </div>
       <div class="hint">관리할 레이드를 선택하세요.</div>
       <div style="margin-top:12px;">
         <a class="btn" href="/admin/code">← 인증키 화면</a>
       </div>
     </div>
-  `));
+  `)
+  );
 });
 
 app.get("/admin/list", requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
-  const raidObj = RAID_OPTIONS.find(r => r.key === raid);
+  const raidObj = RAID_OPTIONS.find((r) => r.key === raid);
   if (!raidObj) return res.redirect("/admin/raid");
 
   const sort = String(req.query.sort || "time"); // time | grade
 
-  let apps = db.prepare(`
+  let apps = db
+    .prepare(
+      `
     SELECT id, viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed
     FROM applications
     WHERE date=? AND raid=?
     ORDER BY id DESC
-  `).all(todayKST(), raid);
+  `
+    )
+    .all(todayKST(), raid);
 
   if (sort === "grade") {
     apps.sort((a, b) => {
@@ -413,12 +460,15 @@ app.get("/admin/list", requireAdmin, (req, res) => {
       ? `/admin/list?raid=${encodeURIComponent(raid)}&sort=time`
       : `/admin/list?raid=${encodeURIComponent(raid)}&sort=grade`;
 
-  res.send(layout(`
+  res.send(
+    layout(`
     <div class="box">
       <div class="row" style="justify-content:space-between;">
         <div>
           <b>레이드:</b> ${esc(raidObj.label)} / <b>날짜:</b> ${esc(todayKST())}
-          <span class="chip">등록완료: ${apps.filter(a=>a.confirmed===1).length}/${apps.length}</span>
+          <span class="chip">등록완료: ${
+            apps.filter((a) => a.confirmed === 1).length
+          }/${apps.length}</span>
         </div>
         <div class="row">
           <a class="btn" href="/admin/raid">레이드 변경</a>
@@ -440,21 +490,29 @@ app.get("/admin/list", requireAdmin, (req, res) => {
           <th class="center">삭제</th>
         </tr>
 
-        ${apps.length ? apps.map(a => {
-          const formId = `confirmForm_${a.id}`;
-          const checked = a.confirmed === 1 ? "checked" : "";
-          return `
+        ${
+          apps.length
+            ? apps
+                .map((a) => {
+                  const formId = `confirmForm_${a.id}`;
+                  const checked = a.confirmed === 1 ? "checked" : "";
+                  return `
             <tr>
               <td class="center">
                 <form id="${formId}" method="POST" action="/admin/confirm" style="margin:0;">
                   <input type="hidden" name="id" value="${esc(a.id)}"/>
                   <input type="hidden" name="raid" value="${esc(raid)}"/>
                   <input type="hidden" name="sort" value="${esc(sort)}"/>
-                  <input type="hidden" name="confirmed" value="${a.confirmed === 1 ? "0" : "1"}"/>
+                  <input type="hidden" name="confirmed" value="${
+                    a.confirmed === 1 ? "0" : "1"
+                  }"/>
                   <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
                 </form>
               </td>
-              <td>${esc(GRADE_OPTIONS.find(g=>g.key===a.viewer_grade)?.label || a.viewer_grade)}</td>
+              <td>${esc(
+                GRADE_OPTIONS.find((g) => g.key === a.viewer_grade)?.label ||
+                  a.viewer_grade
+              )}</td>
               <td>${esc(a.chzzk_nickname)}</td>
               <td>${esc(a.adventure_name)}</td>
               <td>${esc(a.dealer_count)}</td>
@@ -471,7 +529,10 @@ app.get("/admin/list", requireAdmin, (req, res) => {
               </td>
             </tr>
           `;
-        }).join("") : `<tr><td colspan="7" style="text-align:center;color:#666;">오늘 신청이 없습니다.</td></tr>`}
+                })
+                .join("")
+            : `<tr><td colspan="7" style="text-align:center;color:#666;">오늘 신청이 없습니다.</td></tr>`
+        }
       </table>
 
       <div class="hint">
@@ -480,10 +541,11 @@ app.get("/admin/list", requireAdmin, (req, res) => {
         - “삭제”는 관리자만 가능하며 확인 후 즉시 제거됩니다.
       </div>
     </div>
-  `));
+  `)
+  );
 });
 
-// 등록완료 토글 (시청자 화면 상태 표시와 연동됨)
+// 등록완료 토글
 app.post("/admin/confirm", requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -491,16 +553,23 @@ app.post("/admin/confirm", requireAdmin, (req, res) => {
   const confirmed = String(req.body.confirmed || "0") === "1" ? 1 : 0;
 
   if (Number.isInteger(id)) {
-    db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(confirmed, id);
+    db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(
+      confirmed,
+      id
+    );
   }
 
-  if (RAID_OPTIONS.some(r => r.key === raid)) {
-    return res.redirect(`/admin/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  if (RAID_OPTIONS.some((r) => r.key === raid)) {
+    return res.redirect(
+      `/admin/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(
+        sort
+      )}`
+    );
   }
   return res.redirect("/admin/raid");
 });
 
-// ✅ 삭제 유지
+// 개별 삭제
 app.post("/admin/delete", requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -510,31 +579,44 @@ app.post("/admin/delete", requireAdmin, (req, res) => {
     db.prepare("DELETE FROM applications WHERE id=?").run(id);
   }
 
-  if (RAID_OPTIONS.some(r => r.key === raid)) {
-    return res.redirect(`/admin/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  if (RAID_OPTIONS.some((r) => r.key === raid)) {
+    return res.redirect(
+      `/admin/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(
+        sort
+      )}`
+    );
   }
   return res.redirect("/admin/raid");
 });
 
-app.listen(PORT, () => {
-  console.log("Server running on http://localhost:" + PORT);
-});
+/* =========================
+   ✅ Admin API: 특정 레이드 "일괄 삭제"
+   - 오늘 날짜 + raid 기준으로 applications에서 삭제
+   - Render 무료 플랜에서도 브라우저 fetch로 호출 가능
+========================= */
 
-// 어드민: 특정 레이드 신청목록 "일괄 삭제"
+// DELETE 그대로 써도 되지만, 일부 환경에서 호출 번거로우면 POST로 바꿔도 됨.
+// 여기선 너가 원래 쓰던 DELETE를 "정상 동작"하도록 고침.
 app.delete("/api/admin/reservations", (req, res) => {
   const adminKey = req.headers["x-admin-key"];
-  if (!process.env.ADMIN_KEY || adminKey !== process.env.ADMIN_KEY) {
+  if (!ADMIN_KEY || adminKey !== ADMIN_KEY) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
   }
 
-  const raid = req.query.raid;
-  if (!raid) {
-    return res.status(400).json({ ok: false, message: "raid is required" });
+  const raid = String(req.query.raid || "");
+  if (!raid || !RAID_OPTIONS.some((r) => r.key === raid)) {
+    return res
+      .status(400)
+      .json({ ok: false, message: "valid raid is required" });
   }
 
-  const before = reservations.length;
-  reservations = reservations.filter((r) => r.raid !== raid);
-  const deleted = before - reservations.length;
+  const info = db
+    .prepare("DELETE FROM applications WHERE date=? AND raid=?")
+    .run(todayKST(), raid);
 
-  return res.json({ ok: true, deleted });
+  return res.json({ ok: true, deleted: info.changes, date: todayKST(), raid });
+});
+
+app.listen(PORT, () => {
+  console.log("Server running on http://localhost:" + PORT);
 });
