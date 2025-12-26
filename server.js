@@ -672,8 +672,8 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
       <div class="box">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">스트리머 로그인</div>
-            <div class="muted">비밀 주소로만 접속됩니다: <b>${esc(ADMIN_BASE)}</b></div>
+            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자 로그인</div>
+            <div class="muted">관리자용 로그인화면입니다.</div>
           </div>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
