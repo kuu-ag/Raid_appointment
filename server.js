@@ -40,7 +40,7 @@ const RAID_OPTIONS = [
   { key: "nabel-hard", label: "나벨 - 하드모드" },
 ];
 
-// ✅ 등급: 기본값 "등급 선택"(빈 값) 추가
+//  등급: 기본값 "등급 선택"(빈 값) 추가
 const GRADE_OPTIONS = [
   { key: "", label: "등급 선택" }, //  기본값
   { key: "burning", label: "불타는 치즈" },
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS applications (
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
 
-  viewer_grade TEXT NOT NULL,       -- ✅ 필수
+  viewer_grade TEXT NOT NULL,       --  필수
   chzzk_nickname TEXT NOT NULL,
   adventure_name TEXT NOT NULL,
 
@@ -216,7 +216,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     }
     input::placeholder{ color: rgba(233,238,252,.45); }
 
-    /* ✅ 겹침 방지: 폼을 grid로 */
+    /* 겹침 방지: 폼을 grid로 */
     .formGrid{
       display:grid;
       grid-template-columns: 160px minmax(160px, 1fr) minmax(160px, 1fr) 140px 140px;
@@ -463,22 +463,22 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
             <div class="field">
               <label>치지직 닉네임</label>
-              <input name="chzzk_nickname" placeholder="예) 토엔" required maxlength="40"/>
+              <input name="chzzk_nickname" placeholder="치지직 닉네임" required maxlength="40"/>
             </div>
 
             <div class="field">
               <label>모험단 이름</label>
-              <input name="adventure_name" placeholder="예) 흑조군단" required maxlength="60"/>
+              <input name="adventure_name" placeholder="던파 모험단" required maxlength="60"/>
             </div>
 
             <div class="field">
               <label>딜러 갯수</label>
-              <input name="dealer_count" inputmode="numeric" placeholder="정수" required />
+              <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
             </div>
 
             <div class="field">
               <label>버퍼 갯수</label>
-              <input name="buffer_count" inputmode="numeric" placeholder="정수" required />
+              <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
             </div>
           </div>
 
@@ -502,7 +502,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  // ✅ 서버 검증: 등급 선택 필수(빈 값이면 거부)
+  // 서버 검증: 등급 선택 필수(빈 값이면 거부)
   const viewer_grade = String(req.body.viewer_grade || "");
   const chzzk_nickname = String(req.body.chzzk_nickname || "").trim();
   const adventure_name = String(req.body.adventure_name || "").trim();
@@ -629,7 +629,7 @@ app.get("/check", (req, res) => {
             apps.length
               ? apps.map(a => {
                   const status = a.confirmed === 1
-                    ? `<span class="ok">✅ 등록완료</span>`
+                    ? `<span class="ok">✔ 등록완료</span>`
                     : `<span class="wait">⏳ 대기중</span>`;
                   return `
                     <tr>
@@ -911,7 +911,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         </table>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 등록완료 체크는 시청자 화면에도 ✅ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
+          - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - 코멘트는 시청자 예약확인 화면에서도 보입니다.
         </div>
       </div>
