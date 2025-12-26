@@ -147,7 +147,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background: radial-gradient(1100px 600px at 20% 10%, #13244a 0%, var(--bg) 60%, #05070f 100%);
+      background: #070a12;
       color: var(--text);
     }
     a{ color:inherit; text-decoration:none; }
