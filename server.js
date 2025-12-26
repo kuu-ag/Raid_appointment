@@ -25,8 +25,7 @@ app.use(cookieParser());
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 
-// ✅ 기존 관리자 비밀 URL 유지
-// 기존: https://www.devonraid.xyz/devon_path_f23d12
+//  기존 관리자 비밀 URL 유지
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 
@@ -43,7 +42,7 @@ const RAID_OPTIONS = [
 
 // ✅ 등급: 기본값 "등급 선택"(빈 값) 추가
 const GRADE_OPTIONS = [
-  { key: "", label: "등급 선택" }, // ✅ 기본값
+  { key: "", label: "등급 선택" }, //  기본값
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
@@ -683,16 +682,11 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
 
         <form method="POST" action="${esc(ADMIN_BASE)}/login" class="row" style="align-items:flex-end;">
           <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">ADMIN_KEY</div>
-            <input name="key" placeholder="Render 환경변수 ADMIN_KEY" required />
+            <div class="muted" style="margin-bottom:6px;">접속 코드</div>
+            <input name="key" placeholder="관리자 접속 코드" required />
           </div>
           <button class="btn" type="submit">입장</button>
         </form>
-
-        <div class="muted" style="margin-top:12px;">
-          - /admin 은 404로 숨겨집니다.<br/>
-          - 접속 주소: https://www.devonraid.xyz${esc(ADMIN_BASE)}
-        </div>
       </div>
     `, "스트리머 로그인")
   );
