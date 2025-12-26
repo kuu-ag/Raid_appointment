@@ -350,7 +350,7 @@ app.get("/", (req, res) => {
         </div>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 한 회차 정원: 3버퍼/9딜러(총 12명), 하루 최대 20회차(수기 배치)<br/>
+          - 한 회차 정원: 3버퍼/9딜러(총 12명)<br/>
           - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
       </div>
@@ -452,7 +452,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         <form method="POST" action="/reserve">
           <input type="hidden" name="raid" value="${esc(raid)}"/>
 
-          <!-- ✅ 겹침 방지: grid -->
+          <!--  겹침 방지: grid -->
           <div class="formGrid">
             <div class="field">
               <label>시청자 등급</label>
