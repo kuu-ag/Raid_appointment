@@ -35,9 +35,10 @@ const ADMIN_BASE = "/" + ADMIN_PATH;
 // =====================
 const RAID_OPTIONS = [
   { key: "dirige", label: "디레지에" },
+  { key: "dirige-hard", label: "디레지에-악연" },
   { key: "inhwagongjeon", label: "이내향혼전" },
-  { key: "narbel", label: "인공신 : 나벨" },
-  { key: "ganesun", label: "안개신" },
+  { key: "nabel", label: "인공신 : 나벨" },
+  { key: "nabel-hard", label: "나벨 - 하드모드" },
 ];
 
 // ✅ 등급: 기본값 "등급 선택"(빈 값) 추가
