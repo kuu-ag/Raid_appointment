@@ -290,7 +290,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     tr:last-child td{ border-bottom:0; }
     .center{ text-align:center; }
 
-    .commentBox{ width: min(320px, 42vw); }
+    .commentBox{ width: min(260px); }
     @media (max-width: 520px){ .commentBox{ width:100%; } }
   </style>
   <script>
