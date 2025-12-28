@@ -1,4 +1,3 @@
-// server.js (ESM / "type":"module" 환경용)
 "use strict";
 
 import express from "express";
@@ -14,7 +13,6 @@ dotenv.config();
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set("trust proxy", 1); // Render/프록시 환경에서 secure cookie 위해 필요
-
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
@@ -25,7 +23,7 @@ app.use(cookieParser());
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 
-//  기존 관리자 비밀 URL 유지
+// 기존 관리자 비밀 URL 유지 (요청: https://www.devonraid.xyz/devon_path_f23d12)
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 
@@ -40,9 +38,9 @@ const RAID_OPTIONS = [
   { key: "nabel-hard", label: "나벨 - 하드모드" },
 ];
 
-//  등급: 기본값 "등급 선택"(빈 값) 추가
+// 등급: 기본값 "등급 선택"(빈 값) 추가
 const GRADE_OPTIONS = [
-  { key: "", label: "등급 선택" }, //  기본값
+  { key: "", label: "등급 선택" }, // 기본값
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
@@ -58,7 +56,6 @@ const GRADE_SORT = { burning: 1, pink: 2, yellow: 3, normal: 4 };
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Render 디스크 영속성은 플랜/설정에 따라 다를 수 있음(재배포/재시작 시 초기화 가능)
 const db = new Database(path.join(__dirname, "data.sqlite"));
 
 // 테이블 생성
@@ -69,7 +66,7 @@ CREATE TABLE IF NOT EXISTS applications (
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
 
-  viewer_grade TEXT NOT NULL,       --  필수
+  viewer_grade TEXT NOT NULL,
   chzzk_nickname TEXT NOT NULL,
   adventure_name TEXT NOT NULL,
 
@@ -83,13 +80,23 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
+--  "진행중인 레이드 날짜(Active Day)" + 인증키를 저장 (raid별 1개만 유지)
+-- 자정이 넘어도 이 행은 그대로라서, 인증/예약/조회가 유지됨
 CREATE TABLE IF NOT EXISTS day_codes (
+  raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
-  raid_key TEXT NOT NULL,
   code TEXT NOT NULL,
-  PRIMARY KEY (date_kst, raid_key)
+  updated_at TEXT NOT NULL
 );
 `);
+
+//  마이그레이션: request_note(시청자 요청사항) 컬럼이 없으면 추가
+function ensureColumn(table, colName, colDDL) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  const has = cols.some((c) => String(c.name) === colName);
+  if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDDL}`);
+}
+ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
 
 // =====================
 // Utils
@@ -116,9 +123,24 @@ function raidByKey(key) {
 function gradeLabel(key) {
   return GRADE_OPTIONS.find((g) => g.key === key)?.label || key;
 }
+function isValidKstDate(s) {
+  // YYYY-MM-DD 간단 검증
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+}
+
+// - 레이드별 "현재 진행중(활성) 날짜"를 가져온다.
+// - 인증키가 설정되어 있으면 그 date_kst가 Active Day
+// - 없으면 오늘을 반환(단, 인증/예약은 코드가 없으면 막힘)
+function getActiveDay(raidKey) {
+  const row = db.prepare("SELECT date_kst FROM day_codes WHERE raid_key=?").get(raidKey);
+  return row?.date_kst || todayKST();
+}
+function getActiveCodeRow(raidKey) {
+  return db.prepare("SELECT * FROM day_codes WHERE raid_key=?").get(raidKey) || null;
+}
 
 // =====================
-// Layout / CSS (입력칸 겹침 방지 포함)
+// Layout / CSS (기존 유지: 단색 배경)
 // =====================
 function layout(body, title = "데본베일 레이드 예약 사이트") {
   return `<!doctype html>
@@ -146,7 +168,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background: #070a12;
+      background: #070a12; /* 단색 */
       color: var(--text);
     }
     a{ color:inherit; text-decoration:none; }
@@ -204,7 +226,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     .wait{ color:#ffd7a6; }
     .bad{ color:#ffb6c2; }
 
-    input, select{
+    input, select, textarea{
       width: 100%;
       background: #0b1226;
       border:1px solid rgba(255,255,255,.18);
@@ -214,7 +236,8 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       outline:none;
       min-width: 0;
     }
-    input::placeholder{ color: rgba(233,238,252,.45); }
+    input::placeholder, textarea::placeholder{ color: rgba(233,238,252,.45); }
+    textarea{ resize: vertical; min-height: 42px; }
 
     /* 겹침 방지: 폼을 grid로 */
     .formGrid{
@@ -229,16 +252,17 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       color: var(--muted);
       margin: 0 0 6px 2px;
     }
+    .fieldFull{
+      grid-column: 1 / -1;
+    }
 
     @media (max-width: 980px){
-      .formGrid{
-        grid-template-columns: 1fr 1fr;
-      }
+      .formGrid{ grid-template-columns: 1fr 1fr; }
+      .fieldFull{ grid-column: 1 / -1; }
     }
     @media (max-width: 520px){
-      .formGrid{
-        grid-template-columns: 1fr;
-      }
+      .formGrid{ grid-template-columns: 1fr; }
+      .fieldFull{ grid-column: 1 / -1; }
     }
 
     table{
@@ -268,7 +292,6 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
 
     .commentBox{ width: min(360px, 42vw); }
     @media (max-width: 520px){ .commentBox{ width:100%; } }
-
   </style>
   <script>
     function submitOnChange(formId){
@@ -294,7 +317,10 @@ function requireViewerOk(req, res, next) {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  const cookieKey = `viewer_ok_${raid}_${todayKST()}`;
+  // Active Day 기준으로 쿠키 키 생성 → 자정 지나도 유지(Active Day가 바뀌기 전까지)
+  const activeDay = getActiveDay(raid);
+  const cookieKey = `viewer_ok_${raid}_${activeDay}`;
+
   if (req.cookies[cookieKey] !== "1") {
     return res.redirect(`/verify?raid=${encodeURIComponent(raid)}`);
   }
@@ -333,7 +359,7 @@ app.get("/", (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">메인</div>
-            <div class="muted">레이드를 선택 → 인증키 입력 → 예약 신청</div>
+            <div class="muted">레이드 선택 → 인증키 입력 → 예약 신청</div>
           </div>
           <div class="row">
             <a class="btn btnGhost" href="/check">예약확인</a>
@@ -344,14 +370,13 @@ app.get("/", (req, res) => {
 
         <div class="row" style="gap:12px;">
           ${RAID_OPTIONS.map(
-            (r) =>
-              `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`
+            (r) => `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`
           ).join("")}
         </div>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 한 회차 정원: 3버퍼/9딜러(총 12명)<br/>
-          - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
+          - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.<br/>
         </div>
       </div>
     `)
@@ -364,13 +389,16 @@ app.get("/verify", (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
+  const activeRow = getActiveCodeRow(raid);
+  const activeDay = activeRow?.date_kst || todayKST();
+
   res.send(
     layout(`
       <div class="box">
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">인증키 입력</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 날짜: <b>${esc(todayKST())}</b></div>
+            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
           </div>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
@@ -380,11 +408,20 @@ app.get("/verify", (req, res) => {
         <form method="POST" action="/verify" class="row" style="align-items:flex-end;">
           <input type="hidden" name="raid" value="${esc(raid)}"/>
           <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">오늘 인증키</div>
+            <div class="muted" style="margin-bottom:6px;">인증키</div>
             <input name="code" placeholder="스트리머가 공지한 인증키" required />
           </div>
           <button class="btn" type="submit">확인</button>
         </form>
+
+        ${
+          !activeRow
+            ? `<div class="muted" style="margin-top:12px;line-height:1.5;">
+                 - 아직 이 레이드의 인증키가 설정되지 않았을 수 있습니다.<br/>
+                 - 스트리머가 관리자 화면에서 인증키를 먼저 설정해야 합니다.
+               </div>`
+            : ""
+        }
       </div>
     `, "인증키")
   );
@@ -397,10 +434,7 @@ app.post("/verify", (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  const row = db
-    .prepare("SELECT code FROM day_codes WHERE date_kst=? AND raid_key=?")
-    .get(todayKST(), raid);
-
+  const row = getActiveCodeRow(raid); // todayKST()가 아니라 "현재 Active" 코드
   if (!row || String(row.code) !== code) {
     return res.send(
       layout(`
@@ -414,11 +448,13 @@ app.post("/verify", (req, res) => {
     );
   }
 
-  res.cookie(`viewer_ok_${raid}_${todayKST()}`, "1", {
+  // Active Day 기준 쿠키 (자정 지나도 Active Day가 동일하면 유지)
+  const activeDay = row.date_kst;
+  res.cookie(`viewer_ok_${raid}_${activeDay}`, "1", {
     httpOnly: true,
     sameSite: "lax",
     secure: true,
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7일 정도 유지(Active Day가 안 바뀌면 계속 유효)
   });
 
   return res.redirect(`/reserve?raid=${encodeURIComponent(raid)}`);
@@ -431,6 +467,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   if (!raidObj) return res.redirect("/");
 
   const err = String(req.query.err || "");
+  const activeDay = getActiveDay(raid);
 
   res.send(
     layout(`
@@ -438,7 +475,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약 신청</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 날짜: <b>${esc(todayKST())}</b></div>
+            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
             ${err ? `<div class="bad" style="margin-top:8px;"><b>${esc(err)}</b></div>` : ""}
           </div>
           <div class="row">
@@ -452,12 +489,11 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         <form method="POST" action="/reserve">
           <input type="hidden" name="raid" value="${esc(raid)}"/>
 
-          <!--  겹침 방지: grid -->
           <div class="formGrid">
             <div class="field">
               <label>시청자 등급</label>
               <select name="viewer_grade" required>
-                ${GRADE_OPTIONS.map(g => `<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
+                ${GRADE_OPTIONS.map((g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
               </select>
             </div>
 
@@ -468,7 +504,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
             <div class="field">
               <label>모험단 이름</label>
-              <input name="adventure_name" placeholder="던파 모험단" required maxlength="60"/>
+              <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
             </div>
 
             <div class="field">
@@ -480,6 +516,12 @@ app.get("/reserve", requireViewerOk, (req, res) => {
               <label>버퍼 갯수</label>
               <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
             </div>
+
+            <!-- 요청사항(선택) -->
+            <div class="field fieldFull">
+              <label>요청사항 (선택)</label>
+              <textarea name="request_note" placeholder="예) 3깃수부터 예약 부탁드려요."></textarea>
+            </div>
           </div>
 
           <div class="row" style="margin-top:12px;">
@@ -489,6 +531,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 등급을 “등급 선택” 그대로 두면 등록이 안 됩니다.<br/>
+          - 요청사항은 선택이며 비워도 등록됩니다.<br/>
           - 등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
       </div>
@@ -502,15 +545,25 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
+  // Active Day 기준으로 저장 → 자정 지나도 같은 Active Day로 계속 조회 가능
+  const activeRow = getActiveCodeRow(raid);
+  if (!activeRow || !activeRow.code) {
+    return res.redirect(
+      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("스트리머가 아직 인증키를 설정하지 않았습니다.")}`
+    );
+  }
+  const activeDay = activeRow.date_kst;
+
   // 서버 검증: 등급 선택 필수(빈 값이면 거부)
   const viewer_grade = String(req.body.viewer_grade || "");
   const chzzk_nickname = String(req.body.chzzk_nickname || "").trim();
   const adventure_name = String(req.body.adventure_name || "").trim();
   const dealer_count = Number(req.body.dealer_count);
   const buffer_count = Number(req.body.buffer_count);
+  const request_note = String(req.body.request_note || "").slice(0, 300); // 요청사항(선택) 300자 제한
 
-  // 등급 유효성: 빈값 금지 + 목록에 있는 값만
-  const validGradeKeys = new Set(GRADE_OPTIONS.map(g => g.key));
+  // 등급 유효성: 빈값 금지 + 목록에 있는 값만(빈값 "" 제외)
+  const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
   if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
     return res.redirect(
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("시청자 등급을 선택해야 예약이 가능합니다.")}`
@@ -536,24 +589,25 @@ app.post("/reserve", requireViewerOk, (req, res) => {
 
   db.prepare(`
     INSERT INTO applications
-    (created_at, date_kst, raid_key, viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed, comment)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '')
+    (created_at, date_kst, raid_key, viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed, comment, request_note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
   `).run(
     nowISO(),
-    todayKST(),
+    activeDay,
     raid,
     viewer_grade,
     chzzk_nickname,
     adventure_name,
     dealer_count,
-    buffer_count
+    buffer_count,
+    request_note
   );
 
   return res.send(
     layout(`
       <div class="box">
         <div style="font-weight:900;font-size:20px;margin-bottom:6px;">등록 완료</div>
-        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 날짜: <b>${esc(todayKST())}</b></div>
+        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
         <div class="divider"></div>
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
@@ -577,25 +631,25 @@ app.get("/check", (req, res) => {
           <div class="row sp">
             <div>
               <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약확인</div>
-              <div class="muted">확인할 레이드를 선택하세요. (오늘 신청 목록만 표시)</div>
+              <div class="muted">확인할 레이드를 선택하세요. (해당 레이드의 진행중(Active) 날짜 기준)</div>
             </div>
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
           <div class="row" style="gap:12px;">
-            ${RAID_OPTIONS.map(r => `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`).join("")}
+            ${RAID_OPTIONS.map((r) => `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`).join("")}
           </div>
         </div>
       `, "예약확인")
     );
   }
 
-  // (원하면 여기에도 requireViewerOk 걸 수 있지만, 현재 흐름은 공개 목록 형태로 유지)
+  const activeDay = getActiveDay(raid);
   const apps = db.prepare(`
     SELECT * FROM applications
     WHERE date_kst=? AND raid_key=?
     ORDER BY datetime(created_at) ASC
-  `).all(todayKST(), raid);
+  `).all(activeDay, raid);
 
   res.send(
     layout(`
@@ -603,8 +657,9 @@ app.get("/check", (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약확인</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 날짜: <b>${esc(todayKST())}</b>
-              <span class="chip">등록완료 ${apps.filter(a=>a.confirmed===1).length}/${apps.length}</span>
+            <div class="muted">
+              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
+              <span class="chip">등록완료 ${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
             </div>
           </div>
           <div class="row">
@@ -627,29 +682,33 @@ app.get("/check", (req, res) => {
           </tr>
           ${
             apps.length
-              ? apps.map(a => {
-                  const status = a.confirmed === 1
-                    ? `<span class="ok">✔ 등록완료</span>`
-                    : `<span class="wait">⏳ 대기중</span>`;
-                  return `
-                    <tr>
-                      <td>${esc(gradeLabel(a.viewer_grade))}</td>
-                      <td>${esc(a.chzzk_nickname)}</td>
-                      <td>${esc(a.adventure_name)}</td>
-                      <td class="center">${esc(a.dealer_count)}</td>
-                      <td class="center">${esc(a.buffer_count)}</td>
-                      <td class="center">${status}</td>
-                      <td>${a.comment ? esc(a.comment) : `<span class="muted">-</span>`}</td>
-                    </tr>
-                  `;
-                }).join("")
-              : `<tr><td colspan="7" class="center muted">오늘 신청이 없습니다.</td></tr>`
+              ? apps
+                  .map((a) => {
+                    const status =
+                      a.confirmed === 1
+                        ? `<span class="ok">✔ 등록완료</span>`
+                        : `<span class="wait">⏳ 대기중</span>`;
+                    return `
+                      <tr>
+                        <td>${esc(gradeLabel(a.viewer_grade))}</td>
+                        <td>${esc(a.chzzk_nickname)}</td>
+                        <td>${esc(a.adventure_name)}</td>
+                        <td class="center">${esc(a.dealer_count)}</td>
+                        <td class="center">${esc(a.buffer_count)}</td>
+                        <td class="center">${status}</td>
+                        <td>${a.comment ? esc(a.comment) : `<span class="muted">-</span>`}</td>
+                      </tr>
+                    `;
+                  })
+                  .join("")
+              : `<tr><td colspan="7" class="center muted">진행중(Active) 날짜에 신청이 없습니다.</td></tr>`
           }
         </table>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
-          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.
+          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
+          - 자정이 지나도 스트리머가 Active Day를 바꾸지 않으면 이 목록은 그대로 유지됩니다.
         </div>
       </div>
     `, "예약확인")
@@ -710,7 +769,7 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
     httpOnly: true,
     sameSite: "lax",
     secure: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
   });
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -720,7 +779,7 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
   res.redirect(`${ADMIN_BASE}/login`);
 });
 
-// 관리자: 레이드 선택 + 인증키 설정
+// 관리자: 레이드 선택 + Active Day/인증키 설정
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   res.send(
     layout(`
@@ -728,7 +787,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자</div>
-            <div class="muted">레이드별 신청목록 확인 / 오늘 인증키 설정</div>
+            <div class="muted">레이드별 신청목록 확인 / Active Day(진행일) + 인증키 설정</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
@@ -739,7 +798,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <form method="GET" action="${esc(ADMIN_BASE)}/list" class="row">
           <select name="raid" required style="max-width:260px;">
             <option value="">레이드 선택</option>
-            ${RAID_OPTIONS.map(r => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+            ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
           </select>
           <input type="hidden" name="sort" value="time"/>
           <button class="btn" type="submit">확인</button>
@@ -747,8 +806,11 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">오늘 인증키 설정</div>
-        <div class="muted">시청자가 신청하려면 레이드별 “오늘 인증키”가 필요합니다.</div>
+        <div style="font-weight:900;margin-bottom:8px;">Active Day(진행일) + 인증키 설정</div>
+        <div class="muted">
+          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 "기준 날짜"가 됩니다.<br/>
+          - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
+        </div>
 
         <div class="divider"></div>
 
@@ -757,46 +819,57 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
             <div class="muted" style="margin-bottom:6px;">레이드</div>
             <select name="raid" required style="max-width:260px;">
               <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map(r => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
             </select>
           </div>
+
+          <div style="min-width:200px;">
+            <div class="muted" style="margin-bottom:6px;">진행일(YYYY-MM-DD)</div>
+            <input name="date_kst" value="${esc(todayKST())}" placeholder="예) 2025-12-28" required />
+          </div>
+
           <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">오늘 인증키</div>
+            <div class="muted" style="margin-bottom:6px;">인증키</div>
             <input name="code" placeholder="예) 1234ABCD" required />
           </div>
+
           <button class="btn" type="submit">저장</button>
         </form>
-
-        <div class="muted" style="margin-top:12px;">
-          - 날짜는 KST 기준: <b>${esc(todayKST())}</b><br/>
-          - 인증키를 변경하면 시청자는 새 키로만 신청 가능
-        </div>
       </div>
     `, "관리자")
   );
 });
 
-// 인증키 저장
+// Active Day + 인증키 저장
 app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const code = String(req.body.code || "").trim();
-  if (!raidByKey(raid) || !code) return res.redirect(`${ADMIN_BASE}/raid`);
+  const date_kst = String(req.body.date_kst || "").trim();
+
+  if (!raidByKey(raid) || !code || !isValidKstDate(date_kst)) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
 
   db.prepare(`
-    INSERT INTO day_codes(date_kst, raid_key, code)
-    VALUES(?, ?, ?)
-    ON CONFLICT(date_kst, raid_key) DO UPDATE SET code=excluded.code
-  `).run(todayKST(), raid, code);
+    INSERT INTO day_codes(raid_key, date_kst, code, updated_at)
+    VALUES(?, ?, ?, ?)
+    ON CONFLICT(raid_key) DO UPDATE SET
+      date_kst=excluded.date_kst,
+      code=excluded.code,
+      updated_at=excluded.updated_at
+  `).run(raid, date_kst, code, nowISO());
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
-// 신청목록
+// 신청목록 (Active Day 기준)
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
   const sort = String(req.query.sort || "time"); // time | grade
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+
+  const activeDay = getActiveDay(raid);
 
   const gradeHeaderLink =
     sort === "grade"
@@ -806,7 +879,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   let apps = db.prepare(`
     SELECT * FROM applications
     WHERE date_kst=? AND raid_key=?
-  `).all(todayKST(), raid);
+  `).all(activeDay, raid);
 
   if (sort === "grade") {
     apps.sort((a, b) => {
@@ -826,18 +899,18 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">신청목록</div>
             <div class="muted">
-              레이드: <b>${esc(raidObj.label)}</b> / 날짜: <b>${esc(todayKST())}</b>
-              <span class="chip">등록완료 ${apps.filter(a=>a.confirmed===1).length}/${apps.length}</span>
+              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
+              <span class="chip">등록완료 ${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
             </div>
           </div>
           <div class="row">
             <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/raid">레이드 변경</a>
             <form method="POST" action="${esc(ADMIN_BASE)}/clear"
-                  onsubmit="return confirm('정말 이 레이드의 오늘 신청목록을 전부 삭제할까요? (되돌릴 수 없음)');"
+                  onsubmit="return confirm('정말 이 레이드의 진행일(Active Day) 신청목록을 전부 삭제할까요? (되돌릴 수 없음)');"
                   style="margin:0;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <input type="hidden" name="sort" value="${esc(sort)}"/>
-              <button class="btn btnDanger" type="submit">오늘 신청 일괄삭제</button>
+              <button class="btn btnDanger" type="submit">일괄삭제</button>
             </form>
           </div>
         </div>
@@ -856,63 +929,73 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <th>모험단 이름</th>
             <th class="center">딜러</th>
             <th class="center">버퍼</th>
+            <th>요청사항</th>
             <th>코멘트</th>
             <th class="center">삭제</th>
           </tr>
 
           ${
             apps.length
-              ? apps.map(a => {
-                  const formId = `confirmForm_${a.id}`;
-                  const checked = a.confirmed === 1 ? "checked" : "";
-                  const commentVal = String(a.comment || "");
-                  return `
-                    <tr>
-                      <td class="center">
-                        <form id="${formId}" method="POST" action="${esc(ADMIN_BASE)}/confirm" style="margin:0;">
-                          <input type="hidden" name="id" value="${esc(a.id)}"/>
-                          <input type="hidden" name="raid" value="${esc(raid)}"/>
-                          <input type="hidden" name="sort" value="${esc(sort)}"/>
-                          <input type="hidden" name="confirmed" value="${a.confirmed === 1 ? "0" : "1"}"/>
-                          <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
-                        </form>
-                      </td>
-                      <td>${esc(gradeLabel(a.viewer_grade))}</td>
-                      <td>${esc(a.chzzk_nickname)}</td>
-                      <td>${esc(a.adventure_name)}</td>
-                      <td class="center">${esc(a.dealer_count)}</td>
-                      <td class="center">${esc(a.buffer_count)}</td>
-                      <td>
-                        <form method="POST" action="${esc(ADMIN_BASE)}/comment" style="margin:0;" class="row">
-                          <input type="hidden" name="id" value="${esc(a.id)}"/>
-                          <input type="hidden" name="raid" value="${esc(raid)}"/>
-                          <input type="hidden" name="sort" value="${esc(sort)}"/>
-                          <input class="commentBox" name="comment"
-                                 placeholder="예) 3회차 가능 / 디코 부탁 / 오늘 마감"
-                                 value="${esc(commentVal)}"/>
-                          <button class="btn" type="submit">저장</button>
-                        </form>
-                      </td>
-                      <td class="center">
-                        <form method="POST" action="${esc(ADMIN_BASE)}/delete"
-                              onsubmit="return confirm('정말 삭제하시겠습니까?');"
-                              style="margin:0;">
-                          <input type="hidden" name="id" value="${esc(a.id)}"/>
-                          <input type="hidden" name="raid" value="${esc(raid)}"/>
-                          <input type="hidden" name="sort" value="${esc(sort)}"/>
-                          <button class="btn btnDanger" type="submit">삭제</button>
-                        </form>
-                      </td>
-                    </tr>
-                  `;
-                }).join("")
-              : `<tr><td colspan="8" class="center muted">오늘 신청이 없습니다.</td></tr>`
+              ? apps
+                  .map((a) => {
+                    const formId = `confirmForm_${a.id}`;
+                    const checked = a.confirmed === 1 ? "checked" : "";
+                    const commentVal = String(a.comment || "");
+                    const reqVal = String(a.request_note || "");
+
+                    return `
+                      <tr>
+                        <td class="center">
+                          <form id="${formId}" method="POST" action="${esc(ADMIN_BASE)}/confirm" style="margin:0;">
+                            <input type="hidden" name="id" value="${esc(a.id)}"/>
+                            <input type="hidden" name="raid" value="${esc(raid)}"/>
+                            <input type="hidden" name="sort" value="${esc(sort)}"/>
+                            <input type="hidden" name="confirmed" value="${a.confirmed === 1 ? "0" : "1"}"/>
+                            <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
+                          </form>
+                        </td>
+
+                        <td>${esc(gradeLabel(a.viewer_grade))}</td>
+                        <td>${esc(a.chzzk_nickname)}</td>
+                        <td>${esc(a.adventure_name)}</td>
+                        <td class="center">${esc(a.dealer_count)}</td>
+                        <td class="center">${esc(a.buffer_count)}</td>
+
+                        <td>${reqVal ? esc(reqVal) : `<span class="muted">-</span>`}</td>
+
+                        <td>
+                          <form method="POST" action="${esc(ADMIN_BASE)}/comment" style="margin:0;" class="row">
+                            <input type="hidden" name="id" value="${esc(a.id)}"/>
+                            <input type="hidden" name="raid" value="${esc(raid)}"/>
+                            <input type="hidden" name="sort" value="${esc(sort)}"/>
+                            <input class="commentBox" name="comment"
+                                   placeholder="예) 3회차 가능 / 디코 부탁 / 오늘 마감"
+                                   value="${esc(commentVal)}"/>
+                            <button class="btn" type="submit">저장</button>
+                          </form>
+                        </td>
+
+                        <td class="center">
+                          <form method="POST" action="${esc(ADMIN_BASE)}/delete"
+                                onsubmit="return confirm('정말 삭제하시겠습니까?');"
+                                style="margin:0;">
+                            <input type="hidden" name="id" value="${esc(a.id)}"/>
+                            <input type="hidden" name="raid" value="${esc(raid)}"/>
+                            <input type="hidden" name="sort" value="${esc(sort)}"/>
+                            <button class="btn btnDanger" type="submit">삭제</button>
+                          </form>
+                        </td>
+                      </tr>
+                    `;
+                  })
+                  .join("")
+              : `<tr><td colspan="9" class="center muted">진행일(Active Day)에 신청이 없습니다.</td></tr>`
           }
         </table>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
-          - 코멘트는 시청자 예약확인 화면에서도 보입니다.
+          - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
         </div>
       </div>
     `, "신청목록")
@@ -957,18 +1040,20 @@ app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
-// 오늘/선택 레이드 일괄삭제
+// Active Day(진행일) 기준 일괄삭제
 app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "time");
   if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
-  db.prepare("DELETE FROM applications WHERE date_kst=? AND raid_key=?").run(todayKST(), raid);
+  const activeDay = getActiveDay(raid);
+  db.prepare("DELETE FROM applications WHERE date_kst=? AND raid_key=?").run(activeDay, raid);
+
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
 // health
-app.get("/health", (req, res) => res.json({ ok: true, kst: todayKST() }));
+app.get("/health", (req, res) => res.json({ ok: true, kst: todayKST(), admin: ADMIN_BASE }));
 
 // start
 app.listen(PORT, "0.0.0.0", () => {
