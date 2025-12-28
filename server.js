@@ -520,7 +520,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
             <!-- 요청사항(선택) -->
             <div class="field fieldFull">
               <label>요청사항 (선택)</label>
-              <textarea name="request_note" placeholder="예) 3깃수부터 예약 부탁드려요."></textarea>
+              <textarea name="request_note" placeholder="예) 3깃수부터 참여가능/최대 12글자 입력가능"></textarea>
             </div>
           </div>
 
@@ -1019,7 +1019,7 @@ app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "time");
-  const comment = String(req.body.comment || "").slice(0, 200);
+  const comment = String(req.body.comment || "").slice(0, 12);
 
   if (Number.isInteger(id)) {
     db.prepare("UPDATE applications SET comment=? WHERE id=?").run(comment, id);
