@@ -290,7 +290,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     tr:last-child td{ border-bottom:0; }
     .center{ text-align:center; }
 
-    .commentBox{ width: min(360px, 42vw); }
+    .commentBox{ width: min(320px, 42vw); }
     @media (max-width: 520px){ .commentBox{ width:100%; } }
   </style>
   <script>
@@ -631,7 +631,7 @@ app.get("/check", (req, res) => {
           <div class="row sp">
             <div>
               <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약확인</div>
-              <div class="muted">확인할 레이드를 선택하세요. (해당 레이드의 진행중(Active) 날짜 기준)</div>
+              <div class="muted">확인할 레이드를 선택하세요.</div>
             </div>
             <a class="btn btnGhost" href="/">메인</a>
           </div>
@@ -708,7 +708,6 @@ app.get("/check", (req, res) => {
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
           - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
-          - 자정이 지나도 스트리머가 Active Day를 바꾸지 않으면 이 목록은 그대로 유지됩니다.
         </div>
       </div>
     `, "예약확인")
@@ -906,7 +905,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
           <div class="row">
             <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/raid">레이드 변경</a>
             <form method="POST" action="${esc(ADMIN_BASE)}/clear"
-                  onsubmit="return confirm('정말 이 레이드의 진행일(Active Day) 신청목록을 전부 삭제할까요? (되돌릴 수 없음)');"
+                  onsubmit="return confirm('정말 이 레이드의 신청목록을 전부 삭제할까요?');"
                   style="margin:0;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <input type="hidden" name="sort" value="${esc(sort)}"/>
@@ -969,7 +968,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                             <input type="hidden" name="raid" value="${esc(raid)}"/>
                             <input type="hidden" name="sort" value="${esc(sort)}"/>
                             <input class="commentBox" name="comment"
-                                   placeholder="예) 3회차 가능 / 디코 부탁 / 오늘 마감"
+                                   placeholder="예) 1깃수 시작"
                                    value="${esc(commentVal)}"/>
                             <button class="btn" type="submit">저장</button>
                           </form>
