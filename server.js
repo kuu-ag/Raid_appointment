@@ -701,7 +701,7 @@ app.get("/check", (req, res) => {
                     `;
                   })
                   .join("")
-              : `<tr><td colspan="7" class="center muted">진행중(Active) 날짜에 신청이 없습니다.</td></tr>`
+              : `<tr><td colspan="7" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
 
