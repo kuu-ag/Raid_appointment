@@ -988,7 +988,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                     `;
                   })
                   .join("")
-              : `<tr><td colspan="9" class="center muted">진행일(Active Day)에 신청이 없습니다.</td></tr>`
+              : `<tr><td colspan="9" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
 
