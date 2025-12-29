@@ -172,7 +172,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       color: var(--text);
     }
     a{ color:inherit; text-decoration:none; }
-    .wrap{ max-width:1100px; margin:0 auto; padding:22px 14px 60px; }
+    .wrap{ max-width:1400px; margin:0 auto; padding:22px 14px 60px; }
     .title{
       border:2px solid rgba(255,255,255,.20);
       background: rgba(11,18,38,.95);
