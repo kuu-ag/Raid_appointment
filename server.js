@@ -560,14 +560,12 @@ app.get("/reserve", requireViewerOk, (req, res) => {
                     <label>1업둥</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up1"/>
-                      <span>신청</span>
                     </label>
                   </div>
                   <div class="field">
                     <label>2업둥</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up2"/>
-                      <span>신청</span>
                     </label>
                   </div>
                 `
@@ -1075,8 +1073,8 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <div class="divider"></div>
             <div class="row" style="gap:8px; margin-bottom:6px;">
               <a class="btn ${!upFilter ? "" : "btnGhost"}" href="${esc(upFilterAllLink)}">전체</a>
-              <a class="btn ${upFilter === "1" ? "" : "btnGhost"}" href="${esc(upFilter1Link)}">1업둥만</a>
-              <a class="btn ${upFilter === "2" ? "" : "btnGhost"}" href="${esc(upFilter2Link)}">2업둥만</a>
+              <a class="btn ${upFilter === "1" ? "" : "btnGhost"}" href="${esc(upFilter1Link)}">1업둥</a>
+              <a class="btn ${upFilter === "2" ? "" : "btnGhost"}" href="${esc(upFilter2Link)}">2업둥</a>
             </div>
           `
             : ""
