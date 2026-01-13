@@ -602,7 +602,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
             <div class="field fieldFull">
               <label>요청사항 (선택)</label>
               <textarea name="request_note" maxlength="12"
-                placeholder="예) 3깃수부터 참여 가능 / 최대 12글자 입력가능"></textarea>
+                placeholder="예) 3깃수부터 참여가능"></textarea>
             </div>
           </div>
 
@@ -616,7 +616,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           - 요청사항은 선택이며 비워도 등록됩니다.<br/>
           - ${
             isUp
-              ? "업둥교환은 딜/버퍼 수 대신 1업둥, 2업둥 체크박스로 신청합니다. (둘 다 선택 가능)"
+              ? "1업둥, 2업둥 체크박스로 신청합니다. (둘 다 선택 가능)"
               : "등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다."
           }
         </div>
