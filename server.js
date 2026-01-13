@@ -23,7 +23,7 @@ app.use(cookieParser());
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 
-// 기존 관리자 비밀 URL 유지 (요청: https://www.devonraid.xyz/devon_path_f23d12)
+// 기존 관리자 비밀 URL 유지
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 
@@ -36,6 +36,7 @@ const RAID_OPTIONS = [
   { key: "inhwagongjeon", label: "이내향혼전" },
   { key: "nabel", label: "인공신 : 나벨" },
   { key: "nabel-hard", label: "나벨 - 하드모드" },
+  { key: "updoong", label: "업둥교환" }, // ✅ 새 레이드
 ];
 
 // 등급: 기본값 "등급 선택"(빈 값) 추가
@@ -73,14 +74,18 @@ CREATE TABLE IF NOT EXISTS applications (
   dealer_count INTEGER NOT NULL,
   buffer_count INTEGER NOT NULL,
 
+  first_updoong INTEGER NOT NULL DEFAULT 0,
+  second_updoong INTEGER NOT NULL DEFAULT 0,
+
   confirmed INTEGER NOT NULL DEFAULT 0,
-  comment TEXT NOT NULL DEFAULT ''
+  comment TEXT NOT NULL DEFAULT '',
+  request_note TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
--- "진행중인 레이드 날짜(Active Day)" + 인증키를 저장 (raid별 1개만 유지)
+--  "진행중인 레이드 날짜(Active Day)" + 인증키를 저장 (raid별 1개만 유지)
 -- 자정이 넘어도 이 행은 그대로라서, 인증/예약/조회가 유지됨
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
@@ -90,13 +95,15 @@ CREATE TABLE IF NOT EXISTS day_codes (
 );
 `);
 
-//  마이그레이션: request_note(시청자 요청사항) 컬럼이 없으면 추가
+// 마이그레이션: 기존 DB에 없으면 컬럼 추가
 function ensureColumn(table, colName, colDDL) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   const has = cols.some((c) => String(c.name) === colName);
   if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDDL}`);
 }
 ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
+ensureColumn("applications", "first_updoong", "first_updoong INTEGER NOT NULL DEFAULT 0");
+ensureColumn("applications", "second_updoong", "second_updoong INTEGER NOT NULL DEFAULT 0");
 
 // =====================
 // Utils
@@ -127,6 +134,9 @@ function isValidKstDate(s) {
   // YYYY-MM-DD 간단 검증
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
 }
+function isUpdoongRaid(key) {
+  return key === "updoong";
+}
 
 // - 레이드별 "현재 진행중(활성) 날짜"를 가져온다.
 // - 인증키가 설정되어 있으면 그 date_kst가 Active Day
@@ -140,7 +150,7 @@ function getActiveCodeRow(raidKey) {
 }
 
 // =====================
-// Layout / CSS (기존 유지: 단색 배경)
+// Layout / CSS
 // =====================
 function layout(body, title = "데본베일 레이드 예약 사이트") {
   return `<!doctype html>
@@ -168,7 +178,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background: #070a12; /* 단색 */
+      background: #070a12;
       color: var(--text);
     }
     a{ color:inherit; text-decoration:none; }
@@ -254,6 +264,26 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     }
     .fieldFull{
       grid-column: 1 / -1;
+    }
+
+    /* 업둥교환 체크박스용 */
+    .updoongRow{
+      display:flex;
+      gap:18px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+    .bigCheck{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:14px;
+    }
+    .bigCheck input[type="checkbox"]{
+      width:18px;
+      height:18px;
+      transform: scale(1.4);
+      cursor:pointer;
     }
 
     @media (max-width: 980px){
@@ -375,7 +405,7 @@ app.get("/", (req, res) => {
         </div>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 한 회차 정원: 3버퍼/9딜러(총 12명)<br/>
+          - 한 회차 정원: 3버퍼/9딜러(총 12명) (업둥교환은 별도 규칙 적용)<br/>
           - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.<br/>
         </div>
       </div>
@@ -434,7 +464,7 @@ app.post("/verify", (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  const row = getActiveCodeRow(raid); // todayKST()가 아니라 "현재 Active" 코드
+  const row = getActiveCodeRow(raid); // Active 코드
   if (!row || String(row.code) !== code) {
     return res.send(
       layout(`
@@ -448,13 +478,12 @@ app.post("/verify", (req, res) => {
     );
   }
 
-  // Active Day 기준 쿠키 (자정 지나도 Active Day가 동일하면 유지)
   const activeDay = row.date_kst;
   res.cookie(`viewer_ok_${raid}_${activeDay}`, "1", {
     httpOnly: true,
     sameSite: "lax",
     secure: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7일 정도 유지(Active Day가 안 바뀌면 계속 유효)
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   return res.redirect(`/reserve?raid=${encodeURIComponent(raid)}`);
@@ -468,6 +497,13 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
   const err = String(req.query.err || "");
   const activeDay = getActiveDay(raid);
+  const updoong = isUpdoongRaid(raid);
+
+  // 업둥교환 전용 슬롯 설명
+  const slotHelp = updoong
+    ? `- 업둥교환은 딜러/버퍼 대신 1업둥, 2업둥 체크박스로 신청합니다.<br/>
+       - 1업둥, 2업둥은 둘 다 선택도 가능합니다.`
+    : `- 딜러/버퍼 숫자는 본인이 데려오는 인원 수 기준입니다.`;
 
   res.send(
     layout(`
@@ -507,20 +543,39 @@ app.get("/reserve", requireViewerOk, (req, res) => {
               <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
             </div>
 
-            <div class="field">
-              <label>딜러 갯수</label>
-              <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
-            </div>
-
-            <div class="field">
-              <label>버퍼 갯수</label>
-              <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
-            </div>
+            ${
+              updoong
+                ? `
+                  <div class="field fieldFull">
+                    <label>업둥 선택</label>
+                    <div class="updoongRow">
+                      <label class="bigCheck">
+                        <input type="checkbox" name="first_updoong"/>
+                        <span>1업둥</span>
+                      </label>
+                      <label class="bigCheck">
+                        <input type="checkbox" name="second_updoong"/>
+                        <span>2업둥</span>
+                      </label>
+                    </div>
+                  </div>
+                `
+                : `
+                  <div class="field">
+                    <label>딜러 갯수</label>
+                    <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
+                  </div>
+                  <div class="field">
+                    <label>버퍼 갯수</label>
+                    <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
+                  </div>
+                `
+            }
 
             <!-- 요청사항(선택) -->
             <div class="field fieldFull">
               <label>요청사항 (선택)</label>
-              <textarea name="request_note" placeholder="예) 3깃수부터 참여가능/최대 12글자 입력가능"></textarea>
+              <textarea name="request_note" placeholder="예) 3깃수부터 참여 가능 / 자리 관련 요청 등"></textarea>
             </div>
           </div>
 
@@ -532,7 +587,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 등급을 “등급 선택” 그대로 두면 등록이 안 됩니다.<br/>
           - 요청사항은 선택이며 비워도 등록됩니다.<br/>
-          - 등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
+          ${slotHelp}
         </div>
       </div>
     `, "예약 신청")
@@ -545,6 +600,8 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
+  const updoong = isUpdoongRaid(raid);
+
   // Active Day 기준으로 저장 → 자정 지나도 같은 Active Day로 계속 조회 가능
   const activeRow = getActiveCodeRow(raid);
   if (!activeRow || !activeRow.code) {
@@ -554,13 +611,10 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   }
   const activeDay = activeRow.date_kst;
 
-  // 서버 검증: 등급 선택 필수(빈 값이면 거부)
   const viewer_grade = String(req.body.viewer_grade || "");
   const chzzk_nickname = String(req.body.chzzk_nickname || "").trim();
   const adventure_name = String(req.body.adventure_name || "").trim();
-  const dealer_count = Number(req.body.dealer_count);
-  const buffer_count = Number(req.body.buffer_count);
-  const request_note = String(req.body.request_note || "").slice(0, 300); // 요청사항(선택) 300자 제한
+  const request_note = String(req.body.request_note || "").slice(0, 300);
 
   // 등급 유효성: 빈값 금지 + 목록에 있는 값만(빈값 "" 제외)
   const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
@@ -576,21 +630,39 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     );
   }
 
-  if (!Number.isInteger(dealer_count) || dealer_count < 0 || dealer_count > 999) {
-    return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("딜러 갯수는 0~999 정수여야 합니다.")}`
-    );
-  }
-  if (!Number.isInteger(buffer_count) || buffer_count < 0 || buffer_count > 999) {
-    return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("버퍼 갯수는 0~999 정수여야 합니다.")}`
-    );
+  let dealer_count = 0;
+  let buffer_count = 0;
+  let first_updoong = 0;
+  let second_updoong = 0;
+
+  if (updoong) {
+    // 체크박스: 둘 다 선택 가능, 둘 다 off여도 허용
+    first_updoong = req.body.first_updoong ? 1 : 0;
+    second_updoong = req.body.second_updoong ? 1 : 0;
+  } else {
+    dealer_count = Number(req.body.dealer_count);
+    buffer_count = Number(req.body.buffer_count);
+
+    if (!Number.isInteger(dealer_count) || dealer_count < 0 || dealer_count > 999) {
+      return res.redirect(
+        `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("딜러 갯수는 0~999 정수여야 합니다.")}`
+      );
+    }
+    if (!Number.isInteger(buffer_count) || buffer_count < 0 || buffer_count > 999) {
+      return res.redirect(
+        `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("버퍼 갯수는 0~999 정수여야 합니다.")}`
+      );
+    }
   }
 
   db.prepare(`
     INSERT INTO applications
-    (created_at, date_kst, raid_key, viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed, comment, request_note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+    (created_at, date_kst, raid_key,
+     viewer_grade, chzzk_nickname, adventure_name,
+     dealer_count, buffer_count,
+     first_updoong, second_updoong,
+     confirmed, comment, request_note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
   `).run(
     nowISO(),
     activeDay,
@@ -600,6 +672,8 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     adventure_name,
     dealer_count,
     buffer_count,
+    first_updoong,
+    second_updoong,
     request_note
   );
 
@@ -651,6 +725,8 @@ app.get("/check", (req, res) => {
     ORDER BY datetime(created_at) ASC
   `).all(activeDay, raid);
 
+  const updoong = isUpdoongRaid(raid);
+
   res.send(
     layout(`
       <div class="box">
@@ -675,8 +751,8 @@ app.get("/check", (req, res) => {
             <th>시청자 등급</th>
             <th>치지직 닉네임</th>
             <th>모험단 이름</th>
-            <th class="center">딜러</th>
-            <th class="center">버퍼</th>
+            <th class="center">${updoong ? "1업둥" : "딜러"}</th>
+            <th class="center">${updoong ? "2업둥" : "버퍼"}</th>
             <th class="center">상태</th>
             <th>스트리머 코멘트</th>
           </tr>
@@ -688,13 +764,21 @@ app.get("/check", (req, res) => {
                       a.confirmed === 1
                         ? `<span class="ok">✔ 등록완료</span>`
                         : `<span class="wait">⏳ 대기중</span>`;
+
+                    const col1 = updoong
+                      ? (a.first_updoong === 1 ? "✔" : "-")
+                      : esc(a.dealer_count);
+                    const col2 = updoong
+                      ? (a.second_updoong === 1 ? "✔" : "-")
+                      : esc(a.buffer_count);
+
                     return `
                       <tr>
                         <td>${esc(gradeLabel(a.viewer_grade))}</td>
                         <td>${esc(a.chzzk_nickname)}</td>
                         <td>${esc(a.adventure_name)}</td>
-                        <td class="center">${esc(a.dealer_count)}</td>
-                        <td class="center">${esc(a.buffer_count)}</td>
+                        <td class="center">${col1}</td>
+                        <td class="center">${col2}</td>
                         <td class="center">${status}</td>
                         <td>${a.comment ? esc(a.comment) : `<span class="muted">-</span>`}</td>
                       </tr>
@@ -794,7 +878,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="divider"></div>
 
         <div style="font-weight:900;margin-bottom:8px;">신청목록 보기</div>
-        <!-- ✅ 레이드 선택: 가로 버튼 나열 -->
+        <!-- 레이드 선택: 가로 버튼 나열 -->
         <div class="row" style="gap:8px; flex-wrap:wrap; margin-bottom:4px;">
           ${RAID_OPTIONS.map(
             (r) =>
@@ -865,22 +949,34 @@ app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
 // 신청목록 (Active Day 기준)
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
-  const sort = String(req.query.sort || "time"); // time | grade
+  const sort = String(req.query.sort || "time"); // time | grade | 1up | 2up
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const activeDay = getActiveDay(raid);
+  const updoong = isUpdoongRaid(raid);
 
   const gradeHeaderLink =
     sort === "grade"
       ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time`
       : `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=grade`;
 
+  const up1HeaderLink =
+    sort === "1up"
+      ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time`
+      : `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=1up`;
+
+  const up2HeaderLink =
+    sort === "2up"
+      ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time`
+      : `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=2up`;
+
   let apps = db.prepare(`
     SELECT * FROM applications
     WHERE date_kst=? AND raid_key=?
   `).all(activeDay, raid);
 
+  // 정렬/필터 로직
   if (sort === "grade") {
     apps.sort((a, b) => {
       const aa = GRADE_SORT[a.viewer_grade] ?? 999;
@@ -888,7 +984,26 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       if (aa !== bb) return aa - bb;
       return String(a.created_at).localeCompare(String(b.created_at));
     });
+  } else if (sort === "1up") {
+    // 1업둥 신청자만, 치즈등급 순 + 신청시간 순
+    apps = apps.filter((a) => a.first_updoong === 1);
+    apps.sort((a, b) => {
+      const aa = GRADE_SORT[a.viewer_grade] ?? 999;
+      const bb = GRADE_SORT[b.viewer_grade] ?? 999;
+      if (aa !== bb) return aa - bb;
+      return String(a.created_at).localeCompare(String(b.created_at));
+    });
+  } else if (sort === "2up") {
+    // 2업둥 신청자만, 치즈등급 순 + 신청시간 순
+    apps = apps.filter((a) => a.second_updoong === 1);
+    apps.sort((a, b) => {
+      const aa = GRADE_SORT[a.viewer_grade] ?? 999;
+      const bb = GRADE_SORT[b.viewer_grade] ?? 999;
+      if (aa !== bb) return aa - bb;
+      return String(a.created_at).localeCompare(String(b.created_at));
+    });
   } else {
+    // time
     apps.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
   }
 
@@ -927,8 +1042,25 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             </th>
             <th>치지직 닉네임</th>
             <th>모험단 이름</th>
-            <th class="center">딜러</th>
-            <th class="center">버퍼</th>
+            ${
+              updoong
+                ? `
+                  <th class="center">
+                    <a href="${esc(up1HeaderLink)}" style="text-decoration:underline;">
+                      1업둥 ${sort === "1up" ? "▼" : ""}
+                    </a>
+                  </th>
+                  <th class="center">
+                    <a href="${esc(up2HeaderLink)}" style="text-decoration:underline;">
+                      2업둥 ${sort === "2up" ? "▼" : ""}
+                    </a>
+                  </th>
+                `
+                : `
+                  <th class="center">딜러</th>
+                  <th class="center">버퍼</th>
+                `
+            }
             <th>요청사항</th>
             <th>코멘트</th>
             <th class="center">삭제</th>
@@ -942,6 +1074,13 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                     const checked = a.confirmed === 1 ? "checked" : "";
                     const commentVal = String(a.comment || "");
                     const reqVal = String(a.request_note || "");
+
+                    const col1 = updoong
+                      ? (a.first_updoong === 1 ? "✔" : "-")
+                      : esc(a.dealer_count);
+                    const col2 = updoong
+                      ? (a.second_updoong === 1 ? "✔" : "-")
+                      : esc(a.buffer_count);
 
                     return `
                       <tr>
@@ -958,8 +1097,8 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                         <td>${esc(gradeLabel(a.viewer_grade))}</td>
                         <td>${esc(a.chzzk_nickname)}</td>
                         <td>${esc(a.adventure_name)}</td>
-                        <td class="center">${esc(a.dealer_count)}</td>
-                        <td class="center">${esc(a.buffer_count)}</td>
+                        <td class="center">${col1}</td>
+                        <td class="center">${col2}</td>
 
                         <td>${reqVal ? esc(reqVal) : `<span class="muted">-</span>`}</td>
 
@@ -996,6 +1135,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
+          - 업둥교환의 1업둥/2업둥 헤더를 클릭하면 해당 업둥 신청자만 치즈등급 순으로 정렬/표시됩니다.<br/>
         </div>
       </div>
     `, "신청목록")
