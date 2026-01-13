@@ -277,7 +277,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       display:inline-flex;
       align-items:center;
       gap:6px;
-      font-size:14px;
+      font-size:20px;
     }
     .bigCheck input[type="checkbox"]{
       width:18px;
