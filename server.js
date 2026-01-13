@@ -23,7 +23,7 @@ app.use(cookieParser());
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 
-// 기존 관리자 비밀 URL 유지 (요청: https://www.devonraid.xyz/devon_path_f23d12)
+// 기존 관리자 비밀 URL 유지
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 
@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS applications (
   buffer_count INTEGER NOT NULL,
 
   confirmed INTEGER NOT NULL DEFAULT 0,
-  comment TEXT NOT NULL DEFAULT ''
+  comment TEXT NOT NULL DEFAULT '',
+  request_note TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
@@ -90,7 +91,7 @@ CREATE TABLE IF NOT EXISTS day_codes (
 );
 `);
 
-//  마이그레이션: request_note(시청자 요청사항) 컬럼이 없으면 추가
+// (예전 DB에서 올 경우 request_note 없으면 추가하는 안전장치)
 function ensureColumn(table, colName, colDDL) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   const has = cols.some((c) => String(c.name) === colName);
@@ -124,13 +125,10 @@ function gradeLabel(key) {
   return GRADE_OPTIONS.find((g) => g.key === key)?.label || key;
 }
 function isValidKstDate(s) {
-  // YYYY-MM-DD 간단 검증
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
 }
 
-// - 레이드별 "현재 진행중(활성) 날짜"를 가져온다.
-// - 인증키가 설정되어 있으면 그 date_kst가 Active Day
-// - 없으면 오늘을 반환(단, 인증/예약은 코드가 없으면 막힘)
+// 레이드별 Active Day / 코드
 function getActiveDay(raidKey) {
   const row = db.prepare("SELECT date_kst FROM day_codes WHERE raid_key=?").get(raidKey);
   return row?.date_kst || todayKST();
@@ -140,7 +138,7 @@ function getActiveCodeRow(raidKey) {
 }
 
 // =====================
-// Layout / CSS (기존 유지: 단색 배경)
+// Layout / CSS
 // =====================
 function layout(body, title = "데본베일 레이드 예약 사이트") {
   return `<!doctype html>
@@ -168,7 +166,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background: #070a12; /* 단색 */
+      background: #070a12;
       color: var(--text);
     }
     a{ color:inherit; text-decoration:none; }
@@ -193,6 +191,18 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     }
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
+
+    .raidButtons{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:8px;
+    }
+    .raidButtons .btn{
+      min-width:110px;
+      justify-content:center;
+    }
+
     .btn{
       border:1px solid var(--line);
       background: var(--btn);
@@ -239,7 +249,6 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     input::placeholder, textarea::placeholder{ color: rgba(233,238,252,.45); }
     textarea{ resize: vertical; min-height: 42px; }
 
-    /* 겹침 방지: 폼을 grid로 */
     .formGrid{
       display:grid;
       grid-template-columns: 160px minmax(160px, 1fr) minmax(160px, 1fr) 140px 140px;
@@ -317,7 +326,6 @@ function requireViewerOk(req, res, next) {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  // Active Day 기준으로 쿠키 키 생성 → 자정 지나도 유지(Active Day가 바뀌기 전까지)
   const activeDay = getActiveDay(raid);
   const cookieKey = `viewer_ok_${raid}_${activeDay}`;
 
@@ -330,12 +338,15 @@ function requireViewerOk(req, res, next) {
 function requireAdmin(req, res, next) {
   if (!ADMIN_KEY) {
     return res.status(500).send(
-      layout(`
+      layout(
+        `
         <div class="box">
           <div class="bad"><b>ADMIN_KEY가 설정되지 않았습니다.</b></div>
           <div class="muted">Render Environment Variables에 ADMIN_KEY를 추가하세요.</div>
         </div>
-      `, "오류")
+      `,
+        "오류"
+      )
     );
   }
   const key = String(req.cookies.admin_key || "");
@@ -393,7 +404,8 @@ app.get("/verify", (req, res) => {
   const activeDay = activeRow?.date_kst || todayKST();
 
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
@@ -423,7 +435,9 @@ app.get("/verify", (req, res) => {
             : ""
         }
       </div>
-    `, "인증키")
+    `,
+      "인증키"
+    )
   );
 });
 
@@ -434,27 +448,29 @@ app.post("/verify", (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  const row = getActiveCodeRow(raid); // todayKST()가 아니라 "현재 Active" 코드
+  const row = getActiveCodeRow(raid);
   if (!row || String(row.code) !== code) {
     return res.send(
-      layout(`
+      layout(
+        `
         <div class="box">
           <div class="bad"><b>인증키가 올바르지 않습니다.</b></div>
           <div class="divider"></div>
           <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">다시 입력</a>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
-      `, "인증 실패")
+      `,
+        "인증 실패"
+      )
     );
   }
 
-  // Active Day 기준 쿠키 (자정 지나도 Active Day가 동일하면 유지)
   const activeDay = row.date_kst;
   res.cookie(`viewer_ok_${raid}_${activeDay}`, "1", {
     httpOnly: true,
     sameSite: "lax",
     secure: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7일 정도 유지(Active Day가 안 바뀌면 계속 유효)
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
   return res.redirect(`/reserve?raid=${encodeURIComponent(raid)}`);
@@ -470,7 +486,8 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   const activeDay = getActiveDay(raid);
 
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
@@ -517,7 +534,6 @@ app.get("/reserve", requireViewerOk, (req, res) => {
               <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
             </div>
 
-            <!-- 요청사항(선택) -->
             <div class="field fieldFull">
               <label>요청사항 (선택)</label>
               <textarea name="request_note" placeholder="예) 3깃수부터 참여가능/최대 12글자 입력가능"></textarea>
@@ -535,7 +551,9 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           - 등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
       </div>
-    `, "예약 신청")
+    `,
+      "예약 신청"
+    )
   );
 });
 
@@ -545,53 +563,62 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  // Active Day 기준으로 저장 → 자정 지나도 같은 Active Day로 계속 조회 가능
   const activeRow = getActiveCodeRow(raid);
   if (!activeRow || !activeRow.code) {
     return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("스트리머가 아직 인증키를 설정하지 않았습니다.")}`
+      `/reserve?raid=${encodeURIComponent(
+        raid
+      )}&err=${encodeURIComponent("스트리머가 아직 인증키를 설정하지 않았습니다.")}`
     );
   }
   const activeDay = activeRow.date_kst;
 
-  // 서버 검증: 등급 선택 필수(빈 값이면 거부)
   const viewer_grade = String(req.body.viewer_grade || "");
   const chzzk_nickname = String(req.body.chzzk_nickname || "").trim();
   const adventure_name = String(req.body.adventure_name || "").trim();
   const dealer_count = Number(req.body.dealer_count);
   const buffer_count = Number(req.body.buffer_count);
-  const request_note = String(req.body.request_note || "").slice(0, 300); // 요청사항(선택) 300자 제한
+  const request_note = String(req.body.request_note || "").slice(0, 300);
 
-  // 등급 유효성: 빈값 금지 + 목록에 있는 값만(빈값 "" 제외)
   const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
   if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
     return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("시청자 등급을 선택해야 예약이 가능합니다.")}`
+      `/reserve?raid=${encodeURIComponent(
+        raid
+      )}&err=${encodeURIComponent("시청자 등급을 선택해야 예약이 가능합니다.")}`
     );
   }
 
   if (!chzzk_nickname || !adventure_name) {
     return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("닉네임/모험단 이름을 입력해 주세요.")}`
+      `/reserve?raid=${encodeURIComponent(
+        raid
+      )}&err=${encodeURIComponent("닉네임/모험단 이름을 입력해 주세요.")}`
     );
   }
 
   if (!Number.isInteger(dealer_count) || dealer_count < 0 || dealer_count > 999) {
     return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("딜러 갯수는 0~999 정수여야 합니다.")}`
+      `/reserve?raid=${encodeURIComponent(
+        raid
+      )}&err=${encodeURIComponent("딜러 갯수는 0~999 정수여야 합니다.")}`
     );
   }
   if (!Number.isInteger(buffer_count) || buffer_count < 0 || buffer_count > 999) {
     return res.redirect(
-      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent("버퍼 갯수는 0~999 정수여야 합니다.")}`
+      `/reserve?raid=${encodeURIComponent(
+        raid
+      )}&err=${encodeURIComponent("버퍼 갯수는 0~999 정수여야 합니다.")}`
     );
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO applications
     (created_at, date_kst, raid_key, viewer_grade, chzzk_nickname, adventure_name, dealer_count, buffer_count, confirmed, comment, request_note)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
-  `).run(
+  `
+  ).run(
     nowISO(),
     activeDay,
     raid,
@@ -604,7 +631,8 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   );
 
   return res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div style="font-weight:900;font-size:20px;margin-bottom:6px;">등록 완료</div>
         <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
@@ -615,18 +643,21 @@ app.post("/reserve", requireViewerOk, (req, res) => {
           <a class="btn btnGhost" href="/">메인</a>
         </div>
       </div>
-    `, "완료")
+    `,
+      "완료"
+    )
   );
 });
 
-// 예약확인(레이드 미선택 시 선택 화면)
+// 예약확인(시청자)
 app.get("/check", (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
 
   if (!raidObj) {
     return res.send(
-      layout(`
+      layout(
+        `
         <div class="box">
           <div class="row sp">
             <div>
@@ -637,22 +668,31 @@ app.get("/check", (req, res) => {
           </div>
           <div class="divider"></div>
           <div class="row" style="gap:12px;">
-            ${RAID_OPTIONS.map((r) => `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`).join("")}
+            ${RAID_OPTIONS.map(
+              (r) => `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`
+            ).join("")}
           </div>
         </div>
-      `, "예약확인")
+      `,
+        "예약확인"
+      )
     );
   }
 
   const activeDay = getActiveDay(raid);
-  const apps = db.prepare(`
+  const apps = db
+    .prepare(
+      `
     SELECT * FROM applications
     WHERE date_kst=? AND raid_key=?
     ORDER BY datetime(created_at) ASC
-  `).all(activeDay, raid);
+  `
+    )
+    .all(activeDay, raid);
 
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
@@ -710,12 +750,14 @@ app.get("/check", (req, res) => {
           - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
         </div>
       </div>
-    `, "예약확인")
+    `,
+      "예약확인"
+    )
   );
 });
 
 // =====================
-// Admin routes (Secret URL)
+// Admin routes
 // =====================
 app.get(ADMIN_BASE, (req, res) => {
   const key = String(req.cookies.admin_key || "");
@@ -726,7 +768,8 @@ app.get(ADMIN_BASE, (req, res) => {
 // 로그인 화면
 app.get(`${ADMIN_BASE}/login`, (req, res) => {
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
@@ -746,7 +789,9 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
           <button class="btn" type="submit">입장</button>
         </form>
       </div>
-    `, "스트리머 로그인")
+    `,
+      "스트리머 로그인"
+    )
   );
 });
 
@@ -754,13 +799,16 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
   const key = String(req.body.key || "").trim();
   if (!ADMIN_KEY || key !== ADMIN_KEY) {
     return res.send(
-      layout(`
+      layout(
+        `
         <div class="box">
           <div class="bad"><b>키가 올바르지 않습니다.</b></div>
           <div class="divider"></div>
           <a class="btn" href="${esc(ADMIN_BASE)}/login">다시 시도</a>
         </div>
-      `, "실패")
+      `,
+        "실패"
+      )
     );
   }
 
@@ -768,7 +816,7 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
     httpOnly: true,
     sameSite: "lax",
     secure: true,
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
+    maxAge: 30 * 24 * 60 * 60 * 1000,
   });
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -781,7 +829,8 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
 // 관리자: 레이드 선택 + Active Day/인증키 설정
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
@@ -794,14 +843,16 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="divider"></div>
 
         <div style="font-weight:900;margin-bottom:8px;">신청목록 보기</div>
-        <form method="GET" action="${esc(ADMIN_BASE)}/list" class="row">
-          <select name="raid" required style="max-width:260px;">
-            <option value="">레이드 선택</option>
-            ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
-          </select>
-          <input type="hidden" name="sort" value="time"/>
-          <button class="btn" type="submit">확인</button>
-        </form>
+        <div class="raidButtons">
+          ${
+            RAID_OPTIONS.map(
+              (r) =>
+                `<a class="btn" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
+                  r.key
+                )}&sort=time">${esc(r.label)}</a>`
+            ).join("")
+          }
+        </div>
 
         <div class="divider"></div>
 
@@ -835,7 +886,9 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
           <button class="btn" type="submit">저장</button>
         </form>
       </div>
-    `, "관리자")
+    `,
+      "관리자"
+    )
   );
 });
 
@@ -849,22 +902,24 @@ app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
     return res.redirect(`${ADMIN_BASE}/raid`);
   }
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO day_codes(raid_key, date_kst, code, updated_at)
     VALUES(?, ?, ?, ?)
     ON CONFLICT(raid_key) DO UPDATE SET
       date_kst=excluded.date_kst,
       code=excluded.code,
       updated_at=excluded.updated_at
-  `).run(raid, date_kst, code, nowISO());
+  `
+  ).run(raid, date_kst, code, nowISO());
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
-// 신청목록 (Active Day 기준)
+// 신청목록 (관리자)
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
-  const sort = String(req.query.sort || "time"); // time | grade
+  const sort = String(req.query.sort || "time");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
@@ -875,10 +930,14 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time`
       : `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=grade`;
 
-  let apps = db.prepare(`
+  let apps = db
+    .prepare(
+      `
     SELECT * FROM applications
     WHERE date_kst=? AND raid_key=?
-  `).all(activeDay, raid);
+  `
+    )
+    .all(activeDay, raid);
 
   if (sort === "grade") {
     apps.sort((a, b) => {
@@ -892,7 +951,8 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   }
 
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
@@ -949,7 +1009,9 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                             <input type="hidden" name="id" value="${esc(a.id)}"/>
                             <input type="hidden" name="raid" value="${esc(raid)}"/>
                             <input type="hidden" name="sort" value="${esc(sort)}"/>
-                            <input type="hidden" name="confirmed" value="${a.confirmed === 1 ? "0" : "1"}"/>
+                            <input type="hidden" name="confirmed" value="${
+                              a.confirmed === 1 ? "0" : "1"
+                            }"/>
                             <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
                           </form>
                         </td>
@@ -997,7 +1059,9 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
           - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
         </div>
       </div>
-    `, "신청목록")
+    `,
+      "신청목록"
+    )
   );
 });
 
@@ -1011,10 +1075,12 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   if (Number.isInteger(id)) {
     db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(confirmed, id);
   }
-  return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  return res.redirect(
+    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
+  );
 });
 
-// 코멘트 저장
+// 코멘트 저장 (12글자 제한)
 app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -1024,7 +1090,9 @@ app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
   if (Number.isInteger(id)) {
     db.prepare("UPDATE applications SET comment=? WHERE id=?").run(comment, id);
   }
-  return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  return res.redirect(
+    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
+  );
 });
 
 // 개별 삭제
@@ -1036,10 +1104,12 @@ app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
   if (Number.isInteger(id)) {
     db.prepare("DELETE FROM applications WHERE id=?").run(id);
   }
-  return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  return res.redirect(
+    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
+  );
 });
 
-// Active Day(진행일) 기준 일괄삭제
+// Active Day 기준 일괄삭제
 app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "time");
@@ -1048,11 +1118,15 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   const activeDay = getActiveDay(raid);
   db.prepare("DELETE FROM applications WHERE date_kst=? AND raid_key=?").run(activeDay, raid);
 
-  return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
+  return res.redirect(
+    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
+  );
 });
 
 // health
-app.get("/health", (req, res) => res.json({ ok: true, kst: todayKST(), admin: ADMIN_BASE }));
+app.get("/health", (req, res) =>
+  res.json({ ok: true, kst: todayKST(), admin: ADMIN_BASE })
+);
 
 // start
 app.listen(PORT, "0.0.0.0", () => {
