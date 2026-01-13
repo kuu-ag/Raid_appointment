@@ -1,4 +1,4 @@
-// server.js  (ESM / "type": "module")
+  // server.js  (ESM / "type": "module")
 "use strict";
 
 import express from "express";
@@ -309,18 +309,23 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     /* 업둥 체크박스 */
     .bigCheck {
       display:flex;
-      align-items:center;
+      align-items:center;  /* 둘 다 수직 가운데 정렬 */
       gap:6px;
       cursor:pointer;
     }
+
     .bigCheck input[type="checkbox"] {
       width:22px;
       height:22px;
     }
+
     .bigCheck span {
       font-size:16px;
       font-weight:700;
       user-select:none;
+      line-height:22px;      /* 체크박스 높이와 동일하게 */
+      display:inline-flex;
+      align-items:center;    /* 글자도 자체적으로 가운데 정렬 */
     }
   </style>
   <script>
