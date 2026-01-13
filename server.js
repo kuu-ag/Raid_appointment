@@ -1,4 +1,4 @@
-  // server.js  (ESM / "type": "module")
+// server.js  (ESM / "type": "module")
 "use strict";
 
 import express from "express";
@@ -309,23 +309,40 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
     /* 업둥 체크박스 */
     .bigCheck {
       display:flex;
-      align-items:center;  /* 둘 다 수직 가운데 정렬 */
+      align-items:center;
       gap:6px;
       cursor:pointer;
     }
-
     .bigCheck input[type="checkbox"] {
       width:22px;
       height:22px;
     }
-
     .bigCheck span {
       font-size:16px;
       font-weight:700;
       user-select:none;
-      line-height:22px;      /* 체크박스 높이와 동일하게 */
+      line-height:22px;
       display:inline-flex;
-      align-items:center;    /* 글자도 자체적으로 가운데 정렬 */
+      align-items:center;
+    }
+
+    /* 관리자 뷰 등록완료 체크박스 (클릭 영역 확대) */
+    .adminConfirmLabel{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:6px 10px;
+      border-radius:10px;
+      background:rgba(255,255,255,.04);
+      cursor:pointer;
+    }
+    .adminConfirmLabel:hover{
+      background:rgba(255,255,255,.08);
+    }
+    .adminConfirmLabel input[type="checkbox"]{
+      width:22px;
+      height:22px;
+      margin:0;
     }
   </style>
   <script>
@@ -1115,15 +1132,17 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                       <tr>
                         <td class="center">
                           <form id="${formId}" method="POST" action="${esc(
-                        ADMIN_BASE,
-                      )}/confirm" style="margin:0;">
+                            ADMIN_BASE,
+                          )}/confirm" style="margin:0;">
                             <input type="hidden" name="id" value="${esc(a.id)}"/>
                             <input type="hidden" name="raid" value="${esc(raid)}"/>
                             <input type="hidden" name="sort" value="${esc(sort)}"/>
                             <input type="hidden" name="confirmed" value="${
                               a.confirmed === 1 ? "0" : "1"
                             }"/>
-                            <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
+                            <label class="adminConfirmLabel">
+                              <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
+                            </label>
                           </form>
                         </td>
 
