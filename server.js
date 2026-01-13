@@ -502,7 +502,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   // 업둥교환 전용 슬롯 설명
   const slotHelp = updoong
     ? `- 업둥교환은 딜러/버퍼 대신 1업둥, 2업둥 체크박스로 신청합니다.<br/>
-       - 1업둥, 2업둥은 둘 다 선택도 가능합니다.`
+       - 최소 1개 이상 선택하셔야 합니다.`
     : `- 딜러/버퍼 숫자는 본인이 데려오는 인원 수 기준입니다.`;
 
   res.send(
@@ -526,58 +526,64 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           <input type="hidden" name="raid" value="${esc(raid)}"/>
 
           <div class="formGrid">
-            <div class="field">
-              <label>시청자 등급</label>
-              <select name="viewer_grade" required>
-                ${GRADE_OPTIONS.map((g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
-              </select>
-            </div>
+  <div class="field">
+    <label>시청자 등급</label>
+    <select name="viewer_grade" required>
+      ${GRADE_OPTIONS.map((g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
+    </select>
+  </div>
 
-            <div class="field">
-              <label>치지직 닉네임</label>
-              <input name="chzzk_nickname" placeholder="치지직 닉네임" required maxlength="40"/>
-            </div>
+  <div class="field">
+    <label>치지직 닉네임</label>
+    <input name="chzzk_nickname" placeholder="치지직 닉네임" required maxlength="40"/>
+  </div>
 
-            <div class="field">
-              <label>모험단 이름</label>
-              <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
-            </div>
+  <div class="field">
+    <label>모험단 이름</label>
+    <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
+  </div>
 
-            ${
-              updoong
-                ? `
-                  <div class="field fieldFull">
-                    <label>업둥 선택</label>
-                    <div class="updoongRow">
-                      <label class="bigCheck">
-                        <input type="checkbox" name="first_updoong"/>
-                        <span>1업둥</span>
-                      </label>
-                      <label class="bigCheck">
-                        <input type="checkbox" name="second_updoong"/>
-                        <span>2업둥</span>
-                      </label>
-                    </div>
-                  </div>
-                `
-                : `
-                  <div class="field">
-                    <label>딜러 갯수</label>
-                    <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
-                  </div>
-                  <div class="field">
-                    <label>버퍼 갯수</label>
-                    <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
-                  </div>
-                `
-            }
+  ${
+    updoong
+      ? `
+        <!-- 업둥교환: 그리드 4, 5번째 칸에 붙이기 -->
+        <div class="field">
+          <label>1업둥</label>
+          <label class="bigCheck">
+            <input type="checkbox" name="first_updoong"/>
+            <span>신청</span>
+          </label>
+        </div>
 
-            <!-- 요청사항(선택) -->
-            <div class="field fieldFull">
-              <label>요청사항 (선택)</label>
-              <textarea name="request_note" placeholder="예) 3깃수부터 참여 가능 / 자리 관련 요청 등"></textarea>
-            </div>
-          </div>
+        <div class="field">
+          <label>2업둥</label>
+          <label class="bigCheck">
+            <input type="checkbox" name="second_updoong"/>
+            <span>신청</span>
+          </label>
+        </div>
+      `
+      : `
+        <!-- 일반 레이드: 딜러/버퍼 숫자 입력 -->
+        <div class="field">
+          <label>딜러 갯수</label>
+          <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
+        </div>
+
+        <div class="field">
+          <label>버퍼 갯수</label>
+          <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
+        </div>
+      `
+  }
+
+  <!-- 요청사항(선택) -->
+  <div class="field fieldFull">
+    <label>요청사항 (선택)</label>
+    <textarea name="request_note" placeholder="예) 3깃수부터 참여 가능 / 자리 관련 요청 등"></textarea>
+  </div>
+</div>
+
 
           <div class="row" style="margin-top:12px;">
             <button class="btn" type="submit">등록</button>
