@@ -169,7 +169,7 @@ function layout(body, title = "레이드 예약 사이트") {
       --btn2:#4351ff;
       --danger:#ff3960;
       --chip:rgba(23,34,80,.9);
-      --shadow:0 16px 40px rgba(0,0,0,.65);
+      --shadow:0 0 0 rgba(0,0,0,0);   /* 그림자 기본값도 0으로 */
       --radius:18px;
       --accent:#4be0ff;
       --accent2:#ff7ce5;
@@ -178,12 +178,10 @@ function layout(body, title = "레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:#070a12;            /* 단색 배경 (원래도 그라데이션 없음) */
+      background:#070a12;
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
-
-    /* 🔻 기존 .box::before(그라데이션 오버레이)는 통째로 제거했습니다 */
 
     .boxInner{ position:relative; }
     .wrap{
@@ -192,14 +190,14 @@ function layout(body, title = "레이드 예약 사이트") {
       padding:24px 14px 68px;
     }
 
-    /* 타이틀은 그대로 그라데이션 유지 */
+    /* 타이틀 : 그라데이션만 유지, 그림자 제거 */
     .title{
       position:relative;
       border-radius:18px;
       padding:18px 16px 20px;
       margin-bottom:18px;
       background:linear-gradient(135deg, rgba(36,50,255,.85), rgba(75,224,255,.75));
-      box-shadow:0 18px 40px rgba(0,0,0,.65);
+      box-shadow:none;                 /* ← 기존 그림자 제거 */
       overflow:hidden;
     }
     .title::before{
@@ -249,13 +247,13 @@ function layout(body, title = "레이드 예약 사이트") {
       color:var(--muted);
     }
 
-    /* 🔻 박스의 그라데이션 제거: 단색 배경만 사용 */
+    /* 박스 : 단색 배경 + 그림자 제거 */
     .box{
-      background:var(--panel2);      /* 이전: radial-gradient(...) var(--panel2) */
+      background:var(--panel2);
       border-radius:var(--radius);
       padding:20px 18px 18px;
       border:1px solid rgba(120,160,255,.35);
-      box-shadow:var(--shadow);
+      box-shadow:none;                 /* ← 카드 그림자 제거 */
       position:relative;
       overflow:hidden;
     }
@@ -263,10 +261,10 @@ function layout(body, title = "레이드 예약 사이트") {
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
 
-    /* 🔻 버튼 그라데이션 제거: 단색 + 호버도 단색 */
+    /* 버튼 : 단색 + 어떤 상태에서도 box-shadow 없음 */
     .btn{
       border:1px solid rgba(148,163,255,.7);
-      background:#111827;           /* 단색 */
+      background:#111827;
       color:var(--text);
       padding:9px 14px;
       border-radius:999px;
@@ -277,13 +275,12 @@ function layout(body, title = "레이드 예약 사이트") {
       justify-content:center;
       gap:8px;
       font-size:13px;
-      box-shadow:0 10px 24px rgba(15,23,42,.9);
-      transition:transform .08s ease-out, box-shadow .08s ease-out, background .08s ease-out;
+      box-shadow:none;                 /* ← 기본 그림자 제거 */
+      transition:transform .08s ease-out, background .08s ease-out;
     }
     .btn:hover{
-      background:#1d4ed8;           /* 단색 (약간 밝게) */
+      background:#1d4ed8;             /* 색만 살짝 밝게, 그림자 없음 */
       transform:translateY(-1px);
-      box-shadow:0 18px 40px rgba(15,23,42,.95);
     }
     .btnGhost{
       background:transparent;
@@ -292,14 +289,16 @@ function layout(body, title = "레이드 예약 사이트") {
     }
     .btnGhost:hover{
       background:rgba(15,23,42,.9);
-      box-shadow:0 8px 20px rgba(15,23,42,.8);
+      box-shadow:none;
     }
     .btnDanger{
-      background:#b91c1c;           /* 단색 레드 */
+      background:#b91c1c;
       border-color:rgba(248,113,113,.7);
+      box-shadow:none;
     }
     .btnDanger:hover{
-      background:#ef4444;           /* 호버도 단색 */
+      background:#ef4444;
+      box-shadow:none;
     }
 
     .chip{
@@ -319,7 +318,7 @@ function layout(body, title = "레이드 예약 사이트") {
     .wait{ color:#fde68a; font-weight:700; }
     .bad{ color:#fda4af; font-weight:700; }
 
-    /* 인풋/셀렉트는 그대로 유지 (그라데이션 그대로 둠) */
+    /* 인풋/셀렉트/텍스트area는 기존 그대로 (그라데이션 유지) */
     input,select,textarea{
       width:100%;
       background:linear-gradient(135deg,#050816,#020617);
@@ -340,7 +339,6 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:0 0 0 1px var(--accent-soft), 0 0 24px rgba(56,189,248,.35);
     }
 
-    /* 셀렉트 관련 스타일은 그대로 */
     select{
       appearance:none;
       -webkit-appearance:none;
