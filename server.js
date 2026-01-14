@@ -40,16 +40,16 @@ const RAID_OPTIONS = [
   { key: "updoong", label: "업둥교환" }, // 업둥교환 레이드
 ];
 
-// 등급: 기본값 "등급 선택"(빈 값) 추가
+// 치즈: 기본값 "치즈 선택"(빈 값) 추가
 const GRADE_OPTIONS = [
-  { key: "", label: "등급 선택" }, // 기본값
+  { key: "", label: "치즈 선택" }, // 기본값
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
-  { key: "normal", label: "일반 등급" },
+  { key: "normal", label: "일반 치즈" },
 ];
 
-// 등급 정렬 우선순위
+// 치즈 정렬 우선순위
 const GRADE_SORT = { burning: 1, pink: 2, yellow: 3, normal: 4 };
 
 // =====================
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
--- 레이드별 Active Day + 인증키 (자정이 넘어도 행이 유지됨)
+--  레이드별 Active Day + 인증키 (자정이 넘어도 행이 유지됨)
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
@@ -103,6 +103,7 @@ function ensureColumn(table, colName, colDDL) {
   if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDDL}`);
 }
 
+// 요청사항, 업둥 플래그 컬럼 보강 (기존 DB에 없을 때 대비)
 ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
 ensureColumn("applications", "up1", "up1 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
@@ -146,9 +147,9 @@ function getActiveCodeRow(raidKey) {
 }
 
 // =====================
-// Layout / CSS  (던전앤파이터 느낌 UI, 배경/박스는 단색)
+// Layout / CSS
 // =====================
-function layout(body, title = "데본베일 레이드 예약 사이트") {
+function layout(body, title = "레이드 예약 사이트") {
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -157,58 +158,113 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
   <title>${esc(title)}</title>
   <style>
     :root{
-      --bg:#05060c;
-      --panel:#090b18;
-      --panel2:#0d1020;
-      --line:rgba(255,255,255,.16);
-      --text:#f5f7ff;
-      --muted:rgba(210,220,255,.76);
-      --accent:#f2a13b;
-      --accent2:#ff6e3a;
-      --danger:#8c2430;
-      --chip:rgba(255,255,255,.05);
-      --shadow:0 12px 30px rgba(0,0,0,.6);
+      --bg:#050816;
+      --bg2:#0b1024;
+      --panel:#0b1226;
+      --panel2: rgba(16,24,54,.96);
+      --line:rgba(120,160,255,.35);
+      --text:#e9eefc;
+      --muted:rgba(189,198,232,.82);
+      --btn:#2432ff;
+      --btn2:#4351ff;
+      --danger:#ff3960;
+      --chip:rgba(23,34,80,.9);
+      --shadow:0 16px 40px rgba(0,0,0,.65);
       --radius:18px;
+      --accent:#4be0ff;
+      --accent2:#ff7ce5;
     }
     *{ box-sizing:border-box; }
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:var(--bg);
+      background:#070a12;
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
+
     .wrap{
       max-width:1400px;
       margin:0 auto;
-      padding:24px 14px 60px;
+      padding:24px 14px 68px;
     }
+
     .title{
-      border:1px solid rgba(255,255,255,.22);
-      background:var(--panel2);
-      border-radius:20px;
-      text-align:center;
-      font-weight:900;
-      font-size:clamp(20px,3.2vw,34px);
-      letter-spacing:.12em;
-      padding:18px 10px;
-      box-shadow:var(--shadow);
+      position:relative;
+      border-radius:18px;
+      padding:18px 16px 20px;
       margin-bottom:18px;
+      background:linear-gradient(135deg, rgba(36,50,255,.85), rgba(75,224,255,.75));
+      box-shadow:0 18px 40px rgba(0,0,0,.65);
+      overflow:hidden;
     }
-    .box{
-      background:var(--panel2);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:20px;
-      box-shadow:var(--shadow);
+    .title::before{
+      content:"";
+      position:absolute;
+      inset:1px;
+      border-radius:16px;
+      background:linear-gradient(135deg, #050816 0%, #0b1024 40%, #141c3b 100%);
     }
+    .titleInner{
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .titleMain{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .titleLogo{
+      font-size:clamp(22px, 3.4vw, 32px);
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .titleLogo span.accent{
+      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip:text;
+      background-clip:text;
+      color:transparent;
+    }
+    .titleSub{
+      font-size:13px;
+      color:var(--muted);
+    }
+    .titleBadge{
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(142,163,255,.5);
+      background:rgba(9,16,44,.9);
+      font-size:12px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      color:var(--muted);
+    }
+
+    .box {
+      background: #101b2e;
+    }
+    .box::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(135deg, rgba(255,255,255,.04), transparent);
+      opacity:.8;
+      pointer-events:none;
+    }
+    .boxInner{ position:relative; }
+
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
     .btn{
-      border:1px solid rgba(0,0,0,.6);
-      background:linear-gradient(135deg, var(--accent), var(--accent2));
-      color:#fff;
-      padding:10px 16px;
+      border:1px solid rgba(148,163,255,.7);
+      background:radial-gradient(circle at top,#1e293b 0,#020617 60%);
+      color:var(--text);
+      padding:9px 14px;
       border-radius:999px;
       cursor:pointer;
       font-weight:800;
@@ -216,85 +272,100 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       align-items:center;
       justify-content:center;
       gap:8px;
-      font-size:14px;
-      box-shadow:0 6px 14px rgba(0,0,0,.6);
-      transition:transform .05s ease-out, box-shadow .05s ease-out, filter .05s;
+      font-size:13px;
+      box-shadow:0 10px 24px rgba(15,23,42,.9);
+      transition:transform .08s ease-out, box-shadow .08s ease-out, background .08s ease-out;
     }
     .btn:hover{
-      filter:brightness(1.05);
+      background:radial-gradient(circle at top,#1d4ed8 0,#020617 65%);
       transform:translateY(-1px);
-      box-shadow:0 10px 20px rgba(0,0,0,.7);
+      box-shadow:0 18px 40px rgba(15,23,42,.95);
     }
     .btnGhost{
       background:transparent;
-      border:1px solid rgba(255,255,255,.25);
-      color:var(--text);
+      border-color:rgba(148,163,255,.35);
       box-shadow:none;
     }
     .btnGhost:hover{
-      background:rgba(255,255,255,.06);
-      transform:none;
-      box-shadow:none;
+      background:rgba(15,23,42,.9);
+      box-shadow:0 8px 20px rgba(15,23,42,.8);
     }
     .btnDanger{
-      background:linear-gradient(135deg, #e8504a, #a71929);
-      border-color:#4b0a12;
+      background:radial-gradient(circle at top,#b91c1c 0,#450a0a 60%);
+      border-color:rgba(248,113,113,.7);
+    }
+    .btnDanger:hover{
+      background:radial-gradient(circle at top,#ef4444 0,#450a0a 60%);
     }
     .chip{
       display:inline-flex;
       gap:6px;
       align-items:center;
-      padding:6px 10px;
+      padding:5px 10px;
       border-radius:999px;
       background:var(--chip);
-      border:1px solid var(--line);
+      border:1px solid rgba(148,163,255,.4);
       color:var(--muted);
       font-size:12px;
     }
-    .muted{ color:var(--muted); font-size:14px; }
-    .divider{ height:1px; background:rgba(255,255,255,.10); margin:16px 0; }
-    .ok{ color:#b6ffcf; }
-    .wait{ color:#ffd7a6; }
-    .bad{ color:#ffb6c2; }
+    .muted{ color:var(--muted); font-size:13px; }
+    .divider{ height:1px; background:linear-gradient(to right,transparent,#3844a8,transparent); margin:16px 0; }
+    .ok{ color:#4ade80; font-weight:700; }
+    .wait{ color:#fde68a; font-weight:700; }
+    .bad{ color:#fda4af; font-weight:700; }
 
-    input, select, textarea{
+    input,select,textarea{
       width:100%;
-      background:#050814;
-      border:1px solid rgba(115,140,215,.6);
+      background:linear-gradient(135deg,#050816,#020617);
+      border:1px solid rgba(115,145,235,.7);
       color:var(--text);
-      padding:10px 12px;
-      border-radius:999px;
+      padding:9px 11px;
+      border-radius:12px;
       outline:none;
       min-width:0;
-      font-size:14px;
+      font-size:13px;
+      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
     }
-    input::placeholder,
-    textarea::placeholder{ color:rgba(210,220,255,.45); }
+    input::placeholder,textarea::placeholder{ color:rgba(148,163,255,.6); }
+    textarea{ resize:vertical; min-height:44px; }
 
-    textarea{
-      resize:vertical;
-      min-height:42px;
-      border-radius:16px;
+    input:focus,select:focus,textarea:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 1px var(--accent-soft), 0 0 24px rgba(56,189,248,.35);
     }
 
-    /* 모든 셀렉트 박스/옵션 색상 통일 (드롭다운까지) */
+    /* 셀렉트 공통 스타일 */
     select{
+      appearance:none;
       -webkit-appearance:none;
       -moz-appearance:none;
-      appearance:none;
-      background-color:#050814;
-      color:var(--text);
-      position:relative;
+      background:linear-gradient(135deg,#050816,#020617);
+      color:var(--text);          /* 선택된 값(닫힌 상태) – 밝은 글자 */
+      border:1px solid rgba(115,145,235,.7);
     }
+
+    /* 드롭다운에 펼쳐졌을 때 각 옵션 스타일  */
     select option{
-      background-color:#050814;
-      color:var(--text);
+      /* 많은 브라우저에서 배경색은 무시될 수 있지만, 글자색은 잘 먹음 */
+      color:#111827;              /* 진한 남색/거의 검정 – 흰 배경에서도 잘 보이도록 */
+      font-weight:600;
+    }
+
+    /* 선택된 옵션 */
+    select option:checked{
+      background:#1d4ed8;         /* 파란 하이라이트 */
+      color:#ffffff;              /* 흰 글자 */
+    }
+
+    /* (선택) 비활성 옵션이 있을 경우 색 조금만 연하게 */
+    select option:disabled{
+      color:#6b7280;
     }
 
     /* 예약 폼 그리드 */
     .formGrid{
       display:grid;
-      grid-template-columns:160px minmax(160px,1fr) minmax(160px,1fr) 160px 160px;
+      grid-template-columns: 170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
       gap:10px;
       align-items:end;
     }
@@ -302,7 +373,8 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       display:block;
       font-size:12px;
       color:var(--muted);
-      margin:0 0 6px 4px;
+      margin:0 0 6px 2px;
+      letter-spacing:.02em;
     }
     .fieldFull{ grid-column:1 / -1; }
 
@@ -319,23 +391,24 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       width:100%;
       border-collapse:collapse;
       overflow:hidden;
-      border-radius:16px;
-      border:1px solid rgba(255,255,255,.12);
-      background:#050814;
+      border-radius:14px;
+      border:1px solid rgba(148,163,255,.4);
+      background:rgba(10,16,32,.98);
     }
     th,td{
-      border-bottom:1px solid rgba(255,255,255,.08);
+      border-bottom:1px solid rgba(51,65,85,.9);
       padding:10px 10px;
       text-align:left;
       font-size:13px;
       vertical-align:middle;
     }
     th{
-      background:#0b1024;
-      font-weight:900;
+      background:radial-gradient(circle at top,#020617 0,#020617 60%);
+      font-weight:800;
       font-size:12px;
-      letter-spacing:.2px;
-      color:rgba(233,238,252,.9);
+      letter-spacing:.05em;
+      color:rgba(191,219,254,.9);
+      text-transform:uppercase;
     }
     tr:last-child td{ border-bottom:0; }
     .center{ text-align:center; }
@@ -350,47 +423,43 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
 
     /* 관리자 레이드 버튼 영역 */
     .raidNav{ margin-bottom:4px; }
-    .raidNav .btn{ font-size:13px; }
+    .raidNav .btn{ font-size:12px; padding-inline:12px; }
 
-    /* 업둥 체크박스 */
-    .bigCheck{
+    /* 업둥 체크박스 (시청자뷰) */
+    .bigCheck {
       display:flex;
       align-items:center;
       gap:6px;
       cursor:pointer;
     }
-    .bigCheck input[type="checkbox"]{
+    .bigCheck input[type="checkbox"] {
       width:22px;
       height:22px;
     }
-    .bigCheck span{
-      font-size:16px;
-      font-weight:700;
-      user-select:none;
-      line-height:22px;
-      display:inline-flex;
-      align-items:center;
-    }
 
-    /* 관리자 등록완료 체크박스 영역 넓게 */
-    .adminConfirmCell{
-      text-align:center;
-    }
-    .adminConfirmWrap{
+    /* 관리자 등록완료 체크박스 큰 범위 */
+    .adminConfirm{
       display:inline-flex;
       align-items:center;
-      justify-content:center;
-      padding:4px 12px;
+      gap:6px;
+      padding:4px 10px;
       border-radius:999px;
-      background:rgba(115,140,215,.18);
-      border:1px solid rgba(115,140,215,.8);
+      background:rgba(15,23,42,.9);
+      border:1px solid rgba(148,163,255,.5);
       cursor:pointer;
+      font-size:12px;
+      user-select:none;
     }
-    .adminConfirmWrap input[type="checkbox"]{
+    .adminConfirm:hover{
+      background:rgba(37,46,94,.95);
+    }
+    .adminConfirm input[type="checkbox"]{
       width:20px;
       height:20px;
       margin:0;
+      cursor:pointer;
     }
+
   </style>
   <script>
     function submitOnChange(formId){
@@ -401,7 +470,20 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
 </head>
 <body>
   <div class="wrap">
-    <div class="title">데본베일 레이드 예약 사이트</div>
+    <div class="title">
+      <div class="titleInner">
+        <div class="titleMain">
+          <div class="titleLogo">
+            <span class="accent">DEVONVAIL</span> RAID
+          </div>
+          <div class="titleSub">레이드 예약 시스템</div>
+        </div>
+        <div class="titleBadge">
+          <span>🧭뿡빵띠</span>
+        </div>
+      </div>
+    </div>
+
     ${body}
   </div>
 </body>
@@ -477,7 +559,7 @@ app.get("/", (req, res) => {
         </div>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 일반 레이드는 한 회차 정원 3버퍼 / 9딜러(총 12명) 기준입니다.<br/>
+          - 일반 레이드 한 회차 정원: 3버퍼 / 9딜러 (총 12명)<br/>
           - 업둥교환은 1업둥 / 2업둥 슬롯으로 별도 운영됩니다.<br/>
           - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
@@ -600,8 +682,9 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           <input type="hidden" name="raid" value="${esc(raid)}"/>
 
           <div class="formGrid">
+
             <div class="field">
-              <label>치즈 종류</label>
+              <label>치즈 색깔</label>
               <select name="viewer_grade" required>
                 ${GRADE_OPTIONS.map((g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
               </select>
@@ -624,14 +707,12 @@ app.get("/reserve", requireViewerOk, (req, res) => {
                     <label>1업둥</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up1"/>
-                      <span>신청</span>
                     </label>
                   </div>
                   <div class="field">
                     <label>2업둥</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up2"/>
-                      <span>신청</span>
                     </label>
                   </div>
                 `
@@ -661,7 +742,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         </form>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 치즈 종류를 “등급 선택” 그대로 두면 등록이 안 됩니다.<br/>
+          - 치즈 색깔을 “치즈 선택” 그대로 두면 등록이 안 됩니다.<br/>
           - 요청사항은 선택이며 비워도 등록됩니다.<br/>
           - ${
             isUp
@@ -702,13 +783,13 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const buffer_count = Number(req.body.buffer_count);
   const up1 = req.body.up1 ? 1 : 0;
   const up2 = req.body.up2 ? 1 : 0;
-  const request_note = String(req.body.request_note || "").slice(0, 200); // 200자 정도로만 안전 제한
+  const request_note = String(req.body.request_note || ""); // 글자수 제한 제거
 
   const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
   if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
     return res.redirect(
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
-        "치즈 종류를 선택해야 예약이 가능합니다.",
+        "치즈 색깔을 선택해야 예약이 가능합니다.",
       )}`,
     );
   }
@@ -884,8 +965,8 @@ app.get("/check", (req, res) => {
         </table>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - “등록완료”는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
-          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.
+          - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
+          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
         </div>
       </div>
     `,
@@ -1011,7 +1092,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
           <div style="min-width:200px;">
             <div class="muted" style="margin-bottom:6px;">진행일(YYYY-MM-DD)</div>
-            <input name="date_kst" value="${esc(todayKST())}" placeholder="예) 2026-01-15" required />
+            <input name="date_kst" value="${esc(todayKST())}" placeholder="예) 2025-12-28" required />
           </div>
 
           <div style="flex:1; min-width:240px;">
@@ -1088,6 +1169,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
   // 정렬
   if (sort === "grade" || (isUp && upFilter)) {
+    // 치즈색깔 우선 + created_at 순
     apps.sort((a, b) => {
       const aa = GRADE_SORT[a.viewer_grade] ?? 999;
       const bb = GRADE_SORT[b.viewer_grade] ?? 999;
@@ -1178,7 +1260,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
                     return `
                       <tr>
-                        <td class="center adminConfirmCell">
+                        <td class="center">
                           <form id="${formId}" method="POST" action="${esc(
                         ADMIN_BASE,
                       )}/confirm" style="margin:0;">
@@ -1188,8 +1270,9 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                             <input type="hidden" name="confirmed" value="${
                               a.confirmed === 1 ? "0" : "1"
                             }"/>
-                            <label class="adminConfirmWrap">
+                            <label class="adminConfirm">
                               <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
+                              <span>완료</span>
                             </label>
                           </form>
                         </td>
