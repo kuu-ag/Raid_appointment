@@ -178,18 +178,13 @@ function layout(body, title = "레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:#070a12;
+      background:#070a12;            /* 단색 배경 (원래도 그라데이션 없음) */
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
-    .box::before{
-      content:"";
-      position:absolute;
-      inset:0;
-      background:linear-gradient(135deg, rgba(255,255,255,.04), transparent);
-      opacity:.8;
-      pointer-events:none;
-    }
+
+    /* 🔻 기존 .box::before(그라데이션 오버레이)는 통째로 제거했습니다 */
+
     .boxInner{ position:relative; }
     .wrap{
       max-width:1400px;
@@ -197,6 +192,7 @@ function layout(body, title = "레이드 예약 사이트") {
       padding:24px 14px 68px;
     }
 
+    /* 타이틀은 그대로 그라데이션 유지 */
     .title{
       position:relative;
       border-radius:18px;
@@ -253,8 +249,9 @@ function layout(body, title = "레이드 예약 사이트") {
       color:var(--muted);
     }
 
+    /* 🔻 박스의 그라데이션 제거: 단색 배경만 사용 */
     .box{
-      background:radial-gradient(circle at 0 0, rgba(75,224,255,.1), transparent 55%) var(--panel2);
+      background:var(--panel2);      /* 이전: radial-gradient(...) var(--panel2) */
       border-radius:var(--radius);
       padding:20px 18px 18px;
       border:1px solid rgba(120,160,255,.35);
@@ -263,13 +260,13 @@ function layout(body, title = "레이드 예약 사이트") {
       overflow:hidden;
     }
 
-    .boxInner{ position:relative; }
-
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
+
+    /* 🔻 버튼 그라데이션 제거: 단색 + 호버도 단색 */
     .btn{
       border:1px solid rgba(148,163,255,.7);
-      background:radial-gradient(circle at top,#1e293b 0,#020617 60%);
+      background:#111827;           /* 단색 */
       color:var(--text);
       padding:9px 14px;
       border-radius:999px;
@@ -284,7 +281,7 @@ function layout(body, title = "레이드 예약 사이트") {
       transition:transform .08s ease-out, box-shadow .08s ease-out, background .08s ease-out;
     }
     .btn:hover{
-      background:radial-gradient(circle at top,#1d4ed8 0,#020617 65%);
+      background:#1d4ed8;           /* 단색 (약간 밝게) */
       transform:translateY(-1px);
       box-shadow:0 18px 40px rgba(15,23,42,.95);
     }
@@ -298,12 +295,13 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:0 8px 20px rgba(15,23,42,.8);
     }
     .btnDanger{
-      background:radial-gradient(circle at top,#b91c1c 0,#450a0a 60%);
+      background:#b91c1c;           /* 단색 레드 */
       border-color:rgba(248,113,113,.7);
     }
     .btnDanger:hover{
-      background:radial-gradient(circle at top,#ef4444 0,#450a0a 60%);
+      background:#ef4444;           /* 호버도 단색 */
     }
+
     .chip{
       display:inline-flex;
       gap:6px;
@@ -321,6 +319,7 @@ function layout(body, title = "레이드 예약 사이트") {
     .wait{ color:#fde68a; font-weight:700; }
     .bad{ color:#fda4af; font-weight:700; }
 
+    /* 인풋/셀렉트는 그대로 유지 (그라데이션 그대로 둠) */
     input,select,textarea{
       width:100%;
       background:linear-gradient(135deg,#050816,#020617);
@@ -341,35 +340,27 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:0 0 0 1px var(--accent-soft), 0 0 24px rgba(56,189,248,.35);
     }
 
-    /* 셀렉트 공통 스타일 */
+    /* 셀렉트 관련 스타일은 그대로 */
     select{
       appearance:none;
       -webkit-appearance:none;
       -moz-appearance:none;
       background:linear-gradient(135deg,#050816,#020617);
-      color:var(--text);          /* 선택된 값(닫힌 상태) – 밝은 글자 */
+      color:var(--text);
       border:1px solid rgba(115,145,235,.7);
     }
-
-    /* 드롭다운에 펼쳐졌을 때 각 옵션 스타일  */
     select option{
-      /* 많은 브라우저에서 배경색은 무시될 수 있지만, 글자색은 잘 먹음 */
-      color:#111827;              /* 진한 남색/거의 검정 – 흰 배경에서도 잘 보이도록 */
+      color:#111827;
       font-weight:600;
     }
-
-    /* 선택된 옵션(하이라이트) */
     select option:checked{
-      background:#1d4ed8;         /* 파란 하이라이트 */
-      color:#ffffff;              /* 흰 글자 */
+      background:#1d4ed8;
+      color:#ffffff;
     }
-
-    /* (선택) 비활성 옵션이 있을 경우 색 조금만 연하게 */
     select option:disabled{
       color:#6b7280;
     }
 
-    /* 예약 폼 그리드 */
     .formGrid{
       display:grid;
       grid-template-columns: 170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
@@ -428,11 +419,9 @@ function layout(body, title = "레이드 예약 사이트") {
       .commentBox{ width:100%; }
     }
 
-    /* 관리자 레이드 버튼 영역 */
     .raidNav{ margin-bottom:4px; }
     .raidNav .btn{ font-size:12px; padding-inline:12px; }
 
-    /* 업둥 체크박스 (시청자뷰) */
     .bigCheck {
       display:flex;
       align-items:center;
@@ -444,7 +433,6 @@ function layout(body, title = "레이드 예약 사이트") {
       height:22px;
     }
 
-    /* 관리자 등록완료 체크박스 큰 범위 */
     .adminConfirm{
       display:inline-flex;
       align-items:center;
