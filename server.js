@@ -601,7 +601,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
             <div class="field fieldFull">
               <label>요청사항 (선택)</label>
-              <textarea name="request_note" maxlength="12"
+              <textarea name="request_note"
                 placeholder="예) 3깃수부터 참여가능"></textarea>
             </div>
           </div>
