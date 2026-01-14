@@ -182,7 +182,15 @@ function layout(body, title = "레이드 예약 사이트") {
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
-
+    .box::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(135deg, rgba(255,255,255,.04), transparent);
+      opacity:.8;
+      pointer-events:none;
+    }
+    .boxInner{ position:relative; }
     .wrap{
       max-width:1400px;
       margin:0 auto;
