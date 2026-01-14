@@ -469,7 +469,7 @@ function layout(body, title = "레이드 예약 사이트") {
           <div class="titleLogo">
             <span class="accent">DEVONVAIL</span>
           </div>
-          <div class="titleSub">레이드 예약</div>
+          <div class="titleSub">   레이드 예약</div>
         </div>
         <div class="titleBadge">
           <span>Made by 🧭뿡빵띠</span>
