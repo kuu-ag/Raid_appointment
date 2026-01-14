@@ -46,7 +46,7 @@ const GRADE_OPTIONS = [
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
-  { key: "normal", label: "일반 등급" },
+  { key: "normal", label: "일반 치즈" },
 ];
 
 // 등급 정렬 우선순위
@@ -146,9 +146,9 @@ function getActiveCodeRow(raidKey) {
 }
 
 // =====================
-// Layout / CSS
+// Layout / CSS (게임 예약 사이트 느낌으로 리뉴얼)
 // =====================
-function layout(body, title = "데본베일 레이드 예약 사이트") {
+function layout(body, title = "레이드 예약 사이트") {
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -157,114 +157,228 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
   <title>${esc(title)}</title>
   <style>
     :root{
-      --bg:#070a12;
+      --bg:#050816;
+      --bg2:#0b1024;
       --panel:#0b1226;
-      --panel2: rgba(18,26,42,.9);
-      --line:rgba(255,255,255,.14);
+      --panel2: rgba(16,24,54,.96);
+      --line:rgba(120,160,255,.35);
       --text:#e9eefc;
-      --muted:rgba(233,238,252,.72);
-      --btn:#1c2a52;
-      --btn2:#263a75;
-      --danger:#7a1d2a;
-      --chip:rgba(255,255,255,.06);
-      --shadow:0 10px 26px rgba(0,0,0,.35);
-      --radius:16px;
+      --muted:rgba(189,198,232,.82);
+      --btn:#2432ff;
+      --btn2:#4351ff;
+      --danger:#ff3960;
+      --chip:rgba(23,34,80,.9);
+      --shadow:0 16px 40px rgba(0,0,0,.65);
+      --radius:18px;
+      --accent:#4be0ff;
+      --accent2:#ff7ce5;
     }
     *{ box-sizing:border-box; }
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:#070a12;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(75,224,255,.16), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(255,124,229,.18), transparent 55%),
+        linear-gradient(140deg, var(--bg), var(--bg2));
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
-    .wrap{ max-width:1400px; margin:0 auto; padding:22px 14px 60px; }
+
+    .wrap{
+      max-width:1400px;
+      margin:0 auto;
+      padding:24px 14px 68px;
+    }
+
     .title{
-      border:2px solid rgba(255,255,255,.20);
-      background:rgba(11,18,38,.95);
-      border-radius:12px;
-      text-align:center;
+      position:relative;
+      border-radius:18px;
+      padding:18px 16px 20px;
+      margin-bottom:18px;
+      background:linear-gradient(135deg, rgba(36,50,255,.85), rgba(75,224,255,.75));
+      box-shadow:0 18px 40px rgba(0,0,0,.65);
+      overflow:hidden;
+    }
+    .title::before{
+      content:"";
+      position:absolute;
+      inset:1px;
+      border-radius:16px;
+      background:linear-gradient(135deg, #050816 0%, #0b1024 40%, #141c3b 100%);
+    }
+    .titleInner{
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .titleMain{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .titleLogo{
+      font-size:clamp(22px, 3.4vw, 32px);
       font-weight:900;
-      font-size:clamp(20px,3.2vw,34px);
-      padding:16px 10px;
-      box-shadow:var(--shadow);
-      margin-bottom:14px;
+      letter-spacing:.06em;
+      text-transform:uppercase;
     }
+    .titleLogo span.accent{
+      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip:text;
+      background-clip:text;
+      color:transparent;
+    }
+    .titleSub{
+      font-size:13px;
+      color:var(--muted);
+    }
+    .titleBadge{
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(142,163,255,.5);
+      background:rgba(9,16,44,.9);
+      font-size:12px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      color:var(--muted);
+    }
+
     .box{
-      background:var(--panel2);
-      border:1px solid var(--line);
+      background:radial-gradient(circle at 0 0, rgba(75,224,255,.1), transparent 55%) var(--panel2);
       border-radius:var(--radius);
-      padding:18px;
+      padding:20px 18px 18px;
+      border:1px solid rgba(120,160,255,.35);
       box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
     }
+    .box::before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:linear-gradient(135deg, rgba(255,255,255,.04), transparent);
+      opacity:.8;
+      pointer-events:none;
+    }
+    .boxInner{ position:relative; }
+
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
+
     .btn{
-      border:1px solid var(--line);
-      background:var(--btn);
+      border:1px solid rgba(142,163,255,.65);
+      background:radial-gradient(circle at 0 0, rgba(75,224,255,.35), transparent 55%) var(--btn);
       color:var(--text);
-      padding:10px 14px;
-      border-radius:12px;
+      padding:9px 16px;
+      border-radius:999px;
       cursor:pointer;
       font-weight:800;
       display:inline-flex;
       align-items:center;
       justify-content:center;
       gap:8px;
+      font-size:13px;
+      letter-spacing:.02em;
+      box-shadow:0 8px 18px rgba(0,0,0,.5);
+      transition:transform .08s ease, box-shadow .08s ease, background .1s ease, border-color .1s ease;
     }
-    .btn:hover{ background:var(--btn2); }
-    .btnGhost{ background:transparent; }
-    .btnDanger{ background:var(--danger); }
+    .btn:hover{
+      background:radial-gradient(circle at 0 0, rgba(255,255,255,.16), transparent 55%) var(--btn2);
+      transform:translateY(-1px);
+      box-shadow:0 12px 26px rgba(0,0,0,.7);
+      border-color:rgba(187,202,255,.95);
+    }
+    .btn:active{
+      transform:translateY(1px);
+      box-shadow:0 6px 12px rgba(0,0,0,.6);
+    }
+    .btnGhost{
+      background:rgba(12,18,40,.75);
+      border-color:rgba(120,160,255,.45);
+      box-shadow:none;
+    }
+    .btnGhost:hover{
+      background:rgba(24,32,72,.95);
+      box-shadow:0 10px 20px rgba(0,0,0,.55);
+    }
+    .btnDanger{
+      background:radial-gradient(circle at 0 0, rgba(255,120,160,.48), transparent 60%) var(--danger);
+      border-color:rgba(255,152,188,.8);
+    }
+
     .chip{
       display:inline-flex;
       gap:6px;
       align-items:center;
-      padding:6px 10px;
+      padding:5px 11px;
       border-radius:999px;
       background:var(--chip);
-      border:1px solid var(--line);
+      border:1px solid rgba(120,160,255,.5);
       color:var(--muted);
-      font-size:12px;
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.06em;
     }
-    .muted{ color:var(--muted); font-size:14px; }
-    .divider{ height:1px; background:rgba(255,255,255,.10); margin:14px 0; }
-    .ok{ color:#b6ffcf; }
-    .wait{ color:#ffd7a6; }
-    .bad{ color:#ffb6c2; }
+    .muted{ color:var(--muted); font-size:13px; }
+    .divider{
+      height:1px;
+      background:linear-gradient(90deg, transparent, rgba(142,163,255,.75), transparent);
+      margin:14px 0;
+      opacity:.9;
+    }
+    .ok{ color:#86ffcf; font-weight:700; }
+    .wait{ color:#ffdca3; font-weight:600; }
+    .bad{ color:#ff9db7; font-weight:700; }
 
     input,select,textarea{
       width:100%;
-      background:#0b1226;
-      border:1px solid rgba(255,255,255,.18);
+      background:linear-gradient(135deg, #050816, #070b18);
+      border:1px solid rgba(115,145,235,.7);
       color:var(--text);
-      padding:10px 12px;
+      padding:9px 11px;
       border-radius:12px;
       outline:none;
       min-width:0;
+      font-size:13px;
+      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
     }
-    input::placeholder,textarea::placeholder{ color:rgba(233,238,252,.45); }
-    textarea{ resize:vertical; min-height:42px; }
+    input::placeholder,textarea::placeholder{ color:rgba(180,193,236,.6); }
+    textarea{ resize:vertical; min-height:44px; }
+
+    input:focus,select:focus,textarea:focus{
+      border-color:var(--accent);
+      box-shadow:0 0 0 1px rgba(75,224,255,.8), 0 0 0 4px rgba(75,224,255,.12);
+    }
 
     /* 예약 폼 그리드 */
     .formGrid{
       display:grid;
-      grid-template-columns: 160px minmax(160px,1fr) minmax(160px,1fr) 160px 160px;
-      gap:10px;
+      grid-template-columns: 180px minmax(170px,1fr) minmax(170px,1fr) 150px 150px;
+      gap:12px;
       align-items:end;
     }
     .field label{
       display:block;
-      font-size:12px;
+      font-size:11px;
       color:var(--muted);
-      margin:0 0 6px 2px;
+      margin:0 0 4px 2px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
     }
     .fieldFull{ grid-column:1 / -1; }
 
-    @media (max-width:980px){
+    @media (max-width:1100px){
+      .formGrid{ grid-template-columns:1fr 1fr 1fr; }
+    }
+    @media (max-width:900px){
       .formGrid{ grid-template-columns:1fr 1fr; }
       .fieldFull{ grid-column:1 / -1; }
     }
-    @media (max-width:520px){
+    @media (max-width:580px){
       .formGrid{ grid-template-columns:1fr; }
       .fieldFull{ grid-column:1 / -1; }
     }
@@ -273,25 +387,33 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       width:100%;
       border-collapse:collapse;
       overflow:hidden;
-      border-radius:14px;
-      border:1px solid rgba(255,255,255,.12);
-      background:#0b1226;
+      border-radius:16px;
+      border:1px solid rgba(120,160,255,.55);
+      background:radial-gradient(circle at 0 0, rgba(75,224,255,.09), transparent 55%) #050816;
     }
     th,td{
-      border-bottom:1px solid rgba(255,255,255,.10);
-      padding:10px 10px;
+      border-bottom:1px solid rgba(70,90,150,.8);
+      padding:9px 10px;
       text-align:left;
-      font-size:13px;
+      font-size:12px;
       vertical-align:middle;
+      white-space:nowrap;
     }
     th{
-      background:#0e1731;
-      font-weight:900;
-      font-size:12px;
-      letter-spacing:.2px;
-      color:rgba(233,238,252,.9);
+      background:linear-gradient(135deg, #11183b, #1b2350);
+      font-weight:800;
+      font-size:11px;
+      letter-spacing:.08em;
+      color:rgba(222,230,255,.95);
+      text-transform:uppercase;
     }
     tr:last-child td{ border-bottom:0; }
+    tr:nth-child(even) td{
+      background:rgba(10,14,34,.9);
+    }
+    tr:hover td{
+      background:linear-gradient(90deg, rgba(75,224,255,.06), rgba(10,16,44,.98));
+    }
     .center{ text-align:center; }
 
     .commentBox{
@@ -302,47 +424,92 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       .commentBox{ width:100%; }
     }
 
+    /* 메인 레이드 버튼 */
+    .raidButtonRow{
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .raidButtonRow .btn{
+      min-width:130px;
+      justify-content:flex-start;
+    }
+
     /* 관리자 레이드 버튼 영역 */
     .raidNav{ margin-bottom:4px; }
-    .raidNav .btn{ font-size:13px; }
+    .raidNav .btn{ font-size:12px; padding-inline:12px; }
 
-    /* 업둥 체크박스 */
+    /* 업둥 체크박스 (시청자용) */
     .bigCheck {
-      display:flex;
+      display:inline-flex;
       align-items:center;
       gap:6px;
       cursor:pointer;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(120,160,255,.65);
+      background:rgba(16,24,54,.95);
+      box-shadow:0 6px 14px rgba(0,0,0,.55);
     }
     .bigCheck input[type="checkbox"] {
-      width:22px;
-      height:22px;
+      width:20px;
+      height:20px;
+      accent-color:#4be0ff;
+      cursor:pointer;
     }
     .bigCheck span {
-      font-size:16px;
-      font-weight:700;
+      font-size:13px;
+      font-weight:800;
       user-select:none;
-      line-height:22px;
+      line-height:20px;
       display:inline-flex;
       align-items:center;
     }
 
-    /* 관리자 뷰 등록완료 체크박스 (클릭 영역 확대) */
-    .adminConfirmLabel{
+    /* 관리자 등록완료 체크박스 - 클릭 영역 크게 */
+    .confirmToggleWrapper{
+      display:flex;
+      justify-content:center;
+    }
+    .confirmToggle{
       display:inline-flex;
       align-items:center;
+      gap:6px;
+      padding:4px 10px;
+      border-radius:999px;
+      border:1px solid rgba(120,160,255,.6);
+      background:rgba(13,20,52,.95);
+      cursor:pointer;
+      box-shadow:0 6px 16px rgba(0,0,0,.6);
+      min-width:120px;
       justify-content:center;
-      padding:6px 10px;
-      border-radius:10px;
-      background:rgba(255,255,255,.04);
+    }
+    .confirmToggle input[type="checkbox"]{
+      width:20px;
+      height:20px;
+      accent-color:#4be0ff;
       cursor:pointer;
     }
-    .adminConfirmLabel:hover{
-      background:rgba(255,255,255,.08);
+    .confirmToggle span{
+      font-size:11px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.08em;
     }
-    .adminConfirmLabel input[type="checkbox"]{
-      width:22px;
-      height:22px;
-      margin:0;
+
+    /* 상태/필터 영역 */
+    .filterRow{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:6px;
+    }
+
+    .filterLabel{
+      font-size:11px;
+      text-transform:uppercase;
+      letter-spacing:.08em;
+      color:var(--muted);
     }
   </style>
   <script>
@@ -354,7 +521,20 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
 </head>
 <body>
   <div class="wrap">
-    <div class="title">데본베일 레이드 예약 사이트</div>
+    <div class="title">
+      <div class="titleInner">
+        <div class="titleMain">
+          <div class="titleLogo">
+            <span class="accent">DEVONVALE</span> RAID
+          </div>
+          <div class="titleSub">레이드 예약 시스템</div>
+        </div>
+        <div class="titleBadge">
+          <span>🎮 LIVE RAID QUEUE</span>
+        </div>
+      </div>
+    </div>
+
     ${body}
   </div>
 </body>
@@ -384,10 +564,10 @@ function requireAdmin(req, res, next) {
     return res.status(500).send(
       layout(
         `
-        <div class="box">
+        <div class="box"><div class="boxInner">
           <div class="bad"><b>ADMIN_KEY가 설정되지 않았습니다.</b></div>
           <div class="muted">Render Environment Variables에 ADMIN_KEY를 추가하세요.</div>
-        </div>
+        </div></div>
       `,
         "오류",
       ),
@@ -410,11 +590,11 @@ app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 app.get("/", (req, res) => {
   res.send(
     layout(`
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">메인</div>
-            <div class="muted">레이드 선택 → 인증키 입력 → 예약 신청</div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">레이드 선택</div>
+            <div class="muted">참여할 레이드를 선택하고, 인증키 입력 후 예약을 진행해 주세요.</div>
           </div>
           <div class="row">
             <a class="btn btnGhost" href="/check">예약확인</a>
@@ -423,17 +603,17 @@ app.get("/", (req, res) => {
 
         <div class="divider"></div>
 
-        <div class="row" style="gap:12px;">
+        <div class="row raidButtonRow">
           ${RAID_OPTIONS.map(
-            (r) => `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`,
+            (r) => `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">▶ ${esc(r.label)}</a>`,
           ).join("")}
         </div>
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 한 회차 정원: 3버퍼/9딜러(총 12명) (업둥교환은 별도 규칙)<br/>
-          - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.<br/>
+        <div class="muted" style="margin-top:12px;line-height:1.6;">
+          - 기본 레이드 정원: 3버퍼 / 9딜러 (총 12명) &nbsp;·&nbsp; 업둥교환은 별도 규칙으로 운영됩니다.<br/>
+          - 신청 후 “예약확인”에서 <b>등록완료 / 대기중</b> 상태와 스트리머 코멘트를 확인할 수 있습니다.
         </div>
-      </div>
+      </div></div>
     `),
   );
 });
@@ -450,11 +630,11 @@ app.get("/verify", (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">인증키 입력</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">인증키 입력</div>
+            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> · 진행일: <b>${esc(activeDay)}</b></div>
           </div>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
@@ -465,9 +645,9 @@ app.get("/verify", (req, res) => {
           <input type="hidden" name="raid" value="${esc(raid)}"/>
           <div style="flex:1; min-width:240px;">
             <div class="muted" style="margin-bottom:6px;">인증키</div>
-            <input name="code" placeholder="스트리머가 공지한 인증키" required />
+            <input name="code" placeholder="스트리머가 공지한 인증키를 입력하세요" required />
           </div>
-          <button class="btn" type="submit">확인</button>
+          <button class="btn" type="submit">입장하기</button>
         </form>
 
         ${
@@ -478,7 +658,7 @@ app.get("/verify", (req, res) => {
                </div>`
             : ""
         }
-      </div>
+      </div></div>
     `,
       "인증키",
     ),
@@ -497,12 +677,14 @@ app.post("/verify", (req, res) => {
     return res.send(
       layout(
         `
-        <div class="box">
+        <div class="box"><div class="boxInner">
           <div class="bad"><b>인증키가 올바르지 않습니다.</b></div>
           <div class="divider"></div>
-          <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">다시 입력</a>
-          <a class="btn btnGhost" href="/">메인</a>
-        </div>
+          <div class="row">
+            <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">다시 입력</a>
+            <a class="btn btnGhost" href="/">메인</a>
+          </div>
+        </div></div>
       `,
         "인증 실패",
       ),
@@ -533,11 +715,11 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약 신청</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">예약 신청</div>
+            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> · 진행일: <b>${esc(activeDay)}</b></div>
             ${err ? `<div class="bad" style="margin-top:8px;"><b>${esc(err)}</b></div>` : ""}
           </div>
           <div class="row">
@@ -554,7 +736,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           <div class="formGrid">
 
             <div class="field">
-              <label>시청자 등급</label>
+              <label>치즈 종류</label>
               <select name="viewer_grade" required>
                 ${GRADE_OPTIONS.map((g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`).join("")}
               </select>
@@ -577,12 +759,14 @@ app.get("/reserve", requireViewerOk, (req, res) => {
                     <label>1업둥</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up1"/>
+                      <span>신청</span>
                     </label>
                   </div>
                   <div class="field">
                     <label>2업둥</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up2"/>
+                      <span>신청</span>
                     </label>
                   </div>
                 `
@@ -601,26 +785,27 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
             <div class="field fieldFull">
               <label>요청사항 (선택)</label>
-              <textarea name="request_note"
-                placeholder="예) 3깃수부터 참여가능"></textarea>
+              <textarea
+                name="request_note"
+                placeholder="예) 3깃수부터 참여 가능 등, 간단한 요청사항을 적어 주세요"></textarea>
             </div>
           </div>
 
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" type="submit">등록</button>
+          <div class="row" style="margin-top:14px;">
+            <button class="btn" type="submit">예약 등록</button>
           </div>
         </form>
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
+        <div class="muted" style="margin-top:12px;line-height:1.6;">
           - 등급을 “등급 선택” 그대로 두면 등록이 안 됩니다.<br/>
           - 요청사항은 선택이며 비워도 등록됩니다.<br/>
           - ${
             isUp
-              ? "1업둥, 2업둥 체크박스로 신청합니다. (둘 다 선택 가능)"
+              ? "업둥교환은 딜/버퍼 수 대신 1업둥, 2업둥 체크박스로 신청합니다. (둘 다 선택 가능)"
               : "등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다."
           }
         </div>
-      </div>
+      </div></div>
     `,
       "예약 신청",
     ),
@@ -653,13 +838,14 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const buffer_count = Number(req.body.buffer_count);
   const up1 = req.body.up1 ? 1 : 0;
   const up2 = req.body.up2 ? 1 : 0;
-  const request_note = String(req.body.request_note || "").slice(0, 12); // 12글자 제한
+  // 서버에서 요청사항은 너무 길지 않게 안전하게 자르기 (예: 300자)
+  const request_note = String(req.body.request_note || "").slice(0, 300);
 
   const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
   if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
     return res.redirect(
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
-        "시청자 등급을 선택해야 예약이 가능합니다.",
+        "치즈 종류를 선택해야 예약이 가능합니다.",
       )}`,
     );
   }
@@ -713,16 +899,16 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   return res.send(
     layout(
       `
-      <div class="box">
-        <div style="font-weight:900;font-size:20px;margin-bottom:6px;">등록 완료</div>
-        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
+      <div class="box"><div class="boxInner">
+        <div style="font-weight:900;font-size:18px;margin-bottom:6px;">등록 완료</div>
+        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> · 진행일: <b>${esc(activeDay)}</b></div>
         <div class="divider"></div>
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
           <a class="btn btnGhost" href="/check?raid=${encodeURIComponent(raid)}">예약확인</a>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
-      </div>
+      </div></div>
     `,
       "완료",
     ),
@@ -738,21 +924,21 @@ app.get("/check", (req, res) => {
     return res.send(
       layout(
         `
-        <div class="box">
+        <div class="box"><div class="boxInner">
           <div class="row sp">
             <div>
-              <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약확인</div>
+              <div style="font-weight:900;font-size:18px;margin-bottom:6px;">예약확인</div>
               <div class="muted">확인할 레이드를 선택하세요.</div>
             </div>
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="row" style="gap:12px;">
+          <div class="row raidButtonRow">
             ${RAID_OPTIONS.map(
-              (r) => `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`,
+              (r) => `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">▶ ${esc(r.label)}</a>`,
             ).join("")}
           </div>
-        </div>
+        </div></div>
       `,
         "예약확인",
       ),
@@ -774,13 +960,15 @@ app.get("/check", (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약확인</div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">예약확인</div>
             <div class="muted">
-              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
-              <span class="chip">등록완료 ${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
+              레이드: <b>${esc(raidObj.label)}</b> · 진행일: <b>${esc(activeDay)}</b>
+              <span class="chip">CONFIRMED ${
+                apps.filter((a) => a.confirmed === 1).length
+              } / ${apps.length}</span>
             </div>
           </div>
           <div class="row">
@@ -793,7 +981,7 @@ app.get("/check", (req, res) => {
 
         <table>
           <tr>
-            <th>시청자 등급</th>
+            <th>치즈 종류</th>
             <th>치지직 닉네임</th>
             <th>모험단 이름</th>
             ${
@@ -836,9 +1024,9 @@ app.get("/check", (req, res) => {
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
-          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
+          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.
         </div>
-      </div>
+      </div></div>
     `,
       "예약확인",
     ),
@@ -859,11 +1047,11 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자 로그인</div>
-            <div class="muted">관리자용 로그인화면입니다.</div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">관리자 로그인</div>
+            <div class="muted">스트리머 전용 관리 페이지입니다.</div>
           </div>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
@@ -877,7 +1065,7 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
           </div>
           <button class="btn" type="submit">입장</button>
         </form>
-      </div>
+      </div></div>
     `,
       "스트리머 로그인",
     ),
@@ -890,11 +1078,11 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
     return res.send(
       layout(
         `
-        <div class="box">
+        <div class="box"><div class="boxInner">
           <div class="bad"><b>키가 올바르지 않습니다.</b></div>
           <div class="divider"></div>
           <a class="btn" href="${esc(ADMIN_BASE)}/login">다시 시도</a>
-        </div>
+        </div></div>
       `,
         "실패",
       ),
@@ -920,24 +1108,24 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자</div>
-            <div class="muted">레이드별 신청목록 확인 / Active Day(진행일) + 인증키 설정</div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">관리자 패널</div>
+            <div class="muted">레이드별 신청목록 확인 및 Active Day(진행일) + 인증키 설정</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">신청목록 보기</div>
+        <div style="font-weight:900;margin-bottom:8px;">신청목록 바로 가기</div>
         <div class="row raidNav">
           ${RAID_OPTIONS.map(
             (r) =>
               `<a class="btn" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
                 r.key,
-              )}&sort=time">${esc(r.label)}</a>`,
+              )}&sort=time">▶ ${esc(r.label)}</a>`,
           ).join("")}
         </div>
 
@@ -945,8 +1133,8 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
         <div style="font-weight:900;margin-bottom:8px;">Active Day(진행일) + 인증키 설정</div>
         <div class="muted">
-          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 "기준 날짜"가 됩니다.<br/>
-          - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
+          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 기준 날짜가 됩니다.<br/>
+          - 자정이 지나도 이 날짜를 변경하지 않으면 인증/예약/조회가 유지됩니다.
         </div>
 
         <div class="divider"></div>
@@ -961,7 +1149,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
           </div>
 
           <div style="min-width:200px;">
-            <div class="muted" style="margin-bottom:6px;">진행일(YYYY-MM-DD)</div>
+            <div class="muted" style="margin-bottom:6px;">진행일 (YYYY-MM-DD)</div>
             <input name="date_kst" value="${esc(todayKST())}" placeholder="예) 2025-12-28" required />
           </div>
 
@@ -972,7 +1160,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
           <button class="btn" type="submit">저장</button>
         </form>
-      </div>
+      </div></div>
     `,
       "관리자",
     ),
@@ -1039,7 +1227,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
   // 정렬
   if (sort === "grade" || (isUp && upFilter)) {
-    // 업둥에서 1업둥/2업둥 필터가 걸린 경우도 치즈등급 순 + 시간
+    // 업둥에서 1업둥/2업둥 필터가 걸린 경우도 치즈종류 순 + 시간
     apps.sort((a, b) => {
       const aa = GRADE_SORT[a.viewer_grade] ?? 999;
       const bb = GRADE_SORT[b.viewer_grade] ?? 999;
@@ -1063,13 +1251,15 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
+      <div class="box"><div class="boxInner">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">신청목록</div>
+            <div style="font-weight:900;font-size:18px;margin-bottom:6px;">신청목록</div>
             <div class="muted">
-              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
-              <span class="chip">등록완료 ${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
+              레이드: <b>${esc(raidObj.label)}</b> · 진행일: <b>${esc(activeDay)}</b>
+              <span class="chip">CONFIRMED ${
+                apps.filter((a) => a.confirmed === 1).length
+              } / ${apps.length}</span>
             </div>
           </div>
           <div class="row">
@@ -1079,7 +1269,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                   style="margin:0;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <input type="hidden" name="sort" value="${esc(sort)}"/>
-              <button class="btn btnDanger" type="submit">일괄삭제</button>
+              <button class="btn btnDanger" type="submit">오늘 목록 일괄삭제</button>
             </form>
           </div>
         </div>
@@ -1087,11 +1277,11 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         ${
           isUp
             ? `
-            <div class="divider"></div>
-            <div class="row" style="gap:8px; margin-bottom:6px;">
+            <div class="filterRow">
+              <span class="filterLabel">업둥 필터</span>
               <a class="btn ${!upFilter ? "" : "btnGhost"}" href="${esc(upFilterAllLink)}">전체</a>
-              <a class="btn ${upFilter === "1" ? "" : "btnGhost"}" href="${esc(upFilter1Link)}">1업둥</a>
-              <a class="btn ${upFilter === "2" ? "" : "btnGhost"}" href="${esc(upFilter2Link)}">2업둥</a>
+              <a class="btn ${upFilter === "1" ? "" : "btnGhost"}" href="${esc(upFilter1Link)}">1업둥만</a>
+              <a class="btn ${upFilter === "2" ? "" : "btnGhost"}" href="${esc(upFilter2Link)}">2업둥만</a>
             </div>
           `
             : ""
@@ -1104,7 +1294,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <th class="center">등록완료</th>
             <th>
               <a href="${esc(gradeHeaderLink)}" style="text-decoration:underline;">
-                시청자 등급 ${sort === "grade" ? "▼" : ""}
+                치즈 종류 ${sort === "grade" ? "▼" : ""}
               </a>
             </th>
             <th>치지직 닉네임</th>
@@ -1132,17 +1322,21 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                       <tr>
                         <td class="center">
                           <form id="${formId}" method="POST" action="${esc(
-                            ADMIN_BASE,
-                          )}/confirm" style="margin:0;">
+                        ADMIN_BASE,
+                      )}/confirm" style="margin:0;">
                             <input type="hidden" name="id" value="${esc(a.id)}"/>
                             <input type="hidden" name="raid" value="${esc(raid)}"/>
                             <input type="hidden" name="sort" value="${esc(sort)}"/>
                             <input type="hidden" name="confirmed" value="${
                               a.confirmed === 1 ? "0" : "1"
                             }"/>
-                            <label class="adminConfirmLabel">
-                              <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
-                            </label>
+
+                            <div class="confirmToggleWrapper">
+                              <label class="confirmToggle">
+                                <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
+                                <span>CONFIRM</span>
+                              </label>
+                            </div>
                           </form>
                         </td>
 
@@ -1191,11 +1385,11 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         </table>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
+          - 등록완료 체크는 시청자 화면에도 ✔ 등록완료 / ⏳ 대기중으로 표시됩니다.<br/>
           - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
-          - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈등급 순으로 정렬됩니다.
+          - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈종류 순 + 시간 순으로 정렬됩니다.
         </div>
-      </div>
+      </div></div>
     `,
       "신청목록",
     ),
@@ -1207,6 +1401,7 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "time");
+
   const confirmed = String(req.body.confirmed || "0") === "1" ? 1 : 0;
 
   if (Number.isInteger(id)) {
