@@ -178,9 +178,7 @@ function layout(body, title = "레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:
-        radial-gradient(circle at 0% 0%, rgba(75,224,255,.16), transparent 55%),
-        radial-gradient(circle at 100% 100%, rgba(255,124,229,.18), transparent 55%),
+      background:#020617,
         linear-gradient(140deg, var(--bg), var(--bg2));
       color:var(--text);
     }
@@ -488,7 +486,7 @@ function layout(body, title = "레이드 예약 사이트") {
           <div class="titleSub">레이드 예약 시스템</div>
         </div>
         <div class="titleBadge">
-          <span>🎮 LIVE RAID QUEUE</span>
+          <span>🧭뿡빵띠</span>
         </div>
       </div>
     </div>
