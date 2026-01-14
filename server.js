@@ -178,7 +178,7 @@ function layout(body, title = "레이드 예약 사이트") {
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:#070a12,
+      background:#070a12;
         linear-gradient(140deg, var(--bg), var(--bg2));
       color:var(--text);
     }
