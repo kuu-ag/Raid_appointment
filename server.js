@@ -479,7 +479,20 @@ function layout(body, title = "레이드 예약 사이트") {
 </head>
 <body>
   <div class="wrap">
-    <div class="title">레이드 예약 사이트</div>
+    <div class="title">
+      <div class="titleInner">
+        <div class="titleMain">
+          <div class="titleLogo">
+            <span class="accent">DEVONVAIL</span> RAID
+          </div>
+          <div class="titleSub">레이드 예약 시스템</div>
+        </div>
+        <div class="titleBadge">
+          <span>🎮 LIVE RAID QUEUE</span>
+        </div>
+      </div>
+    </div>
+
     ${body}
   </div>
 </body>
