@@ -158,21 +158,18 @@ function layout(body, title = "레이드 예약 사이트") {
   <title>${esc(title)}</title>
   <style>
     :root{
-      --bg:#050816;
-      --bg2:#0b1024;
+      --bg:#070a12;
       --panel:#0b1226;
-      --panel2: rgba(16,24,54,.96);
-      --line:rgba(120,160,255,.35);
+      --panel2: rgba(18,26,42,.9);
+      --line:rgba(255,255,255,.14);
       --text:#e9eefc;
-      --muted:rgba(189,198,232,.82);
-      --btn:#2432ff;
-      --btn2:#4351ff;
-      --danger:#ff3960;
-      --chip:rgba(23,34,80,.9);
-      --shadow:0 16px 40px rgba(0,0,0,.65);
-      --radius:18px;
-      --accent:#4be0ff;
-      --accent2:#ff7ce5;
+      --muted:rgba(233,238,252,.72);
+      --btn:#1c2a52;
+      --btn2:#263a75;
+      --danger:#7a1d2a;
+      --chip:rgba(255,255,255,.06);
+      --shadow:0 10px 26px rgba(0,0,0,.35);
+      --radius:16px;
     }
     *{ box-sizing:border-box; }
     body{
