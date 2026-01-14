@@ -40,16 +40,16 @@ const RAID_OPTIONS = [
   { key: "updoong", label: "업둥교환" }, // 업둥교환 레이드
 ];
 
-// 등급: 기본값 "치즈 선택"(빈 값) 추가
+// 치즈: 기본값 "치즈 선택"(빈 값) 추가
 const GRADE_OPTIONS = [
   { key: "", label: "치즈 선택" }, // 기본값
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
-  { key: "normal", label: "일반 등급" },
+  { key: "normal", label: "일반 치즈" },
 ];
 
-// 등급 정렬 우선순위
+// 치즈 정렬 우선순위
 const GRADE_SORT = { burning: 1, pink: 2, yellow: 3, normal: 4 };
 
 // =====================
@@ -149,7 +149,7 @@ function getActiveCodeRow(raidKey) {
 // =====================
 // Layout / CSS  (게임 로비 느낌)
 // =====================
-function layout(body, title = "데본베일 레이드 예약 사이트") {
+function layout(body, title = "레이드 예약 사이트") {
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -298,21 +298,32 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
       box-shadow:0 0 0 1px var(--accent-soft), 0 0 24px rgba(56,189,248,.35);
     }
 
-    /* 셀렉트 드롭다운 옵션 색상 (옵션 글자 안 보이던 문제 해결) */
+    /* 셀렉트 공통 스타일 */
     select{
       appearance:none;
       -webkit-appearance:none;
       -moz-appearance:none;
       background:linear-gradient(135deg,#050816,#020617);
-      color:var(--text);
+      color:var(--text);          /* 선택된 값(닫힌 상태) – 밝은 글자 */
+      border:1px solid rgba(115,145,235,.7);
     }
+
+    /* 드롭다운에 펼쳐졌을 때 각 옵션 스타일  */
     select option{
-      background:#020617;
-      color:#e9eefc;
+      /* 많은 브라우저에서 배경색은 무시될 수 있지만, 글자색은 잘 먹음 */
+      color:#111827;              /* 진한 남색/거의 검정 – 흰 배경에서도 잘 보이도록 */
+      font-weight:600;
     }
+
+    /* 선택된 옵션(하이라이트) */
     select option:checked{
-      background:#1d4ed8;
-      color:#ffffff;
+      background:#1d4ed8;         /* 파란 하이라이트 */
+      color:#ffffff;              /* 흰 글자 */
+    }
+
+    /* (선택) 비활성 옵션이 있을 경우 색 조금만 연하게 */
+    select option:disabled{
+      color:#6b7280;
     }
 
     /* 예약 폼 그리드 */
@@ -423,7 +434,7 @@ function layout(body, title = "데본베일 레이드 예약 사이트") {
 </head>
 <body>
   <div class="wrap">
-    <div class="title">데본베일 레이드 예약 사이트</div>
+    <div class="title">레이드 예약 사이트</div>
     ${body}
   </div>
 </body>
@@ -682,7 +693,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         </form>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
-          - 등급을 “치즈 선택” 그대로 두면 등록이 안 됩니다.<br/>
+          - 치즈 색깔을 “치즈 선택” 그대로 두면 등록이 안 됩니다.<br/>
           - 요청사항은 선택이며 비워도 등록됩니다.<br/>
           - ${
             isUp
@@ -1109,7 +1120,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
   // 정렬
   if (sort === "grade" || (isUp && upFilter)) {
-    // 치즈등급 우선 + created_at 순
+    // 치즈색깔 우선 + created_at 순
     apps.sort((a, b) => {
       const aa = GRADE_SORT[a.viewer_grade] ?? 999;
       const bb = GRADE_SORT[b.viewer_grade] ?? 999;
@@ -1264,7 +1275,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
-          - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈등급 순으로 정렬됩니다.
+          - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈색깔 순으로 정렬됩니다.
         </div>
       </div>
     `,
