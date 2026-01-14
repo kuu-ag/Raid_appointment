@@ -147,7 +147,7 @@ function getActiveCodeRow(raidKey) {
 }
 
 // =====================
-// Layout / CSS  (게임 로비 느낌)
+// Layout / CSS
 // =====================
 function layout(body, title = "레이드 예약 사이트") {
   return `<!doctype html>
@@ -158,70 +158,115 @@ function layout(body, title = "레이드 예약 사이트") {
   <title>${esc(title)}</title>
   <style>
     :root{
-      --bg:#020617;
-      --bg2:#050816;
-      --panel:#060b1b;
-      --panel2:rgba(10,18,40,.96);
-      --line:rgba(120,148,255,.45);
+      --bg:#050816;
+      --bg2:#0b1024;
+      --panel:#0b1226;
+      --panel2: rgba(16,24,54,.96);
+      --line:rgba(120,160,255,.35);
       --text:#e9eefc;
-      --muted:rgba(185,196,235,.8);
-      --btn:#1b2a5c;
-      --btn2:#25397c;
-      --danger:#7a1d2a;
-      --chip:rgba(15,23,42,.9);
-      --shadow:0 18px 40px rgba(0,0,0,.65);
+      --muted:rgba(189,198,232,.82);
+      --btn:#2432ff;
+      --btn2:#4351ff;
+      --danger:#ff3960;
+      --chip:rgba(23,34,80,.9);
+      --shadow:0 16px 40px rgba(0,0,0,.65);
       --radius:18px;
-      --accent:#38bdf8;
-      --accent-soft:rgba(56,189,248,.12);
+      --accent:#4be0ff;
+      --accent2:#ff7ce5;
     }
     *{ box-sizing:border-box; }
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
       background:
-        radial-gradient(circle at 0% 0%, #0f172a 0, transparent 55%),
-        radial-gradient(circle at 100% 100%, #020617 0, transparent 55%),
-        radial-gradient(circle at 100% 0%, #1d2238 0, transparent 55%),
-        #020617;
+        radial-gradient(circle at 0% 0%, rgba(75,224,255,.16), transparent 55%),
+        radial-gradient(circle at 100% 100%, rgba(255,124,229,.18), transparent 55%),
+        linear-gradient(140deg, var(--bg), var(--bg2));
       color:var(--text);
     }
     a{ color:inherit; text-decoration:none; }
+
     .wrap{
       max-width:1400px;
       margin:0 auto;
-      padding:24px 16px 72px;
+      padding:24px 14px 68px;
     }
+
     .title{
       position:relative;
-      border:1px solid rgba(148,163,255,.55);
-      background:linear-gradient(135deg,#020617,#020617,#020617);
-      border-radius:16px;
-      text-align:center;
-      font-weight:900;
-      font-size:clamp(20px,2.6vw,30px);
-      padding:16px 10px;
-      box-shadow:0 18px 40px rgba(15,23,42,.9);
+      border-radius:18px;
+      padding:18px 16px 20px;
       margin-bottom:18px;
-      letter-spacing:.08em;
-      text-transform:uppercase;
+      background:linear-gradient(135deg, rgba(36,50,255,.85), rgba(75,224,255,.75));
+      box-shadow:0 18px 40px rgba(0,0,0,.65);
+      overflow:hidden;
     }
     .title::before{
-      content:" ";
+      content:"";
+      position:absolute;
+      inset:1px;
+      border-radius:16px;
+      background:linear-gradient(135deg, #050816 0%, #0b1024 40%, #141c3b 100%);
+    }
+    .titleInner{
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .titleMain{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .titleLogo{
+      font-size:clamp(22px, 3.4vw, 32px);
+      font-weight:900;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .titleLogo span.accent{
+      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip:text;
+      background-clip:text;
+      color:transparent;
+    }
+    .titleSub{
+      font-size:13px;
+      color:var(--muted);
+    }
+    .titleBadge{
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(142,163,255,.5);
+      background:rgba(9,16,44,.9);
+      font-size:12px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      color:var(--muted);
+    }
+
+    .box{
+      background:radial-gradient(circle at 0 0, rgba(75,224,255,.1), transparent 55%) var(--panel2);
+      border-radius:var(--radius);
+      padding:20px 18px 18px;
+      border:1px solid rgba(120,160,255,.35);
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
+    }
+    .box::before{
+      content:"";
       position:absolute;
       inset:0;
-      border-radius:inherit;
-      border:1px solid rgba(56,189,248,.25);
+      background:linear-gradient(135deg, rgba(255,255,255,.04), transparent);
+      opacity:.8;
       pointer-events:none;
-      mix-blend-mode:screen;
     }
-    .box{
-      background:radial-gradient(circle at top left,#020617 0,transparent 50%), var(--panel2);
-      border:1px solid rgba(148,163,255,.4);
-      border-radius:var(--radius);
-      padding:20px 20px 22px;
-      box-shadow:var(--shadow);
-      backdrop-filter:blur(14px);
-    }
+    .boxInner{ position:relative; }
+
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
     .btn{
