@@ -1,4 +1,4 @@
-// server.js  (ESM / "type": "module")
+  // server.js  (ESM / "type": "module")
 "use strict";
 
 import express from "express";
@@ -381,29 +381,40 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:0 0 0 1px rgba(56,189,248,.4), 0 0 24px rgba(56,189,248,.35);
     }
 
-    /* 셀렉트 공통 스타일 (이미지처럼) */
-    select{
+    select {
       appearance:none;
       -webkit-appearance:none;
       -moz-appearance:none;
-      background:#020617;
-      color:var(--text);
+
+      background:#ffffff !important;
+      color:#111827 !important;
+
       border:1px solid rgba(115,145,235,.7);
-      padding:9px 11px;
       border-radius:12px;
-      font-size:13px;
-      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
+
+      padding:9px 12px;
+      font-size:14px;
+
+      box-shadow:0 0 0 rgba(0,0,0,0);
     }
-    select option{
+
+    select option {
       color:#111827;
       font-weight:600;
     }
-    select option:checked{
+    
+    select option:checked {
       background:#1d4ed8;
       color:#ffffff;
     }
-    select option:disabled{
+
+    select option:disabled {
       color:#6b7280;
+    }
+    
+    .formRow > select {
+      flex:1 1 0;
+      width:100%;
     }
 
     /* 예약 폼 그리드 */
