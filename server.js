@@ -508,16 +508,16 @@ function layout(body, title = "레이드 예약 사이트") {
     .partyGrid{
       display:flex;
       flex-wrap:wrap;
-      gap:12px;
+      gap:14px;
     }
     .partyCard{
       flex:1 1 calc(25% - 12px);
-      min-width:240px;
-      max-width:260px;
+      min-width:260px;
+      max-width:320px;
       background:#020617;
       border-radius:14px;
       border:1px solid rgba(148,163,255,.4);
-      padding:10px 10px 8px;
+      padding:12px 12px 10px;
     }
     .partyHeader{
       display:flex;
