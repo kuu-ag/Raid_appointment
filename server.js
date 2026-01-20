@@ -1233,10 +1233,10 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 }
 
 // 자동배치 알고리즘
-// - confirmed=1인 신청만 사용
-// - 치즈색/등록시간 우선
+// - 해당 레이드/날짜의 모든 신청(confirmed 여부 상관없이) 사용
+// - 치즈색 / 등록시간 우선
 // - 비활성 공대 번호는 사용하지 않음
-// - 한 공대 안에서 같은 닉네임이 딜/버 포함 2칸 이상 들어갈 수 있음 (이 부분은 이후 필요 시 조정)
+// - 한 공대에 같은 닉네임은 딜/버 포함 "한 자리"만 들어갈 수 있음
 function rebuildLineupForRaid(raidKey) {
   if (raidKey === "updoong") return; // 업둥교환 제외
 
@@ -1244,15 +1244,15 @@ function rebuildLineupForRaid(raidKey) {
   const dateKst = getActiveDay(raidKey);
   const disabledSet = getDisabledPartySet(raidKey, dateKst);
 
-  // 해당 레이드/날짜의 기존 배치 삭제
+  // 기존 배치 삭제
   db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raidKey, dateKst);
 
-  // 확정된 신청만 사용
+  //  confirmed 상관없이, 해당 날짜/레이드의 모든 신청 사용
   const apps = db
     .prepare(
       `
       SELECT * FROM applications
-      WHERE raid_key=? AND date_kst=? AND confirmed=1
+      WHERE raid_key=? AND date_kst=?
       ORDER BY
         CASE viewer_grade
           WHEN 'burning' THEN 1
@@ -1277,26 +1277,28 @@ function rebuildLineupForRaid(raidKey) {
   `,
   );
 
-  // parties: [{ index, buffersUsed, dealersUsed }]
+  // parties: [{ index, buffersUsed, dealersUsed, usedNames:Set }]
   const parties = [];
   let nextPartyIndex = 1;
 
   function createParty() {
-    let idx = nextPartyIndex;
-    // 비활성 공대 및 이미 사용 중인 공대 번호는 스킵
+    // 비활성 공대 + 이미 사용 중인 번호는 건너뛰고 새 번호 찾기
     const usedIndices = new Set(parties.map((p) => p.index));
+    let idx = nextPartyIndex;
     while (disabledSet.has(idx) || usedIndices.has(idx)) {
       idx++;
     }
     nextPartyIndex = idx + 1;
-    const p = { index: idx, buffersUsed: 0, dealersUsed: 0 };
+    const p = { index: idx, buffersUsed: 0, dealersUsed: 0, usedNames: new Set() };
     parties.push(p);
     return p;
   }
 
-  function findPartyWithSpace(role) {
+  // 해당 역할에 자리가 있고, 아직 그 닉네임이 들어가 있지 않은 공대 찾기
+  function findPartyWithSpace(role, nickname) {
     const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
     for (const p of parties) {
+      if (p.usedNames.has(nickname)) continue; // ⭐ 이미 이 공대에 이 닉네임이 있으면 스킵
       const used = role === "buffer" ? p.buffersUsed : p.dealersUsed;
       if (used < perParty) return p;
     }
@@ -1307,13 +1309,14 @@ function rebuildLineupForRaid(raidKey) {
     const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
     if (perParty <= 0) return;
 
-    let party = findPartyWithSpace(role);
+    let party = findPartyWithSpace(role, nickname);
     if (!party) {
       party = createParty();
     }
+
     let used = role === "buffer" ? party.buffersUsed : party.dealersUsed;
     if (used >= perParty) {
-      // 그래도 자리가 없으면 새 공대 생성
+      // 혹시 꽉 찬 공대가 선택됐으면 새 공대 생성
       party = createParty();
       used = role === "buffer" ? party.buffersUsed : party.dealersUsed;
     }
@@ -1321,6 +1324,9 @@ function rebuildLineupForRaid(raidKey) {
     const slotIndex = used + 1;
     if (role === "buffer") party.buffersUsed++;
     else party.dealersUsed++;
+
+    // ⭐ 이 공대에는 이 닉네임 한 번 들어갔다고 표시 (딜/버 공통)
+    party.usedNames.add(nickname);
 
     insert.run(
       dateKst,
@@ -1334,11 +1340,13 @@ function rebuildLineupForRaid(raidKey) {
     );
   }
 
-  // 치즈/시간 우선순위대로 버퍼/딜러를 한 자리씩 배치
+  // 치즈/시간 우선순위대로, 버퍼 → 딜러 순으로 한 칸씩 배치
   for (const app of apps) {
+    // 버퍼 n개 → 각 공대당 1명만 들어가게 공대를 계속 늘려가며 배치
     for (let i = 0; i < app.buffer_count; i++) {
       allocSeat("buffer", app.chzzk_nickname, app.id);
     }
+    // 딜러 n개도 같은 규칙 적용
     for (let i = 0; i < app.dealer_count; i++) {
       allocSeat("dealer", app.chzzk_nickname, app.id);
     }
