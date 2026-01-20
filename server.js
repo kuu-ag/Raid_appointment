@@ -28,8 +28,8 @@ const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 
-// production 환경에서만 secure 쿠키 사용
-const isProd = process.env.NODE_ENV === "production";
+// 배포/로컬에 따라 secure 쿠키 여부
+const IS_PROD = process.env.NODE_ENV === "production";
 
 // =====================
 // Options
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
---  레이드별 진행일 + 인증키 (자정이 넘어도 행이 유지됨)
+--  레이드별 Active Day + 인증키 (자정이 넘어도 행이 유지됨)
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
@@ -167,10 +167,13 @@ function getActiveCodeRow(raidKey) {
 
 // 레이드별 공대 구성 규칙
 function getRaidConfig(raidKey) {
-  if (raidKey === "inhwagongjeon") {
-    return { buffersPerParty: 2, dealersPerParty: 6 }; // 이내황혼전: 2버퍼 6딜러
+  const raid = raidByKey(raidKey);
+  // 이내황혼전만 2버퍼 / 6딜러
+  if (raid && raid.label.includes("이내황혼전")) {
+    return { buffersPerParty: 2, dealersPerParty: 6 };
   }
-  return { buffersPerParty: 3, dealersPerParty: 9 }; // 나머지: 3버퍼 9딜러
+  // 나머지는 3버퍼 / 9딜러
+  return { buffersPerParty: 3, dealersPerParty: 9 };
 }
 
 // =====================
@@ -554,6 +557,19 @@ function layout(body, title = "레이드 예약 사이트") {
       const f = document.getElementById(formId);
       if(f) f.submit();
     }
+    // 공대 삭제용 (중첩 form 방지)
+    function deleteParty(raidKey, partyIndex){
+      const msg = partyIndex + "공대를 삭제하시겠습니까?\\n(해당 공대에 배치된 인원은 모두 삭제됩니다.)";
+      if(!confirm(msg)) return;
+      const f = document.getElementById("deletePartyForm");
+      if(!f) return;
+      const raidInput = document.getElementById("deleteRaidInput");
+      const partyInput = document.getElementById("deletePartyIndexInput");
+      if(!raidInput || !partyInput) return;
+      raidInput.value = raidKey;
+      partyInput.value = String(partyIndex);
+      f.submit();
+    }
   </script>
 </head>
 <body>
@@ -733,7 +749,7 @@ app.post("/verify", (req, res) => {
   res.cookie(`viewer_ok_${raid}_${activeDay}`, "1", {
     httpOnly: true,
     sameSite: "lax",
-    secure: isProd,
+    secure: IS_PROD,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 
@@ -1091,7 +1107,6 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode }) {
   const buffersPerParty = cfg.buffersPerParty;
   const dealersPerParty = cfg.dealersPerParty;
   const dealersPerRow = 3;
-  const rowsOfDealer = Math.ceil(dealersPerParty / dealersPerRow);
   const maxParty = Math.max(0, ...partyMap.keys());
   if (!maxParty) return `<div class="muted">편성된 공대가 없습니다.</div>`;
 
@@ -1105,16 +1120,10 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode }) {
         <div class="partyTitle"><span>${p}공대</span></div>
         ${
           editable && adminMode
-            ? `<form method="POST" action="${esc(
-                ADMIN_BASE,
-              )}/lineup/delete-party" style="margin:0;">
-                 <input type="hidden" name="raid" value="${esc(raidKey)}"/>
-                 <input type="hidden" name="party_index" value="${p}"/>
-                 <button class="btn btnDanger" type="submit"
-                   onclick="return confirm('${p}공대를 삭제하시겠습니까?\\n(해당 공대에 배치된 인원은 모두 삭제됩니다.)');">
-                   공대 삭제
-                 </button>
-               </form>`
+            ? `<button class="btn btnDanger" type="button"
+                 onclick="deleteParty('${esc(raidKey)}', ${p});">
+                 공대 삭제
+               </button>`
             : ""
         }
       </div>
@@ -1248,16 +1257,7 @@ function rebuildLineupForRaid(raidKey) {
       if (idx === -1) continue;
       const seat = queue.splice(idx, 1)[0];
       used.add(seat.app.chzzk_nickname);
-      insert.run(
-        dateKst,
-        raidKey,
-        p,
-        "buffer",
-        b,
-        seat.app.chzzk_nickname,
-        seat.app.id,
-        nowISO(),
-      );
+      insert.run(dateKst, raidKey, p, "buffer", b, seat.app.chzzk_nickname, seat.app.id, nowISO());
     }
 
     // 딜러
@@ -1266,16 +1266,7 @@ function rebuildLineupForRaid(raidKey) {
       if (idx === -1) continue;
       const seat = queue.splice(idx, 1)[0];
       used.add(seat.app.chzzk_nickname);
-      insert.run(
-        dateKst,
-        raidKey,
-        p,
-        "dealer",
-        d,
-        seat.app.chzzk_nickname,
-        seat.app.id,
-        nowISO(),
-      );
+      insert.run(dateKst, raidKey, p, "dealer", d, seat.app.chzzk_nickname, seat.app.id, nowISO());
     }
   }
 }
@@ -1339,7 +1330,7 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
   res.cookie("admin_key", key, {
     httpOnly: true,
     sameSite: "lax",
-    secure: isProd,
+    secure: IS_PROD,
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
   return res.redirect(`${ADMIN_BASE}/raid`);
@@ -1359,7 +1350,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자</div>
-            <div class="muted">레이드별 신청목록 확인 / 진행일 + 인증키 설정 / 공대편성</div>
+            <div class="muted">레이드별 신청목록 확인 / Active Day(진행일) + 인증키 설정 / 공대편성</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
@@ -1378,7 +1369,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">진행일 + 인증키 설정</div>
+        <div style="font-weight:900;margin-bottom:8px;">Active Day(진행일) + 인증키 설정</div>
         <div class="muted">
           - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 "기준 날짜"가 됩니다.<br/>
           - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
@@ -1741,8 +1732,8 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           </div>
           <div class="row">
             <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
-        raid,
-      )}&sort=time">신청목록</a>
+              raid,
+            )}&sort=time">신청목록</a>
             <form method="POST" action="${esc(
               ADMIN_BASE,
             )}/lineup/auto" style="margin:0;display:inline;">
@@ -1775,6 +1766,15 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <div class="row" style="margin-top:16px;">
             <button class="btn" type="submit">수동 수정 내용 저장</button>
           </div>
+        </form>
+
+        <!-- 공대 삭제용 숨겨진 폼 -->
+        <form id="deletePartyForm"
+              method="POST"
+              action="${esc(ADMIN_BASE)}/lineup/delete-party"
+              style="display:none;">
+          <input type="hidden" id="deleteRaidInput" name="raid" value="${esc(raid)}"/>
+          <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
 
         <div class="muted" style="margin-top:12px;line-height:1.5;">
@@ -1849,20 +1849,20 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const partyIndex = Number(req.body.party_index || 0);
-  if (!partyIndex) return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  if (!partyIndex) {
+    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  }
 
   const dateKst = getActiveDay(raid);
 
-  // 해당 공대의 편성만 삭제 (다른 공대 번호는 그대로 둠)
-  const del = db.prepare(
+  db.prepare(
     "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=? AND party_index=?",
-  );
-  del.run(raid, dateKst, partyIndex);
+  ).run(raid, dateKst, partyIndex);
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// 공대 진행도 초기화 (해당 레이드/날짜의 모든 공대 편성 삭제)
+// 공대 진행도 초기화 (전체 편성 삭제 → 1공대부터 다시 시작 가능)
 app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -1870,7 +1870,9 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
+  db.prepare(
+    "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?",
+  ).run(raid, dateKst);
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
