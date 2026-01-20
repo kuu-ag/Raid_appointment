@@ -1233,26 +1233,34 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 }
 
 // 자동배치 알고리즘
-// - 해당 레이드/날짜의 모든 신청(confirmed 여부 상관없이) 사용
-// - 치즈색 / 등록시간 우선
-// - 비활성 공대 번호는 사용하지 않음
-// - 한 공대에 같은 닉네임은 딜/버 포함 "한 자리"만 들어갈 수 있음
-function rebuildLineupForRaid(raidKey) {
+// - useConfirmedOnly = true  → confirmed=1 신청만 사용 (체크박스 토글용)
+// - useConfirmedOnly = false → 모든 신청 사용 (전체 자동배치 버튼용)
+// - 한 공대에 같은 닉네임은 딜/버 포함 "1자리"만 들어갈 수 있음
+// - 비활성 공대(삭제한 공대)는 사용하지 않음
+function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
   if (raidKey === "updoong") return; // 업둥교환 제외
 
   const cfg = getRaidConfig(raidKey);
   const dateKst = getActiveDay(raidKey);
-  const disabledSet = getDisabledPartySet(raidKey, dateKst);
+  const disabledSet = getDisabledPartySet
+    ? getDisabledPartySet(raidKey, dateKst)
+    : new Set();
 
-  // 기존 배치 삭제
-  db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raidKey, dateKst);
+  // 기존 편성 삭제
+  db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(
+    raidKey,
+    dateKst,
+  );
 
-  //  confirmed 상관없이, 해당 날짜/레이드의 모든 신청 사용
+  // 어떤 신청들을 사용할지 조건 결정
+  const confirmedClause = useConfirmedOnly ? "AND confirmed=1" : "";
+
+  // 치즈색 / 등록시간 우선순위대로 신청 가져오기
   const apps = db
     .prepare(
       `
       SELECT * FROM applications
-      WHERE raid_key=? AND date_kst=?
+      WHERE raid_key=? AND date_kst=? ${confirmedClause}
       ORDER BY
         CASE viewer_grade
           WHEN 'burning' THEN 1
@@ -1282,7 +1290,7 @@ function rebuildLineupForRaid(raidKey) {
   let nextPartyIndex = 1;
 
   function createParty() {
-    // 비활성 공대 + 이미 사용 중인 번호는 건너뛰고 새 번호 찾기
+    // 이미 쓰고 있는 번호 + 비활성 공대 번호를 피해서 새 번호 찾기
     const usedIndices = new Set(parties.map((p) => p.index));
     let idx = nextPartyIndex;
     while (disabledSet.has(idx) || usedIndices.has(idx)) {
@@ -1294,11 +1302,12 @@ function rebuildLineupForRaid(raidKey) {
     return p;
   }
 
-  // 해당 역할에 자리가 있고, 아직 그 닉네임이 들어가 있지 않은 공대 찾기
+  // 아직 해당 닉네임이 들어가 있지 않고, 자리가 남은 공대 찾기
   function findPartyWithSpace(role, nickname) {
     const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
     for (const p of parties) {
-      if (p.usedNames.has(nickname)) continue; // ⭐ 이미 이 공대에 이 닉네임이 있으면 스킵
+      // ⭐ 이미 이 공대에 이 닉네임이 있으면 (버퍼/딜러 상관없이) 스킵
+      if (p.usedNames.has(nickname)) continue;
       const used = role === "buffer" ? p.buffersUsed : p.dealersUsed;
       if (used < perParty) return p;
     }
@@ -1316,7 +1325,7 @@ function rebuildLineupForRaid(raidKey) {
 
     let used = role === "buffer" ? party.buffersUsed : party.dealersUsed;
     if (used >= perParty) {
-      // 혹시 꽉 찬 공대가 선택됐으면 새 공대 생성
+      // 혹시 꽉 찬 공대를 집어왔으면 새 공대 생성
       party = createParty();
       used = role === "buffer" ? party.buffersUsed : party.dealersUsed;
     }
@@ -1325,7 +1334,7 @@ function rebuildLineupForRaid(raidKey) {
     if (role === "buffer") party.buffersUsed++;
     else party.dealersUsed++;
 
-    // ⭐ 이 공대에는 이 닉네임 한 번 들어갔다고 표시 (딜/버 공통)
+    // ⭐ 이 공대에 이 닉네임이 들어갔다는 것만 기록 (딜/버 공통)
     party.usedNames.add(nickname);
 
     insert.run(
@@ -1340,13 +1349,11 @@ function rebuildLineupForRaid(raidKey) {
     );
   }
 
-  // 치즈/시간 우선순위대로, 버퍼 → 딜러 순으로 한 칸씩 배치
+  // 버퍼 → 딜러 순으로 한 칸씩 배치
   for (const app of apps) {
-    // 버퍼 n개 → 각 공대당 1명만 들어가게 공대를 계속 늘려가며 배치
     for (let i = 0; i < app.buffer_count; i++) {
       allocSeat("buffer", app.chzzk_nickname, app.id);
     }
-    // 딜러 n개도 같은 규칙 적용
     for (let i = 0; i < app.dealer_count; i++) {
       allocSeat("dealer", app.chzzk_nickname, app.id);
     }
@@ -1718,7 +1725,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   );
 });
 
-// 등록완료 토글 (배치는 전체 자동배치에서 수행)
+// 등록완료 토글 + 공대 편성표 즉시 반영
 app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -1728,10 +1735,17 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   if (Number.isInteger(id)) {
     db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(confirmed, id);
   }
+
+  //    - 현재 레이드의 "등록완료된 신청들"만 가지고 공대 편성표를 다시 만든다.
+  //    - 체크 ON → 그 인원도 포함해서 재배치
+  //    - 체크 OFF → 그 인원을 제외하고 빈칸을 우선순위대로 채우는 효과
+  rebuildLineupForRaid(raid, { useConfirmedOnly: true });
+
   return res.redirect(
     `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`,
   );
 });
+
 
 // 코멘트 저장 (12글자 제한 유지)
 app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
@@ -1884,16 +1898,18 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   );
 });
 
-// 자동배치 실행
+// 자동배치 실행 (모든 예약 기준)
 app.post(`${ADMIN_BASE}/lineup/auto`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
-  rebuildLineupForRaid(raid);
+  // ✅ 전체 자동배치는 confirmed 여부 상관없이 전체 예약 사용
+  rebuildLineupForRaid(raid, { useConfirmedOnly: false });
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
+
 
 // 수동 수정 저장 (빈칸은 삭제, 비활성 공대는 입력 무시)
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
