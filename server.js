@@ -1239,12 +1239,12 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
             bName,
           )}" placeholder="비활성" disabled/></td>`;
         } else {
-          html += `<td><input class="slotInput" name="b_${p}_${b}" value="${esc(
-            bName,
-          )}" placeholder="버퍼"/></td>`;
+          html += `<td style="border-right:1px solid rgba(148,163,255,.35);">
+          <input class="slotInput" name="b_${p}_${b}" 
+          value="${esc(bName)}" placeholder="버퍼"/></td>`;
         }
       } else {
-        html += `<td>${bName ? esc(bName) : "&nbsp;"}</td>`;
+        html += `<td style="border-right:1px solid rgba(148,163,255,.35);">${bName ? esc(bName) : "&nbsp;"}</td>`;
       }
 
       // 딜러 3칸
