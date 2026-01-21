@@ -1267,11 +1267,13 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
   return html;
 }
 
-// 자동배치 알고리즘
+// 자동배치 알고리즘 (수동 편성이 항상 우선)
 // - useConfirmedOnly = true  → confirmed=1 신청만 사용 (체크박스 토글용)
 // - useConfirmedOnly = false → 모든 신청 사용 (전체 자동배치 버튼용)
 // - 한 공대에 같은 닉네임은 딜/버 포함 "1자리"만 들어갈 수 있음
 // - 비활성 공대(삭제한 공대)는 사용하지 않음
+// - 수동으로 저장한 편성(raid_lineups의 application_id IS NULL)은 그대로 두고,
+//   자동배치는 "빈 칸"만 채운다.
 function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
   if (raidKey === "updoong") return; // 업둥교환 제외
 
@@ -1281,16 +1283,139 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     ? getDisabledPartySet(raidKey, dateKst)
     : new Set();
 
-  // 기존 편성 삭제
-  db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(
-    raidKey,
-    dateKst,
+  // 1) 자동 배치로 채운 칸만 삭제 (application_id NOT NULL)
+  db.prepare(
+    "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=? AND application_id IS NOT NULL",
+  ).run(raidKey, dateKst);
+
+  // 2) 현재 남아 있는 편성(수동 포함)을 읽어와서 파티 상태 초기화
+  const existing = db
+    .prepare(
+      `
+      SELECT party_index, role, slot_index, nickname, application_id
+      FROM raid_lineups
+      WHERE raid_key=? AND date_kst=?
+      ORDER BY party_index, role, slot_index
+    `,
+    )
+    .all(raidKey, dateKst);
+
+  // partyIndex -> 상태
+  const parties = [];
+  const partyStateMap = new Map();
+
+  function getOrCreatePartyState(index) {
+    let p = partyStateMap.get(index);
+    if (!p) {
+      p = {
+        index,
+        usedNames: new Set(),   // 이 공대에 이미 들어간 닉네임(수동/자동 포함)
+        bufferSlots: new Set(), // 버퍼가 사용 중인 slot_index
+        dealerSlots: new Set(), // 딜러가 사용 중인 slot_index
+      };
+      partyStateMap.set(index, p);
+      parties.push(p);
+    }
+    return p;
+  }
+
+  for (const row of existing) {
+    const p = getOrCreatePartyState(row.party_index);
+    if (row.nickname) {
+      p.usedNames.add(row.nickname);
+    }
+    if (row.role === "buffer") {
+      p.bufferSlots.add(row.slot_index);
+    } else if (row.role === "dealer") {
+      p.dealerSlots.add(row.slot_index);
+    }
+  }
+
+  // 3) 새로 만들 파티 인덱스 계산 (기존 + 비활성 공대 피해서)
+  let nextPartyIndex = 1;
+  function createParty() {
+    const usedIndices = new Set(parties.map((p) => p.index));
+    let idx = nextPartyIndex;
+    while (disabledSet.has(idx) || usedIndices.has(idx)) {
+      idx++;
+    }
+    nextPartyIndex = idx + 1;
+    const p = {
+      index: idx,
+      usedNames: new Set(),
+      bufferSlots: new Set(),
+      dealerSlots: new Set(),
+    };
+    parties.push(p);
+    partyStateMap.set(idx, p);
+    return p;
+  }
+
+  // 4) seat를 넣을 파티 찾기
+  function findPartyWithSpace(role, nickname) {
+    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
+    for (const p of parties) {
+      if (disabledSet.has(p.index)) continue;
+      if (p.usedNames.has(nickname)) continue; // 한 공대에 같은 닉네임은 1자리만
+      const usedCount =
+        role === "buffer" ? p.bufferSlots.size : p.dealerSlots.size;
+      if (usedCount < perParty) return p;
+    }
+    return null;
+  }
+
+  const insert = db.prepare(
+    `
+    INSERT INTO raid_lineups
+      (date_kst, raid_key, party_index, role, slot_index, nickname, application_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `,
   );
 
-  // 어떤 신청들을 사용할지 조건 결정
-  const confirmedClause = useConfirmedOnly ? "AND confirmed=1" : "";
+  // 5) 실제 배치: 빈 칸만 채우기
+  function allocSeat(role, nickname, appId) {
+    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
+    if (perParty <= 0) return;
 
-  // 치즈색 / 등록시간 우선순위대로 신청 가져오기
+    let party = findPartyWithSpace(role, nickname);
+    if (!party) {
+      party = createParty();
+    }
+
+    // 안전 체크: 만약 꽉 찬 공대를 잡았다면 새 공대 생성
+    const usedCount =
+      role === "buffer" ? party.bufferSlots.size : party.dealerSlots.size;
+    if (usedCount >= perParty) {
+      party = createParty();
+    }
+
+    // 이 공대에서 사용 가능한 가장 낮은 slot_index 찾기
+    const slots = role === "buffer" ? party.bufferSlots : party.dealerSlots;
+    let slotIndex = 1;
+    while (slots.has(slotIndex) && slotIndex <= perParty) {
+      slotIndex++;
+    }
+    if (slotIndex > perParty) {
+      return; // 더 이상 넣을 칸이 없음
+    }
+
+    insert.run(
+      dateKst,
+      raidKey,
+      party.index,
+      role,
+      slotIndex,
+      nickname,
+      appId,
+      nowISO(),
+    );
+
+    slots.add(slotIndex);
+    party.usedNames.add(nickname);
+  }
+
+  // 6) 사용할 신청 목록 읽기 (치즈 색 + 작성 시간 순)
+  const confirmedClause = useConfirmedOnly ? "AND confirmed=1" : "";
   const apps = db
     .prepare(
       `
@@ -1312,79 +1437,7 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
 
   if (!apps.length) return;
 
-  const insert = db.prepare(
-    `
-    INSERT INTO raid_lineups
-      (date_kst, raid_key, party_index, role, slot_index, nickname, application_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `,
-  );
-
-  // parties: [{ index, buffersUsed, dealersUsed, usedNames:Set }]
-  const parties = [];
-  let nextPartyIndex = 1;
-
-  function createParty() {
-    // 이미 쓰고 있는 번호 + 비활성 공대 번호를 피해서 새 번호 찾기
-    const usedIndices = new Set(parties.map((p) => p.index));
-    let idx = nextPartyIndex;
-    while (disabledSet.has(idx) || usedIndices.has(idx)) {
-      idx++;
-    }
-    nextPartyIndex = idx + 1;
-    const p = { index: idx, buffersUsed: 0, dealersUsed: 0, usedNames: new Set() };
-    parties.push(p);
-    return p;
-  }
-
-  // 아직 해당 닉네임이 들어가 있지 않고, 자리가 남은 공대 찾기
-  function findPartyWithSpace(role, nickname) {
-    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
-    for (const p of parties) {
-      // ⭐ 이미 이 공대에 이 닉네임이 있으면 (버퍼/딜러 상관없이) 스킵
-      if (p.usedNames.has(nickname)) continue;
-      const used = role === "buffer" ? p.buffersUsed : p.dealersUsed;
-      if (used < perParty) return p;
-    }
-    return null;
-  }
-
-  function allocSeat(role, nickname, appId) {
-    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
-    if (perParty <= 0) return;
-
-    let party = findPartyWithSpace(role, nickname);
-    if (!party) {
-      party = createParty();
-    }
-
-    let used = role === "buffer" ? party.buffersUsed : party.dealersUsed;
-    if (used >= perParty) {
-      // 혹시 꽉 찬 공대를 집어왔으면 새 공대 생성
-      party = createParty();
-      used = role === "buffer" ? party.buffersUsed : party.dealersUsed;
-    }
-
-    const slotIndex = used + 1;
-    if (role === "buffer") party.buffersUsed++;
-    else party.dealersUsed++;
-
-    // ⭐ 이 공대에 이 닉네임이 들어갔다는 것만 기록 (딜/버 공통)
-    party.usedNames.add(nickname);
-
-    insert.run(
-      dateKst,
-      raidKey,
-      party.index,
-      role,
-      slotIndex,
-      nickname,
-      appId,
-      nowISO(),
-    );
-  }
-
-  // 버퍼 → 딜러 순으로 한 칸씩 배치
+  // 7) 버퍼 → 딜러 순서로, 남은 인원만 빈칸에 채우기
   for (const app of apps) {
     for (let i = 0; i < app.buffer_count; i++) {
       allocSeat("buffer", app.chzzk_nickname, app.id);
