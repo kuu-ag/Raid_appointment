@@ -1992,12 +1992,39 @@ app.post(`${ADMIN_BASE}/lineup/auto`, requireAdmin, (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
-  // ✅ 전체 자동배치는 confirmed 여부 상관없이 전체 예약 사용
+  //  전체 자동배치는 confirmed 여부 상관없이 전체 예약 사용
   rebuildLineupForRaid(raid, { useConfirmedOnly: false });
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
+// 공대 진행도 초기화: 해당 레이드/날짜의 공대 편성 + 비활성 공대 정보만 전부 삭제
+app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
+  const raid = String(req.body.raid || "");
+  const raidObj = raidByKey(raid);
+  if (!raidObj) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  const dateKst = getActiveDay(raid);
+
+  // 1) 이 레이드의 오늘 기준 공대 편성 전부 삭제
+  db.prepare(
+    "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?"
+  ).run(raid, dateKst);
+
+  // 2) 비활성 공대 정보도 초기화
+  db.prepare(
+    "DELETE FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?"
+  ).run(raid, dateKst);
+
+  // 신청서(applications)는 건드리지 않음
+  // → 기존 예약 인원 수는 그대로 유지, 이후 자동배치/수동편성에 다시 사용 가능
+
+  return res.redirect(
+    `${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`
+  );
+});
 
 // 수동 수정 저장 (빈칸은 삭제, 비활성 공대는 입력 무시)
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
