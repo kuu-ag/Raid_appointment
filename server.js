@@ -994,12 +994,16 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       <div class="box">
         <div style="font-weight:900;font-size:20px;margin-bottom:6px;">등록 완료</div>
         <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay,
-      )}</b></div>
+          activeDay,
+        )}</b></div>
         <div class="divider"></div>
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
           <a class="btn btnGhost" href="/check?raid=${encodeURIComponent(raid)}">예약확인</a>
+          <!-- 🔹 추가: 바로 공대 편성표로 이동 -->
+          <a class="btn btnGhost" href="/lineup?raid=${encodeURIComponent(
+            raid,
+          )}">공대 편성표</a>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
       </div>
@@ -1152,12 +1156,28 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
   const buffersPerParty = cfg.buffersPerParty;
   const dealersPerParty = cfg.dealersPerParty;
   const dealersPerRow = 3;
-  const maxParty = Math.max(0, ...partyMap.keys());
-  if (!maxParty) return `<div class="muted">편성된 공대가 없습니다.</div>`;
+
+  // 🔹 partyMap에 있는 공대 + 비활성 공대 번호 모두 합치기
+  const indexSet = new Set([
+    ...Array.from(partyMap.keys()),
+    ...Array.from(disabledSet),
+  ]);
+
+  if (indexSet.size === 0) {
+    return `<div class="muted">편성된 공대가 없습니다.</div>`;
+  }
+
+  const allIndices = Array.from(indexSet).sort((a, b) => a - b);
+
+  // 🔹 활성 공대(비활성 아님)를 앞으로, 비활성 공대를 뒤로
+  const activeIndices = allIndices.filter((i) => !disabledSet.has(i));
+  const disabledIndicesArr = allIndices.filter((i) => disabledSet.has(i));
+  const viewOrder = [...activeIndices, ...disabledIndicesArr];
 
   let html = `<div class="partyGrid">`;
 
-  for (let p = 1; p <= maxParty; p++) {
+  // 🔹 viewOrder 순서대로 카드 렌더링
+  for (const p of viewOrder) {
     const data = partyMap.get(p) || { buffers: {}, dealers: {} };
     const isDisabled = disabledSet.has(p);
     const disableInputs = editable && adminMode && isDisabled;
@@ -1192,6 +1212,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
         const dIndex = (b - 1) * dealersPerRow + c + 1;
         if (dIndex > dealersPerParty) continue;
         const dName = data.dealers[dIndex] || "";
+
         if (editable && adminMode) {
           if (disableInputs) {
             dealerCells.push(
@@ -1225,6 +1246,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       } else {
         html += `<td>${bName ? esc(bName) : "&nbsp;"}</td>`;
       }
+
       // 딜러 3칸
       if (dealerCells.length) {
         html += `<td><table style="width:100%;border:0;background:transparent;"><tr>${dealerCells.join(
