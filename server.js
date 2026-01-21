@@ -1991,18 +1991,77 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// 공대 삭제 (비활성 처리 + 인원 삭제)
+// 공대 삭제 (비활성 처리 + 인원 삭제 + 해당 공대 사용 인원 소모 처리)
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const partyIndex = Number(req.body.party_index || 0);
-  if (!partyIndex) return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  if (!partyIndex) {
+    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  }
 
   const dateKst = getActiveDay(raid);
 
-  // 비활성 공대로 기록
+  // 1) 이 공대에서 실제로 편성된 인원들(예약 기반) 조회
+  //    - application_id가 NULL인 슬롯(수동 입력 닉네임)은 무시
+  //    - role별로 몇 칸 썼는지 집계
+  const seatRows = db
+    .prepare(
+      `
+      SELECT application_id, role, COUNT(*) AS cnt
+      FROM raid_lineups
+      WHERE raid_key=? AND date_kst=? AND party_index=? AND application_id IS NOT NULL
+      GROUP BY application_id, role
+    `,
+    )
+    .all(raid, dateKst, partyIndex);
+
+  // appId -> { usedBuffers, usedDealers } 형태로 모으기
+  const usageMap = new Map();
+  for (const row of seatRows) {
+    const appId = row.application_id;
+    if (!appId) continue;
+    if (!usageMap.has(appId)) {
+      usageMap.set(appId, { usedBuffers: 0, usedDealers: 0 });
+    }
+    const u = usageMap.get(appId);
+    if (row.role === "buffer") {
+      u.usedBuffers += row.cnt || 0;
+    } else if (row.role === "dealer") {
+      u.usedDealers += row.cnt || 0;
+    }
+  }
+
+  // 2) 각 신청서(application)에 대해, 해당 공대에서 소모한 인원만큼
+  //    dealer_count / buffer_count를 깎아준다. (최소 0까지)
+  for (const [appId, u] of usageMap.entries()) {
+    const app = db
+      .prepare(
+        `
+        SELECT dealer_count, buffer_count
+        FROM applications
+        WHERE id=?
+      `,
+      )
+      .get(appId);
+
+    if (!app) continue;
+
+    const newDealer = Math.max(0, Number(app.dealer_count || 0) - (u.usedDealers || 0));
+    const newBuffer = Math.max(0, Number(app.buffer_count || 0) - (u.usedBuffers || 0));
+
+    db.prepare(
+      `
+      UPDATE applications
+      SET dealer_count=?, buffer_count=?
+      WHERE id=?
+    `,
+    ).run(newDealer, newBuffer, appId);
+  }
+
+  // 3) 이 공대를 "비활성 공대"로 기록
   db.prepare(
     `
     INSERT INTO raid_disabled_parties(date_kst, raid_key, party_index)
@@ -2011,7 +2070,7 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   `,
   ).run(dateKst, raid, partyIndex);
 
-  // 해당 공대의 편성만 삭제
+  // 4) 해당 공대의 편성만 삭제
   db.prepare(
     "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=? AND party_index=?",
   ).run(raid, dateKst, partyIndex);
@@ -2019,22 +2078,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// 공대 진행도 초기화 (해당 레이드/날짜의 모든 편성 + 비활성 상태 제거)
-app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
-
-  const dateKst = getActiveDay(raid);
-
-  db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
-  db.prepare("DELETE FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?").run(
-    raid,
-    dateKst,
-  );
-
-  return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
-});
 
 // =====================
 // 공대 편성표 (시청자용 /read-only)
