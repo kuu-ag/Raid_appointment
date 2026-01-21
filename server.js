@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
---  레이드별 Active Day + 인증키 (자정이 넘어도 행이 유지됨)
+--  레이드별 진행일 + 인증키 (자정이 넘어도 행이 유지됨)
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
@@ -1527,7 +1527,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자</div>
-            <div class="muted">레이드별 신청목록 확인 / Active Day(진행일) + 인증키 설정 / 공대편성</div>
+            <div class="muted">레이드별 신청목록 확인 / 진행일 + 인증키 설정 / 공대편성</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
@@ -1546,7 +1546,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">Active Day(진행일) + 인증키 설정</div>
+        <div style="font-weight:900;margin-bottom:8px;">진행일 + 인증키 설정</div>
         <div class="muted">
           - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 "기준 날짜"가 됩니다.<br/>
           - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
