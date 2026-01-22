@@ -1905,7 +1905,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
 
-        <div class="muted" style="margin-top:12px;line-height:1.5%;">
+        <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 빈 칸으로 두고 저장하면 해당 슬롯의 인원이 삭제됩니다.<br/>
           - 공대 삭제 버튼을 누르면 해당 공대의 인원은 삭제되며, 공대 진행도 초기화를 하기 전까지 비활성 상태가 되어 자동배치/추가 배치에서 사용되지 않습니다.<br/>
           - “전체 자동배치”를 누르면 현재 확정(등록완료)된 예약을 기준으로 다시 편성합니다.<br/>
@@ -2149,7 +2149,7 @@ app.get("/lineup", (req, res) => {
 
         ${partyCardsHtml}
 
-        <div class="muted" style="margin-top:12px;line-height:1.5%;">
+        <div class="muted" style="margin-top:12px;line-height:1.5;">
           - 실제 진행 상황에 따라 스트리머가 수동으로 수정할 수 있습니다.<br/>
           - 빈 공대가 보인다면 아직 편성이 이루어지지 않은 상태이거나, 삭제된 공대일 수 있습니다.
         </div>
