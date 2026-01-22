@@ -1,4 +1,4 @@
-  // server.js  (ESM / "type": "module")
+// server.js (ESM / "type": "module")
 "use strict";
 
 import express from "express";
@@ -13,54 +13,44 @@ dotenv.config();
 
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false }));
-app.set("trust proxy", 1); // Render/프록시 환경에서 secure cookie 위해 필요
+app.set("trust proxy", 1); // 프록시 설정
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// =====================
-// ENV
-// =====================
+// ENV 설정
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 
-// 기존 관리자 비밀 URL 유지
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 
-// =====================
-// Options
-// =====================
+// 옵션 상수
 const RAID_OPTIONS = [
   { key: "dirige", label: "디레지에" },
   { key: "dirige-hard", label: "디레지에-악연" },
-  { key: "inhwagongjeon", label: "이내황혼전" }, // 이름 수정
+  { key: "inhwagongjeon", label: "이내황혼전" },
   { key: "nabel", label: "인공신 : 나벨" },
   { key: "nabel-hard", label: "나벨 - 하드모드" },
-  { key: "updoong", label: "업둥교환" }, // 업둥교환 레이드
+  { key: "updoong", label: "업둥교환" },
 ];
 
-// 치즈: 기본값 "치즈 선택"(빈 값) 추가
 const GRADE_OPTIONS = [
-  { key: "", label: "치즈 선택" }, // 기본값
+  { key: "", label: "치즈 선택" },
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
   { key: "normal", label: "일반 치즈" },
 ];
 
-// 치즈 정렬 우선순위
 const GRADE_SORT = { burning: 1, pink: 2, yellow: 3, normal: 4 };
 
-// =====================
-// DB
-// =====================
+// DB 초기화
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database(path.join(__dirname, "data.sqlite"));
 
-// 테이블 생성
 db.exec(`
 CREATE TABLE IF NOT EXISTS applications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,7 +77,7 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
---  레이드별 진행일 + 인증키 (자정이 넘어도 행이 유지됨)
+--  레이드별 진행일 + 인증키
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
@@ -95,14 +85,14 @@ CREATE TABLE IF NOT EXISTS day_codes (
   updated_at TEXT NOT NULL
 );
 
-/* 공대 편성표 (배치 결과) */
+/* 공대 편성표 */
 CREATE TABLE IF NOT EXISTS raid_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
   party_index INTEGER NOT NULL, -- 1공대, 2공대 ...
   role TEXT NOT NULL,           -- 'buffer' | 'dealer'
-  slot_index INTEGER NOT NULL,  -- 각 역할 내 순번 (버퍼1~3, 딜러1~9 등)
+  slot_index INTEGER NOT NULL,  -- 각 역할 내 순번
   nickname TEXT NOT NULL,
   application_id INTEGER,
   created_at TEXT NOT NULL
@@ -111,8 +101,7 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
 CREATE INDEX IF NOT EXISTS idx_lineups_key
 ON raid_lineups(date_kst, raid_key, party_index);
 
-/* 비활성 공대 목록 (공대 삭제 시 기록)
-   공대 진행도 초기화 전까지 이 공대 번호는 자동배치/추가 배치에서 사용되지 않음 */
+/* 비활성 공대 목록 */
 CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -122,25 +111,22 @@ CREATE TABLE IF NOT EXISTS raid_disabled_parties (
 );
 `);
 
-// 마이그레이션: 없는 컬럼 추가
+// 컬럼 체크
 function ensureColumn(table, colName, colDDL) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   const has = cols.some((c) => String(c.name) === colName);
   if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDDL}`);
 }
 
-// 요청사항, 업둥 플래그 컬럼 보강 (기존 DB에 없을 때 대비)
 ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
 ensureColumn("applications", "up1", "up1 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
 
-// =====================
-// Utils
-// =====================
+// 유틸 함수
 function todayKST() {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 10); // YYYY-MM-DD
+  return kst.toISOString().slice(0, 10);
 }
 function nowISO() {
   return new Date().toISOString();
@@ -163,7 +149,7 @@ function isValidKstDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
 }
 
-// 레이드별 Active Day (없는 경우 오늘)
+// 레이드 날짜/코드
 function getActiveDay(raidKey) {
   const row = db.prepare("SELECT date_kst FROM day_codes WHERE raid_key=?").get(raidKey);
   return row?.date_kst || todayKST();
@@ -182,17 +168,15 @@ function getDisabledPartySet(raidKey, dateKst) {
   return new Set(rows.map((r) => r.party_index));
 }
 
-// 레이드별 공대 구성 규칙
+// 레이드별 공대 구성
 function getRaidConfig(raidKey) {
   if (raidKey === "inhwagongjeon") {
-    return { buffersPerParty: 2, dealersPerParty: 6 }; // 이내황혼전: 2버퍼 6딜러
+    return { buffersPerParty: 2, dealersPerParty: 6 };
   }
-  return { buffersPerParty: 3, dealersPerParty: 9 }; // 나머지: 3버퍼 9딜러
+  return { buffersPerParty: 3, dealersPerParty: 9 };
 }
 
-// =====================
-// Layout / CSS
-// =====================
+// 레이아웃 / 스타일
 function layout(body, title = "레이드 예약 사이트") {
   return `<!doctype html>
 <html lang="ko">
@@ -234,7 +218,6 @@ function layout(body, title = "레이드 예약 사이트") {
       padding:24px 14px 68px;
     }
 
-    /* 타이틀만 그라데이션 유지 */
     .title{
       position:relative;
       border-radius:18px;
@@ -291,7 +274,6 @@ function layout(body, title = "레이드 예약 사이트") {
       color:var(--muted);
     }
 
-    /* 박스는 단색 배경 */
     .box{
       background:var(--panel2);
       border-radius:var(--radius);
@@ -304,7 +286,6 @@ function layout(body, title = "레이드 예약 사이트") {
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
 
-    /* 버튼은 단색 배경 */
     .btn{
       border:1px solid rgba(148,163,255,.7);
       background:var(--btn);
@@ -360,7 +341,6 @@ function layout(body, title = "레이드 예약 사이트") {
     .wait{ color:#fde68a; font-weight:700; }
     .bad{ color:#fda4af; font-weight:700; }
 
-    /* 입력 공통 */
     input,textarea{
       width:100%;
       background:#020617;
@@ -381,7 +361,7 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:0 0 0 1px rgba(56,189,248,.4), 0 0 24px rgba(56,189,248,.35);
     }
 
-  select {
+    select {
       appearance:none;
       -webkit-appearance:none;
       -moz-appearance:none;
@@ -419,7 +399,6 @@ function layout(body, title = "레이드 예약 사이트") {
       background:#e5e7eb;
     }
 
-    /* 예약 폼 그리드 */
     .formGrid{
       display:grid;
       grid-template-columns: 170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
@@ -478,11 +457,9 @@ function layout(body, title = "레이드 예약 사이트") {
       .commentBox{ width:100%; }
     }
 
-    /* 관리자 레이드 버튼 영역 */
     .raidNav{ margin-bottom:4px; }
     .raidNav .btn{ font-size:12px; padding-inline:12px; }
 
-    /* 업둥 체크박스 (시청자뷰) */
     .bigCheck {
       display:flex;
       align-items:center;
@@ -494,7 +471,6 @@ function layout(body, title = "레이드 예약 사이트") {
       height:22px;
     }
 
-    /* 관리자 등록완료 체크박스 큰 범위 */
     .adminConfirm{
       display:inline-flex;
       align-items:center;
@@ -517,7 +493,6 @@ function layout(body, title = "레이드 예약 사이트") {
       cursor:pointer;
     }
 
-    /* 공대 편성표 카드 */
     .partyGrid{
       display:flex;
       flex-wrap:wrap;
@@ -589,7 +564,6 @@ function layout(body, title = "레이드 예약 사이트") {
       if(f) f.submit();
     }
 
-    // 공대 삭제 버튼 클릭 시: 비활성화 + 인원 삭제
     function deleteParty(raidKey, partyIndex){
       const msg = partyIndex + "공대를 삭제하시겠습니까?\\n(해당 공대에 배치된 인원은 모두 삭제되고, 공대 진행도 초기화를 하기 전까지 비활성 상태가 됩니다.)";
       if(!confirm(msg)) return;
@@ -626,15 +600,12 @@ function layout(body, title = "레이드 예약 사이트") {
 </html>`;
 }
 
-// =====================
-// Auth Guards
-// =====================
+// 인증 미들웨어
 function requireViewerOk(req, res, next) {
   const raid = String(req.query.raid || req.body.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  // Active Day 기준으로 쿠키 키 생성 → 자정 지나도 유지(Active Day가 바뀌기 전까지)
   const activeDay = getActiveDay(raid);
   const cookieKey = `viewer_ok_${raid}_${activeDay}`;
 
@@ -663,15 +634,11 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-// =====================
-// Hide /admin (404)
-// =====================
+// /admin 숨김 처리
 app.get("/admin", (req, res) => res.status(404).send("Not Found"));
 app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 
-// =====================
-// Viewer routes
-// =====================
+// Viewer: 메인
 app.get("/", (req, res) => {
   res.send(
     layout(`
@@ -708,7 +675,7 @@ app.get("/", (req, res) => {
   );
 });
 
-// 인증키 입력 화면
+// Viewer: 인증 페이지
 app.get("/verify", (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
@@ -757,7 +724,7 @@ app.get("/verify", (req, res) => {
   );
 });
 
-// 인증키 검증 → 예약 페이지
+// Viewer: 인증 처리
 app.post("/verify", (req, res) => {
   const raid = String(req.body.raid || "");
   const code = String(req.body.code || "").trim();
@@ -792,7 +759,7 @@ app.post("/verify", (req, res) => {
   return res.redirect(`/reserve?raid=${encodeURIComponent(raid)}`);
 });
 
-// 예약 화면
+// Viewer: 예약 폼
 app.get("/reserve", requireViewerOk, (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
@@ -901,7 +868,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   );
 });
 
-// 예약 등록 처리
+// Viewer: 예약 저장
 app.post("/reserve", requireViewerOk, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -909,7 +876,6 @@ app.post("/reserve", requireViewerOk, (req, res) => {
 
   const isUp = raid === "updoong";
 
-  // Active Day 기준으로 저장
   const activeRow = getActiveCodeRow(raid);
   if (!activeRow || !activeRow.code) {
     return res.redirect(
@@ -927,7 +893,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const buffer_count = Number(req.body.buffer_count);
   const up1 = req.body.up1 ? 1 : 0;
   const up2 = req.body.up2 ? 1 : 0;
-  const request_note = String(req.body.request_note || ""); // 글자수 제한 제거
+  const request_note = String(req.body.request_note || "");
 
   const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
   if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
@@ -943,11 +909,11 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
         "닉네임/모험단 이름을 입력해 주세요.",
       )}`,
+
     );
   }
 
   if (!isUp) {
-    // 일반 레이드: 딜/버퍼 검증
     if (!Number.isInteger(dealer_count) || dealer_count < 0 || dealer_count > 999) {
       return res.redirect(
         `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
@@ -1000,7 +966,6 @@ app.post("/reserve", requireViewerOk, (req, res) => {
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
           <a class="btn btnGhost" href="/check?raid=${encodeURIComponent(raid)}">예약확인</a>
-          <!-- 🔹 추가: 바로 공대 편성표로 이동 -->
           <a class="btn btnGhost" href="/lineup?raid=${encodeURIComponent(
             raid,
           )}">공대 편성표</a>
@@ -1013,7 +978,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   );
 });
 
-// 예약확인(시청자용)
+// Viewer: 예약확인
 app.get("/check", (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
@@ -1134,11 +1099,8 @@ app.get("/check", (req, res) => {
   );
 });
 
-// =====================
-// 공대 편성표 (공통 렌더 함수)
-// =====================
+// 공대 편성용 유틸
 function buildPartyMap(lineups, cfg) {
-  // party -> { buffers: {slotIndex: name}, dealers: {slotIndex: name} }
   const map = new Map();
   for (const row of lineups) {
     const p = row.party_index;
@@ -1157,7 +1119,6 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
   const dealersPerParty = cfg.dealersPerParty;
   const dealersPerRow = 3;
 
-  // 🔹 partyMap에 있는 공대 + 비활성 공대 번호 모두 합치기
   const indexSet = new Set([
     ...Array.from(partyMap.keys()),
     ...Array.from(disabledSet),
@@ -1169,14 +1130,12 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 
   const allIndices = Array.from(indexSet).sort((a, b) => a - b);
 
-  // 🔹 활성 공대(비활성 아님)를 앞으로, 비활성 공대를 뒤로
   const activeIndices = allIndices.filter((i) => !disabledSet.has(i));
   const disabledIndicesArr = allIndices.filter((i) => disabledSet.has(i));
   const viewOrder = [...activeIndices, ...disabledIndicesArr];
 
   let html = `<div class="partyGrid">`;
 
-  // 🔹 viewOrder 순서대로 카드 렌더링
   for (const p of viewOrder) {
     const data = partyMap.get(p) || { buffers: {}, dealers: {} };
     const isDisabled = disabledSet.has(p);
@@ -1204,7 +1163,6 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
           </tr>
     `;
 
-    // 각 버퍼 행에 대해 딜러 3명씩 배치
     for (let b = 1; b <= buffersPerParty; b++) {
       const bName = data.buffers[b] || "";
       const dealerCells = [];
@@ -1247,7 +1205,6 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
         html += `<td style="border-right:1px solid rgba(148,163,255,.35);">${bName ? esc(bName) : "&nbsp;"}</td>`;
       }
 
-      // 딜러 3칸
       if (dealerCells.length) {
         html += `<td><table style="width:100%;border:0;background:transparent;"><tr>${dealerCells.join(
           "",
@@ -1267,15 +1224,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
   return html;
 }
 
-// 자동배치 알고리즘 (수동 편성이 항상 우선)
-// - useConfirmedOnly = true  → confirmed=1 신청만 사용 (체크박스 토글용)
-// - useConfirmedOnly = false → 모든 신청 사용 (전체 자동배치 버튼용)
-// - 한 공대에 같은 닉네임은 딜/버 포함 "1자리"만 들어갈 수 있음
-// - 비활성 공대(삭제한 공대)는 사용하지 않음
-// - 수동으로 저장한 편성(raid_lineups의 application_id IS NULL)은 그대로 두고,
-//   자동배치는 "빈 칸"만 채운다.
+// 자동배치 (확정 여부 옵션)
 function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
-  if (raidKey === "updoong") return; // 업둥교환 제외
+  if (raidKey === "updoong") return;
 
   const cfg = getRaidConfig(raidKey);
   const dateKst = getActiveDay(raidKey);
@@ -1283,12 +1234,10 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     ? getDisabledPartySet(raidKey, dateKst)
     : new Set();
 
-  // 1) 자동 배치로 채운 칸만 삭제 (application_id NOT NULL)
   db.prepare(
     "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=? AND application_id IS NOT NULL",
   ).run(raidKey, dateKst);
 
-  // 2) 현재 남아 있는 편성(수동 포함)을 읽어와서 파티 상태 초기화
   const existing = db
     .prepare(
       `
@@ -1300,7 +1249,6 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     )
     .all(raidKey, dateKst);
 
-  // partyIndex -> 상태
   const parties = [];
   const partyStateMap = new Map();
 
@@ -1309,9 +1257,9 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     if (!p) {
       p = {
         index,
-        usedNames: new Set(),   // 이 공대에 이미 들어간 닉네임(수동/자동 포함)
-        bufferSlots: new Set(), // 버퍼가 사용 중인 slot_index
-        dealerSlots: new Set(), // 딜러가 사용 중인 slot_index
+        usedNames: new Set(),
+        bufferSlots: new Set(),
+        dealerSlots: new Set(),
       };
       partyStateMap.set(index, p);
       parties.push(p);
@@ -1331,7 +1279,6 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     }
   }
 
-  // 3) 새로 만들 파티 인덱스 계산 (기존 + 비활성 공대 피해서)
   let nextPartyIndex = 1;
   function createParty() {
     const usedIndices = new Set(parties.map((p) => p.index));
@@ -1351,12 +1298,11 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     return p;
   }
 
-  // 4) seat를 넣을 파티 찾기
   function findPartyWithSpace(role, nickname) {
     const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
     for (const p of parties) {
       if (disabledSet.has(p.index)) continue;
-      if (p.usedNames.has(nickname)) continue; // 한 공대에 같은 닉네임은 1자리만
+      if (p.usedNames.has(nickname)) continue;
       const usedCount =
         role === "buffer" ? p.bufferSlots.size : p.dealerSlots.size;
       if (usedCount < perParty) return p;
@@ -1372,7 +1318,6 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
   `,
   );
 
-  // 5) 실제 배치: 빈 칸만 채우기
   function allocSeat(role, nickname, appId) {
     const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
     if (perParty <= 0) return;
@@ -1382,21 +1327,19 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
       party = createParty();
     }
 
-    // 안전 체크: 만약 꽉 찬 공대를 잡았다면 새 공대 생성
     const usedCount =
       role === "buffer" ? party.bufferSlots.size : party.dealerSlots.size;
     if (usedCount >= perParty) {
       party = createParty();
     }
 
-    // 이 공대에서 사용 가능한 가장 낮은 slot_index 찾기
     const slots = role === "buffer" ? party.bufferSlots : party.dealerSlots;
     let slotIndex = 1;
     while (slots.has(slotIndex) && slotIndex <= perParty) {
       slotIndex++;
     }
     if (slotIndex > perParty) {
-      return; // 더 이상 넣을 칸이 없음
+      return;
     }
 
     insert.run(
@@ -1414,7 +1357,6 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
     party.usedNames.add(nickname);
   }
 
-  // 6) 사용할 신청 목록 읽기 (치즈 색 + 작성 시간 순)
   const confirmedClause = useConfirmedOnly ? "AND confirmed=1" : "";
   const apps = db
     .prepare(
@@ -1437,7 +1379,6 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
 
   if (!apps.length) return;
 
-  // 7) 버퍼 → 딜러 순서로, 남은 인원만 빈칸에 채우기
   for (const app of apps) {
     for (let i = 0; i < app.buffer_count; i++) {
       allocSeat("buffer", app.chzzk_nickname, app.id);
@@ -1448,16 +1389,14 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
   }
 }
 
-// =====================
-// Admin routes
-// =====================
+// Admin: 기본 라우팅
 app.get(ADMIN_BASE, (req, res) => {
   const key = String(req.cookies.admin_key || "");
   if (ADMIN_KEY && key === ADMIN_KEY) return res.redirect(`${ADMIN_BASE}/raid`);
   return res.redirect(`${ADMIN_BASE}/login`);
 });
 
-// 로그인 화면
+// Admin: 로그인 페이지
 app.get(`${ADMIN_BASE}/login`, (req, res) => {
   res.send(
     layout(
@@ -1487,6 +1426,7 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
   );
 });
 
+// Admin: 로그인 처리
 app.post(`${ADMIN_BASE}/login`, (req, res) => {
   const key = String(req.body.key || "").trim();
   if (!ADMIN_KEY || key !== ADMIN_KEY) {
@@ -1513,12 +1453,13 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
+// Admin: 로그아웃
 app.get(`${ADMIN_BASE}/logout`, (req, res) => {
   res.clearCookie("admin_key");
   res.redirect(`${ADMIN_BASE}/login`);
 });
 
-// 관리자: 레이드 선택 + Active Day/인증키 설정
+// Admin: 메인 / 인증키 설정
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   res.send(
     layout(
@@ -1584,7 +1525,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   );
 });
 
-// Active Day + 인증키 저장
+// Admin: 인증키 저장
 app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const code = String(req.body.code || "").trim();
@@ -1608,10 +1549,10 @@ app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
-// 신청목록 (관리자)
+// Admin: 신청목록
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
-  const sort = String(req.query.sort || "time"); // time | grade
+  const sort = String(req.query.sort || "time");
   const upFilter = req.query.up === "1" ? "1" : req.query.up === "2" ? "2" : "";
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
@@ -1633,7 +1574,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
     )
     .all(activeDay, raid);
 
-  // 업둥 전용 필터
   if (isUp) {
     if (upFilter === "1") {
       apps = apps.filter((a) => a.up1 === 1);
@@ -1642,9 +1582,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
     }
   }
 
-  // 정렬
   if (sort === "grade" || (isUp && upFilter)) {
-    // 치즈색깔 우선 + created_at 순
     apps.sort((a, b) => {
       const aa = GRADE_SORT[a.viewer_grade] ?? 999;
       const bb = GRADE_SORT[b.viewer_grade] ?? 999;
@@ -1813,7 +1751,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   );
 });
 
-// 등록완료 토글 + 공대 편성표 즉시 반영
+// Admin: 등록완료 토글
 app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -1824,9 +1762,6 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
     db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(confirmed, id);
   }
 
-  //    - 현재 레이드의 "등록완료된 신청들"만 가지고 공대 편성표를 다시 만든다.
-  //    - 체크 ON → 그 인원도 포함해서 재배치
-  //    - 체크 OFF → 그 인원을 제외하고 빈칸을 우선순위대로 채우는 효과
   rebuildLineupForRaid(raid, { useConfirmedOnly: true });
 
   return res.redirect(
@@ -1834,8 +1769,7 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   );
 });
 
-
-// 코멘트 저장 (12글자 제한 유지)
+// Admin: 코멘트 저장
 app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -1850,7 +1784,7 @@ app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
   );
 });
 
-// 개별 삭제
+// Admin: 개별 삭제
 app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
   const id = Number(req.body.id);
   const raid = String(req.body.raid || "");
@@ -1865,7 +1799,7 @@ app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
   );
 });
 
-// Active Day 기준 일괄삭제
+// Admin: 일괄삭제
 app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "time");
@@ -1884,9 +1818,7 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   );
 });
 
-// =====================
-// 공대 편성표 (관리자용)
-// =====================
+// Admin: 공대 편성표 관리
 app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
@@ -1973,7 +1905,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
+        <div class="muted" style="margin-top:12px;line-height:1.5%;">
           - 빈 칸으로 두고 저장하면 해당 슬롯의 인원이 삭제됩니다.<br/>
           - 공대 삭제 버튼을 누르면 해당 공대의 인원은 삭제되며, 공대 진행도 초기화를 하기 전까지 비활성 상태가 되어 자동배치/추가 배치에서 사용되지 않습니다.<br/>
           - “전체 자동배치”를 누르면 현재 확정(등록완료)된 예약을 기준으로 다시 편성합니다.<br/>
@@ -1986,19 +1918,18 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   );
 });
 
-// 자동배치 실행 (모든 예약 기준)
+// Admin: 공대 자동배치 실행
 app.post(`${ADMIN_BASE}/lineup/auto`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
-  //  전체 자동배치는 confirmed 여부 상관없이 전체 예약 사용
   rebuildLineupForRaid(raid, { useConfirmedOnly: false });
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// 공대 진행도 초기화: 해당 레이드/날짜의 공대 편성 + 비활성 공대 정보만 전부 삭제
+// Admin: 공대 진행도 초기화
 app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2008,25 +1939,20 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  // 1) 이 레이드의 오늘 기준 공대 편성 전부 삭제
   db.prepare(
     "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?"
   ).run(raid, dateKst);
 
-  // 2) 비활성 공대 정보도 초기화
   db.prepare(
     "DELETE FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?"
   ).run(raid, dateKst);
-
-  // 신청서(applications)는 건드리지 않음
-  // → 기존 예약 인원 수는 그대로 유지, 이후 자동배치/수동편성에 다시 사용 가능
 
   return res.redirect(
     `${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`
   );
 });
 
-// 수동 수정 저장 (빈칸은 삭제, 비활성 공대는 입력 무시)
+// Admin: 공대 수동 저장
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2037,7 +1963,6 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const partyCount = Number(req.body.party_count || 0) || 0;
   const disabledSet = getDisabledPartySet(raid, dateKst);
 
-  // 해당 레이드/날짜 기존 편성 전체 삭제 후, 폼 기준으로 재생성
   db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
 
   const insert = db.prepare(
@@ -2050,16 +1975,14 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
 
   for (let p = 1; p <= partyCount; p++) {
     const isDisabled = disabledSet.has(p);
-    if (isDisabled) continue; // 비활성 공대는 무시
+    if (isDisabled) continue;
 
-    // 버퍼
     for (let b = 1; b <= cfg.buffersPerParty; b++) {
       const key = `b_${p}_${b}`;
       const name = String(req.body[key] || "").trim();
       if (!name) continue;
       insert.run(dateKst, raid, p, "buffer", b, name, nowISO());
     }
-    // 딜러
     for (let d = 1; d <= cfg.dealersPerParty; d++) {
       const key = `d_${p}_${d}`;
       const name = String(req.body[key] || "").trim();
@@ -2071,7 +1994,7 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// 공대 삭제 (비활성 처리 + 인원 삭제 + 해당 공대 사용 인원 소모 처리)
+// Admin: 공대 삭제
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2084,9 +2007,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  // 1) 이 공대에서 실제로 편성된 인원들(예약 기반) 조회
-  //    - application_id가 NULL인 슬롯(수동 입력 닉네임)은 무시
-  //    - role별로 몇 칸 썼는지 집계
   const seatRows = db
     .prepare(
       `
@@ -2098,7 +2018,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
     )
     .all(raid, dateKst, partyIndex);
 
-  // appId -> { usedBuffers, usedDealers } 형태로 모으기
   const usageMap = new Map();
   for (const row of seatRows) {
     const appId = row.application_id;
@@ -2114,8 +2033,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
     }
   }
 
-  // 2) 각 신청서(application)에 대해, 해당 공대에서 소모한 인원만큼
-  //    dealer_count / buffer_count를 깎아준다. (최소 0까지)
   for (const [appId, u] of usageMap.entries()) {
     const app = db
       .prepare(
@@ -2141,7 +2058,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
     ).run(newDealer, newBuffer, appId);
   }
 
-  // 3) 이 공대를 "비활성 공대"로 기록
   db.prepare(
     `
     INSERT INTO raid_disabled_parties(date_kst, raid_key, party_index)
@@ -2150,7 +2066,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   `,
   ).run(dateKst, raid, partyIndex);
 
-  // 4) 해당 공대의 편성만 삭제
   db.prepare(
     "DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=? AND party_index=?",
   ).run(raid, dateKst, partyIndex);
@@ -2158,10 +2073,7 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-
-// =====================
-// 공대 편성표 (시청자용 /read-only)
-// =====================
+// Viewer: 공대 편성표 (read-only)
 app.get("/lineup", (req, res) => {
   const raid = String(req.query.raid || "");
   const hasRaid = !!raidByKey(raid);
@@ -2237,7 +2149,7 @@ app.get("/lineup", (req, res) => {
 
         ${partyCardsHtml}
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
+        <div class="muted" style="margin-top:12px;line-height:1.5%;">
           - 실제 진행 상황에 따라 스트리머가 수동으로 수정할 수 있습니다.<br/>
           - 빈 공대가 보인다면 아직 편성이 이루어지지 않은 상태이거나, 삭제된 공대일 수 있습니다.
         </div>
@@ -2248,12 +2160,12 @@ app.get("/lineup", (req, res) => {
   );
 });
 
-// health
+// 헬스체크
 app.get("/health", (req, res) =>
   res.json({ ok: true, kst: todayKST(), admin: ADMIN_BASE }),
 );
 
-// start
+// 서버 시작
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Admin secret url: ${ADMIN_BASE}`);
