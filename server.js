@@ -1675,7 +1675,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   dealer_count = Math.max(0, Math.min(999, Math.floor(dealer_count)));
   buffer_count = Math.max(0, Math.min(999, Math.floor(buffer_count)));
 
-  // 둘 다 0이면 의미 없으니 패스
+
   if (dealer_count === 0 && buffer_count === 0) {
     return res.redirect(`${ADMIN_BASE}/raid`);
   }
@@ -1690,7 +1690,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        dealer_count, buffer_count,
        up1, up2,
        confirmed, is_streamer)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1, 1)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
   ).run(
     nowISO(),
