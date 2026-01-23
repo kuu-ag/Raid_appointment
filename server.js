@@ -509,16 +509,17 @@ function layout(body, title = "레이드 예약 사이트") {
     }
     .partyHeader{
       display:flex;
-      justify-content:space-between;
-      align-items:center;
-      font-weight:800;
-      margin-bottom:6px;
-      font-size:14px;
+      flex-direction:column;      
+      align-items:center;         
+      justify-content:flex-start;
+      font-weight:900;
+      margin-bottom:8px;
     }
     .partyTitle{
-      display:flex;
-      align-items:center;
-      gap:6px;
+      font-size:20px;             
+      font-weight:900;
+      text-align:center;
+    }
     }
     .partyBody table{
       width:100%;
