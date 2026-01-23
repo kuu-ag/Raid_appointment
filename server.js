@@ -1221,7 +1221,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 
     html += `<div class="partyCard">
       <div class="partyHeader">
-        <div class="partyTitle">${p}공대</div>
+        <div class="partyTitle">${p}기수</div>
         ${
           editable && adminMode
             ? isDisabled
