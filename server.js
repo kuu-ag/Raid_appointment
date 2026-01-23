@@ -522,14 +522,15 @@ function layout(body, title = "레이드 예약 사이트") {
 /* 공대 카드 기본 박스 – 색은 기존과 동일 */
 .partyCard{
   position:relative;
-  flex:1 1 calc(16.66% - 14px);
-  min-width:200px;   /* ← 모바일 대비 */
-  max-width:240px;
+  flex:1 1 calc(10% - 10px);
+  min-width:120px;
+  max-width:200px;
   background:#020617;
   border-radius:14px;
   border:1px solid rgba(148,163,255,.4);
   padding:12px 12px 10px;
 }
+
 
 
 /* 카드 상단 (n공대 + 삭제 버튼) */
