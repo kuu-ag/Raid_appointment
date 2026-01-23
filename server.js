@@ -1049,9 +1049,15 @@ app.post("/reserve", requireViewerOk, (req, res) => {
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
           <a class="btn btnGhost" href="/check?raid=${encodeURIComponent(raid)}">예약확인</a>
-          <a class="btn btnGhost" href="/lineup?raid=${encodeURIComponent(
-            raid
-          )}">공대 편성표</a>
+<a class="btn"
+   style="
+      background:linear-gradient(135deg,#2563eb,#3b82f6);
+      border-color:rgba(99,102,241,.8);
+   "
+   href="/lineup?raid=${raid}">
+   공대 편성표
+</a>
+
           <a class="btn btnGhost" href="/">메인</a>
         </div>
       </div>
