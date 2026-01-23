@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS applications (
   up1 INTEGER NOT NULL DEFAULT 0,
   up2 INTEGER NOT NULL DEFAULT 0,
 
+  -- 스트리머 전용 예약 여부
+  is_streamer INTEGER NOT NULL DEFAULT 0,
+
   confirmed INTEGER NOT NULL DEFAULT 0,
   comment TEXT NOT NULL DEFAULT '',
   request_note TEXT NOT NULL DEFAULT ''
@@ -121,6 +124,7 @@ function ensureColumn(table, colName, colDDL) {
 ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
 ensureColumn("applications", "up1", "up1 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
+ensureColumn("applications", "is_streamer", "is_streamer INTEGER NOT NULL DEFAULT 0");
 
 // 유틸 함수
 function todayKST() {
@@ -507,41 +511,37 @@ function layout(body, title = "레이드 예약 사이트") {
       border:1px solid rgba(148,163,255,.4);
       padding:12px 12px 10px;
     }
-.partyHeader{
-  position:relative;            /* 내부 절대 위치 버튼 배치 */
-  height:32px;
-  margin-bottom:8px;
-  display:flex;
-  align-items:center;
-  justify-content:center;       /* 가운데에 공대명 */
-}
-
-.partyTitle{
-  font-size:20px;
-  font-weight:900;
-  text-align:center;
-  pointer-events:none;          /* 클릭 방해 X */
-}
-
-/* 삭제 버튼 오른쪽 상단 */
-.partyHeader .partyDeleteBtn{
-  position:absolute;
-  right:0;
-  top:0;
-  transform:translateY(-4px);
-  font-size:11px;
-  padding:3px 7px;
-  border-radius:8px;
-  background:#b91c1c;
-  border:1px solid rgba(255,120,120,0.6);
-  color:white;
-  cursor:pointer;
-  white-space:nowrap;
-}
-
-.partyHeader .partyDeleteBtn:hover{
-  background:#dc2626;
-}
+    .partyHeader{
+      position:relative;
+      height:32px;
+      margin-bottom:8px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .partyTitle{
+      font-size:20px;
+      font-weight:900;
+      text-align:center;
+      pointer-events:none;
+    }
+    .partyHeader .partyDeleteBtn{
+      position:absolute;
+      right:0;
+      top:0;
+      transform:translateY(-4px);
+      font-size:11px;
+      padding:3px 7px;
+      border-radius:8px;
+      background:#b91c1c;
+      border:1px solid rgba(255,120,120,0.6);
+      color:white;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .partyHeader .partyDeleteBtn:hover{
+      background:#dc2626;
+    }
 
     .partyBody table{
       width:100%;
@@ -932,7 +932,6 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
         "닉네임/모험단 이름을 입력해 주세요.",
       )}`,
-
     );
   }
 
@@ -960,8 +959,9 @@ app.post("/reserve", requireViewerOk, (req, res) => {
        viewer_grade, chzzk_nickname, adventure_name,
        dealer_count, buffer_count,
        up1, up2,
+       is_streamer,
        confirmed, comment, request_note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
   `,
   ).run(
     nowISO(),
@@ -974,6 +974,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     isUp ? 0 : buffer_count,
     isUp ? up1 : 0,
     isUp ? up2 : 0,
+    0, // 시청자 예약: is_streamer = 0
     request_note,
   );
 
@@ -1164,7 +1165,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     const isDisabled = disabledSet.has(p);
     const disableInputs = editable && adminMode && isDisabled;
 
-html += `<div class="partyCard">
+    html += `<div class="partyCard">
   <div class="partyHeader">
     <div class="partyTitle">${p}공대</div>
     ${
@@ -1248,7 +1249,7 @@ html += `<div class="partyCard">
   return html;
 }
 
-// 자동배치 (확정 여부 옵션)
+// 자동배치 (스트리머 최우선 + 확정 여부 옵션)
 function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
   if (raidKey === "updoong") return;
 
@@ -1385,9 +1386,11 @@ function rebuildLineupForRaid(raidKey, { useConfirmedOnly = false } = {}) {
   const apps = db
     .prepare(
       `
-      SELECT * FROM applications
+      SELECT *
+      FROM applications
       WHERE raid_key=? AND date_kst=? ${confirmedClause}
       ORDER BY
+        CASE WHEN is_streamer = 1 THEN 0 ELSE 1 END,  -- 스트리머 최우선
         CASE viewer_grade
           WHEN 'burning' THEN 1
           WHEN 'pink' THEN 2
@@ -1483,7 +1486,7 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
   res.redirect(`${ADMIN_BASE}/login`);
 });
 
-// Admin: 메인 / 인증키 설정
+// Admin: 메인 / 인증키 설정 / 스트리머 전용 예약 버튼 추가
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   res.send(
     layout(
@@ -1506,6 +1509,24 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
               `<a class="btn" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
                 r.key,
               )}&sort=time">${esc(r.label)}</a>`,
+          ).join("")}
+        </div>
+
+        <div class="divider"></div>
+
+        <div style="font-weight:900;margin-bottom:8px;">스트리머 전용 예약</div>
+        <div class="muted" style="margin-bottom:8px;">
+          - 스트리머 본인 캐릭터/계정을 인증 없이 바로 예약할 수 있습니다.<br/>
+          - 자동 공대 배치 시 스트리머 예약은 항상 최우선으로 배치됩니다.
+        </div>
+        <div class="row raidNav">
+          ${RAID_OPTIONS.map(
+            (r) =>
+              `<a class="btn btnGhost" href="${esc(
+                ADMIN_BASE,
+              )}/stream-reserve?raid=${encodeURIComponent(r.key)}">${esc(
+                r.label,
+              )} 스트리머 예약</a>`,
           ).join("")}
         </div>
 
@@ -1571,6 +1592,207 @@ app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
   ).run(raid, date_kst, code, nowISO());
 
   return res.redirect(`${ADMIN_BASE}/raid`);
+});
+
+// Admin: 스트리머 전용 예약 폼
+app.get(`${ADMIN_BASE}/stream-reserve`, requireAdmin, (req, res) => {
+  const raid = String(req.query.raid || "");
+  const raidObj = raidByKey(raid);
+  if (!raidObj) {
+    return res.send(
+      layout(
+        `
+        <div class="box">
+          <div class="row sp">
+            <div>
+              <div style="font-weight:900;font-size:20px;margin-bottom:6px;">스트리머 전용 예약</div>
+              <div class="muted">예약할 레이드를 선택하세요.</div>
+            </div>
+            <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/raid">관리자 메인</a>
+          </div>
+          <div class="divider"></div>
+          <div class="row" style="gap:12px;">
+            ${RAID_OPTIONS.map(
+              (r) =>
+                `<a class="btn" href="${esc(
+                  ADMIN_BASE,
+                )}/stream-reserve?raid=${encodeURIComponent(r.key)}">${esc(
+                  r.label,
+                )}</a>`,
+            ).join("")}
+          </div>
+        </div>
+      `,
+        "스트리머 예약",
+      ),
+    );
+  }
+
+  const isUp = raid === "updoong";
+  const activeRow = getActiveCodeRow(raid);
+  const activeDay = activeRow?.date_kst || getActiveDay(raid);
+
+  res.send(
+    layout(
+      `
+      <div class="box">
+        <div class="row sp">
+          <div>
+            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">스트리머 전용 예약</div>
+            <div class="muted">
+              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
+            </div>
+          </div>
+          <div class="row">
+            <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/raid">관리자 메인</a>
+            <a class="btn btnGhost" href="${esc(
+              ADMIN_BASE,
+            )}/list?raid=${encodeURIComponent(raid)}&sort=time">신청목록</a>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/stream-reserve">
+          <input type="hidden" name="raid" value="${esc(raid)}"/>
+
+          <div class="formGrid">
+            <div class="field">
+              <label>치즈 색깔</label>
+              <select name="viewer_grade" required>
+                ${GRADE_OPTIONS.map(
+                  (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`,
+                ).join("")}
+              </select>
+            </div>
+
+            <div class="field">
+              <label>치지직 닉네임 (표시용)</label>
+              <input name="chzzk_nickname" placeholder="스트리머 닉네임" required maxlength="40"/>
+            </div>
+
+            <div class="field">
+              <label>모험단 이름</label>
+              <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
+            </div>
+
+            ${
+              isUp
+                ? `
+                  <div class="field">
+                    <label>1업둥</label>
+                    <label class="bigCheck">
+                      <input type="checkbox" name="up1"/>
+                    </label>
+                  </div>
+                  <div class="field">
+                    <label>2업둥</label>
+                    <label class="bigCheck">
+                      <input type="checkbox" name="up2"/>
+                    </label>
+                  </div>
+                `
+                : `
+                  <div class="field">
+                    <label>딜러 갯수</label>
+                    <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
+                  </div>
+
+                  <div class="field">
+                    <label>버퍼 갯수</label>
+                    <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
+                  </div>
+                `
+            }
+
+            <div class="field fieldFull">
+              <label>비고 (선택)</label>
+              <textarea name="request_note"
+                placeholder="예) 스트리머 본캐 / 부캐 등 메모용"></textarea>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn" type="submit">스트리머 예약 등록</button>
+          </div>
+        </form>
+
+        <div class="muted" style="margin-top:12px;line-height:1.5;">
+          - 이 화면에서 등록한 예약은 <b>스트리머 예약</b>으로 저장되며, 자동 공대 배치에서 항상 최우선으로 배치됩니다.<br/>
+          - 신청목록 / 공대 편성표에서는 일반 예약과 동일하게 표시됩니다.
+        </div>
+      </div>
+      `,
+      "스트리머 예약",
+    ),
+  );
+});
+
+// Admin: 스트리머 전용 예약 저장
+app.post(`${ADMIN_BASE}/stream-reserve`, requireAdmin, (req, res) => {
+  const raid = String(req.body.raid || "");
+  const raidObj = raidByKey(raid);
+  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+
+  const isUp = raid === "updoong";
+  const activeRow = getActiveCodeRow(raid);
+  const activeDay = activeRow?.date_kst || getActiveDay(raid);
+
+  const viewer_grade = String(req.body.viewer_grade || "");
+  const chzzk_nickname = String(req.body.chzzk_nickname || "").trim();
+  const adventure_name = String(req.body.adventure_name || "").trim();
+  const dealer_count = Number(req.body.dealer_count);
+  const buffer_count = Number(req.body.buffer_count);
+  const up1 = req.body.up1 ? 1 : 0;
+  const up2 = req.body.up2 ? 1 : 0;
+  const request_note = String(req.body.request_note || "");
+
+  const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
+  if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
+    return res.redirect(`${ADMIN_BASE}/stream-reserve?raid=${encodeURIComponent(raid)}`);
+  }
+  if (!chzzk_nickname || !adventure_name) {
+    return res.redirect(`${ADMIN_BASE}/stream-reserve?raid=${encodeURIComponent(raid)}`);
+  }
+
+  if (!isUp) {
+    if (!Number.isInteger(dealer_count) || dealer_count < 0 || dealer_count > 999) {
+      return res.redirect(`${ADMIN_BASE}/stream-reserve?raid=${encodeURIComponent(raid)}`);
+    }
+    if (!Number.isInteger(buffer_count) || buffer_count < 0 || buffer_count > 999) {
+      return res.redirect(`${ADMIN_BASE}/stream-reserve?raid=${encodeURIComponent(raid)}`);
+    }
+  }
+
+  db.prepare(
+    `
+    INSERT INTO applications
+      (created_at, date_kst, raid_key,
+       viewer_grade, chzzk_nickname, adventure_name,
+       dealer_count, buffer_count,
+       up1, up2,
+       is_streamer,
+       confirmed, comment, request_note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '', ?)
+  `,
+  ).run(
+    nowISO(),
+    activeDay,
+    raid,
+    viewer_grade,
+    chzzk_nickname,
+    adventure_name,
+    isUp ? 0 : dealer_count,
+    isUp ? 0 : buffer_count,
+    isUp ? up1 : 0,
+    isUp ? up2 : 0,
+    1, // 스트리머 예약: is_streamer = 1
+    request_note,
+  );
+
+  return res.redirect(
+    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time`,
+  );
 });
 
 // Admin: 신청목록
@@ -1699,6 +1921,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                     const checked = a.confirmed === 1 ? "checked" : "";
                     const commentVal = String(a.comment || "");
                     const reqVal = String(a.request_note || "");
+                    const streamerTag = a.is_streamer === 1 ? ` <span class="chip">스트리머</span>` : "";
 
                     return `
                       <tr>
@@ -1720,7 +1943,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                         </td>
 
                         <td>${esc(gradeLabel(a.viewer_grade))}</td>
-                        <td>${esc(a.chzzk_nickname)}</td>
+                        <td>${esc(a.chzzk_nickname)}${streamerTag}</td>
                         <td>${esc(a.adventure_name)}</td>
 
                         ${
@@ -1763,10 +1986,11 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
           }
         </table>
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
+        <div class="muted" style="margin-top:12px;line-height:1.5%;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
-          - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈색깔 순으로 정렬됩니다.
+          - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈색깔 순으로 정렬됩니다.<br/>
+          - 스트리머 예약은 자동 공대 배치 시 항상 가장 먼저 배치됩니다.
         </div>
       </div>
     `,
@@ -1929,10 +2153,10 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
+        <div class="muted" style="margin-top:12px;line-height:1.5%;">
           - 빈 칸으로 두고 저장하면 해당 슬롯의 인원이 삭제됩니다.<br/>
           - 공대 삭제 버튼을 누르면 해당 공대의 인원은 삭제되며, 공대 진행도 초기화를 하기 전까지 비활성 상태가 되어 자동배치/추가 배치에서 사용되지 않습니다.<br/>
-          - “전체 자동배치”를 누르면 현재 확정(등록완료)된 예약을 기준으로 다시 편성합니다.<br/>
+          - “전체 자동배치”를 누르면 현재 확정(등록완료)된 예약을 기준으로 다시 편성합니다. (스트리머 예약 우선 배치)<br/>
           - “공대 진행도 초기화”를 누르면 이 레이드의 공대 편성이 모두 삭제되고, 비활성 공대 설정도 해제되어 1공대부터 다시 편성할 수 있습니다.
         </div>
       </div>
@@ -2173,7 +2397,7 @@ app.get("/lineup", (req, res) => {
 
         ${partyCardsHtml}
 
-        <div class="muted" style="margin-top:12px;line-height:1.5;">
+        <div class="muted" style="margin-top:12px;line-height:1.5%;">
           - 실제 진행 상황에 따라 스트리머가 수동으로 수정할 수 있습니다.<br/>
           - 빈 공대가 보인다면 아직 편성이 이루어지지 않은 상태이거나, 삭제된 공대일 수 있습니다.
         </div>
