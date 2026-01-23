@@ -507,20 +507,42 @@ function layout(body, title = "레이드 예약 사이트") {
       border:1px solid rgba(148,163,255,.4);
       padding:12px 12px 10px;
     }
-    .partyHeader{
-      display:flex;
-      flex-direction:column;      
-      align-items:center;         
-      justify-content:flex-start;
-      font-weight:900;
-      margin-bottom:8px;
-    }
-    .partyTitle{
-      font-size:20px;             
-      font-weight:900;
-      text-align:center;
-    }
-    }
+.partyHeader{
+  position:relative;            /* 내부 절대 위치 버튼 배치 */
+  height:32px;
+  margin-bottom:8px;
+  display:flex;
+  align-items:center;
+  justify-content:center;       /* 가운데에 공대명 */
+}
+
+.partyTitle{
+  font-size:20px;
+  font-weight:900;
+  text-align:center;
+  pointer-events:none;          /* 클릭 방해 X */
+}
+
+/* 삭제 버튼 오른쪽 상단 */
+.partyHeader .partyDeleteBtn{
+  position:absolute;
+  right:0;
+  top:0;
+  transform:translateY(-4px);
+  font-size:11px;
+  padding:3px 7px;
+  border-radius:8px;
+  background:#b91c1c;
+  border:1px solid rgba(255,120,120,0.6);
+  color:white;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.partyHeader .partyDeleteBtn:hover{
+  background:#dc2626;
+}
+
     .partyBody table{
       width:100%;
       border-radius:10px;
@@ -1142,20 +1164,21 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     const isDisabled = disabledSet.has(p);
     const disableInputs = editable && adminMode && isDisabled;
 
-    html += `<div class="partyCard">
-      <div class="partyHeader">
-        <div class="partyTitle"><span>${p}공대</span></div>
-        ${
-          editable && adminMode
-            ? isDisabled
-              ? `<span class="chip bad">삭제된 공대</span>`
-              : `<button class="btn btnDanger" type="button"
-                   onclick="deleteParty('${esc(raidKey)}', ${p});">
-                   공대 삭제
-                 </button>`
-            : ""
-        }
-      </div>
+html += `<div class="partyCard">
+  <div class="partyHeader">
+    <div class="partyTitle">${p}공대</div>
+    ${
+      editable && adminMode
+        ? isDisabled
+          ? `<span class="chip bad">삭제된 공대</span>`
+          : `<button class="partyDeleteBtn"
+                 type="button"
+                 onclick="deleteParty('${esc(raidKey)}', ${p});">
+                 삭제
+             </button>`
+        : ""
+    }
+  </div>
       <div class="partyBody">
         <table>
           <tr>
