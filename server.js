@@ -522,9 +522,11 @@ function layout(body, title = "레이드 예약 사이트") {
 /* 공대 카드 기본 박스 – 색은 기존과 동일 */
 .partyCard{
   position:relative;
-  flex:1 1 calc(10px); /* 8개 분할 */
-  min-width:160px;            /* 모바일 대비 */
+
+  width:220px;
+  flex:0 0 220px;   
   max-width:220px;
+
   background:#020617;
   border-radius:14px;
   border:1px solid rgba(148,163,255,.4);
