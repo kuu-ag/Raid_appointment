@@ -512,92 +512,129 @@ function layout(body, title = "레이드 예약 사이트") {
       cursor:pointer;
     }
 
-    .partyGrid{
-      display:flex;
-      flex-wrap:wrap;
-      gap:14px;
-    }
-    .partyCard{
-      flex:1 1 calc(25% - 12px);
-      min-width:260px;
-      max-width:320px;
-      background:#020617;
-      border-radius:14px;
-      border:1px solid rgba(148,163,255,.4);
-      padding:12px 12px 10px;
-    }
+/* 공대 카드 전체 배치 */
+.partyGrid{
+  display:flex;
+  flex-wrap:wrap;
+  gap:14px;
+}
+
+/* 공대 카드 기본 박스 – 색은 기존과 동일 */
+.partyCard{
+  position:relative;
+  flex:1 1 calc(25% - 14px);
+  min-width:260px;
+  max-width:320px;
+  background:#020617;
+  border-radius:14px;
+  border:1px solid rgba(148,163,255,.4);
+  padding:12px 12px 10px;
+}
+
+/* 카드 상단 (n공대 + 삭제 버튼) */
 .partyHeader{
   position:relative;
-  height:32px;
-  margin-bottom:8px;
   display:flex;
   align-items:center;
   justify-content:center;
+  margin-bottom:8px;
 }
 
 .partyTitle{
-  font-size:20px;
+  font-size:22px;
   font-weight:900;
   text-align:center;
   pointer-events:none;
 }
 
+/* 삭제 버튼 오른쪽 상단 */
 .partyHeader .partyDeleteBtn{
   position:absolute;
   right:0;
   top:0;
   transform:translateY(-4px);
   font-size:11px;
-  padding:3px 7px;
-  border-radius:8px;
+  padding:3px 8px;
+  border-radius:999px;
   background:#b91c1c;
   border:1px solid rgba(255,120,120,0.6);
   color:white;
   cursor:pointer;
   white-space:nowrap;
 }
-
 .partyHeader .partyDeleteBtn:hover{
   background:#dc2626;
 }
 
-    .partyBody table{
-      width:100%;
-      border-radius:10px;
-      border:1px solid rgba(51,65,85,.9);
-      background:#020617;
-    }
-    .partyBody th{
-      text-align:center;
-      font-size:11px;
-      padding:4px 4px;
-    }
-    .partyBody td{
-      padding:4px 4px;
-      font-size:12px;
-      text-align:center;
-    }
-    .slotInput{
-      width:100%;
-      padding:4px 6px;
-      font-size:12px;
-      border-radius:8px;
-      border:1px solid rgba(71,85,105,.9);
-      background:#020617;
-      color:var(--text);
-    }
-    .slotInput::placeholder{
-      color:rgba(148,163,255,.55);
-    }
-    .slotInput:focus{
-      border-color:var(--accent);
-      box-shadow:0 0 0 1px rgba(56,189,248,.3);
-      outline:none;
-    }
-    .slotInput[disabled]{
-      opacity:0.4;
-      cursor:not-allowed;
-    }
+/* 카드 내부 – 세로 한 줄 레이아웃 */
+.partyBody{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* 버퍼 / 딜러 섹션 박스 */
+.slotSection{
+  background:#020617;
+  border-radius:10px;
+  border:1px solid rgba(15,23,42,.9);
+  padding:6px 8px 8px;
+}
+
+/* 섹션 제목 (버퍼 / 딜러) */
+.slotSectionTitle{
+  font-size:12px;
+  color:rgba(191,219,254,.8);
+  margin:0 0 6px 2px;
+}
+
+/* 버퍼 / 딜러 사이 구분선 */
+.slotDivider{
+  height:1px;
+  margin:2px 2px 0;
+  background:linear-gradient(to right,transparent,rgba(148,163,255,.7),transparent);
+}
+
+/* 입력칸 – 캡처처럼 넓은 필 모양 */
+.slotInput{
+  width:100%;
+  padding:6px 10px;
+  margin-bottom:6px;
+  font-size:13px;
+  border-radius:999px;
+  border:1px solid rgba(71,85,105,.95);
+  background:#020617;
+  color:var(--text);
+  box-shadow:0 3px 10px rgba(15,23,42,.85) inset;
+}
+.slotInput::placeholder{
+  color:rgba(148,163,255,.6);
+}
+.slotInput:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 1px rgba(56,189,248,.35),
+             0 0 18px rgba(56,189,248,.35);
+  outline:none;
+}
+.slotInput[disabled]{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+/* 보기 전용 슬롯 (시청자 화면용) */
+.slotStatic{
+  width:100%;
+  padding:6px 10px;
+  margin-bottom:6px;
+  font-size:13px;
+  border-radius:999px;
+  border:1px solid rgba(30,64,175,.9);
+  background:#020617;
+  text-align:center;
+}
+.slotStatic.slotEmpty{
+  opacity:.4;
+}
   </style>
   <script>
     function submitOnChange(formId){
@@ -1157,26 +1194,20 @@ function buildPartyMap(lineups, cfg) {
   return map;
 }
 
-function renderPartyCards({
-  raidKey,
-  partyMap,
-  cfg,
-  editable,
-  adminMode,
-  disabledSet = new Set(),
-}) {
+function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disabledSet = new Set() }) {
   const buffersPerParty = cfg.buffersPerParty;
   const dealersPerParty = cfg.dealersPerParty;
-  const dealersPerRow = 3;
 
-  const indexSet = new Set([...Array.from(partyMap.keys()), ...Array.from(disabledSet)]);
+  const indexSet = new Set([
+    ...Array.from(partyMap.keys()),
+    ...Array.from(disabledSet),
+  ]);
 
   if (indexSet.size === 0) {
     return `<div class="muted">편성된 공대가 없습니다.</div>`;
   }
 
   const allIndices = Array.from(indexSet).sort((a, b) => a - b);
-
   const activeIndices = allIndices.filter((i) => !disabledSet.has(i));
   const disabledIndicesArr = allIndices.filter((i) => disabledSet.has(i));
   const viewOrder = [...activeIndices, ...disabledIndicesArr];
@@ -1189,85 +1220,81 @@ function renderPartyCards({
     const disableInputs = editable && adminMode && isDisabled;
 
     html += `<div class="partyCard">
-  <div class="partyHeader">
-    <div class="partyTitle">${p}공대</div>
-    ${
-      editable && adminMode
-        ? isDisabled
-          ? `<span class="chip bad">삭제된 공대</span>`
-          : `<button class="partyDeleteBtn"
-                 type="button"
-                 onclick="deleteParty('${esc(raidKey)}', ${p});">
-                 삭제
-             </button>`
-        : ""
-    }
-  </div>
-      <div class="partyBody">
-        <table>
-          <tr>
-            <th style="width:70px;">버퍼</th>
-            <th>딜러</th>
-          </tr>
-    `;
+      <div class="partyHeader">
+        <div class="partyTitle">${p}공대</div>
+        ${
+          editable && adminMode
+            ? isDisabled
+              ? `<span class="chip bad">삭제된 공대</span>`
+              : `<button class="partyDeleteBtn"
+                   type="button"
+                   onclick="deleteParty('${esc(raidKey)}', ${p});">
+                   삭제
+                 </button>`
+            : ""
+        }
+      </div>
+
+      <div class="partyBody">`;
+
+    // ===== 버퍼 섹션 =====
+    html += `<div class="slotSection">
+      <div class="slotSectionTitle">버퍼</div>`;
 
     for (let b = 1; b <= buffersPerParty; b++) {
       const bName = data.buffers[b] || "";
-      const dealerCells = [];
-      for (let c = 0; c < dealersPerRow; c++) {
-        const dIndex = (b - 1) * dealersPerRow + c + 1;
-        if (dIndex > dealersPerParty) continue;
-        const dName = data.dealers[dIndex] || "";
 
-        if (editable && adminMode) {
-          if (disableInputs) {
-            dealerCells.push(
-              `<td><input class="slotInput" value="${esc(
-                dName
-              )}" placeholder="비활성" disabled/></td>`
-            );
-          } else {
-            dealerCells.push(
-              `<td><input class="slotInput" name="d_${p}_${dIndex}" value="${esc(
-                dName
-              )}" placeholder="딜러"/></td>`
-            );
-          }
-        } else {
-          dealerCells.push(`<td>${dName ? esc(dName) : "&nbsp;"}</td>`);
-        }
-      }
-
-      html += `<tr>`;
       if (editable && adminMode) {
         if (disableInputs) {
-          html += `<td><input class="slotInput" value="${esc(
+          html += `<input class="slotInput" value="${esc(
             bName
-          )}" placeholder="비활성" disabled/></td>`;
+          )}" placeholder="비활성" disabled/>`;
         } else {
-          html += `<td style="border-right:1px solid rgba(148,163,255,.35);">
-          <input class="slotInput" name="b_${p}_${b}" 
-          value="${esc(bName)}" placeholder="버퍼"/></td>`;
+          html += `<input class="slotInput" name="b_${p}_${b}"
+                     value="${esc(bName)}" placeholder="버퍼"/>`;
         }
       } else {
-        html += `<td style="border-right:1px solid rgba(148,163,255,.35);">${
-          bName ? esc(bName) : "&nbsp;"
-        }</td>`;
+        if (bName) {
+          html += `<div class="slotStatic">${esc(bName)}</div>`;
+        } else {
+          html += `<div class="slotStatic slotEmpty">버퍼</div>`;
+        }
       }
-
-      if (dealerCells.length) {
-        html += `<td><table style="width:100%;border:0;background:transparent;"><tr>${dealerCells.join(
-          ""
-        )}</tr></table></td>`;
-      } else {
-        html += `<td>&nbsp;</td>`;
-      }
-      html += `</tr>`;
     }
 
-    html += `</table>
-      </div>
-    </div>`;
+    html += `</div>`; // end 버퍼 섹션
+
+    html += `<div class="slotDivider"></div>`;
+
+    // ===== 딜러 섹션 =====
+    html += `<div class="slotSection">
+      <div class="slotSectionTitle">딜러</div>`;
+
+    for (let d = 1; d <= dealersPerParty; d++) {
+      const dName = data.dealers[d] || "";
+
+      if (editable && adminMode) {
+        if (disableInputs) {
+          html += `<input class="slotInput" value="${esc(
+            dName
+          )}" placeholder="비활성" disabled/>`;
+        } else {
+          html += `<input class="slotInput" name="d_${p}_${d}"
+                     value="${esc(dName)}" placeholder="딜러"/>`;
+        }
+      } else {
+        if (dName) {
+          html += `<div class="slotStatic">${esc(dName)}</div>`;
+        } else {
+          html += `<div class="slotStatic slotEmpty">딜러</div>`;
+        }
+      }
+    }
+
+    html += `</div>`; // end 딜러 섹션
+
+    html += `</div>  <!-- partyBody -->
+    </div>`;        // partyCard
   }
 
   html += `</div>`;
