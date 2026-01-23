@@ -533,30 +533,31 @@ function layout(body, title = "레이드 예약 사이트") {
   padding:12px 12px 10px;
 }
 
-/* 카드 상단 (n공대 + 삭제 버튼) */
+/* 카드 상단 (기수 + 삭제 버튼) */
 .partyHeader{
-  position:relative;
   display:flex;
   align-items:center;
-  justify-content:center;
-  margin-bottom:8px;
+  justify-content:space-between;
+  width:100%;
+  margin-bottom:6px;
 }
 
 .partyTitle{
-  font-size:22px;
+  font-size:18px;
   font-weight:900;
-  text-align:center;
+  text-align:left;
+  line-height:1.1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
   pointer-events:none;
 }
 
-/* 삭제 버튼 오른쪽 상단 */
+/* 삭제 버튼 오른쪽 */
 .partyHeader .partyDeleteBtn{
-  position:absolute;
-  right:0;
-  top:0;
-  transform:translateY(-4px);
+  flex-shrink:0;
   font-size:11px;
-  padding:3px 8px;
+  padding:3px 6px;
   border-radius:999px;
   background:#b91c1c;
   border:1px solid rgba(255,120,120,0.6);
@@ -2047,7 +2048,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
             )}/lineup/reset" style="margin:0;display:inline;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <button class="btn btnDanger" type="submit"
-                onclick="return confirm('현재 레이드의 공대 진행도를 모두 초기화합니다.\\n모든 공대 편성이 삭제되고 비활성 상태도 해제됩니다.');">
+                onclick="return confirm('현재 레이드의 공대 진행도를 모두 초기화합니다.\\n모든 공대 편성이 삭제되고 비활성 상태도 해제되어 1공대부터 다시 편성할 수 있습니다.');">
                 공대 진행도 초기화
               </button>
             </form>
