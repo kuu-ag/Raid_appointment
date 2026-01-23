@@ -94,12 +94,12 @@ CREATE TABLE IF NOT EXISTS day_codes (
   updated_at TEXT NOT NULL
 );
 
-/* 공대 편성표 */
+/*  편성표 */
 CREATE TABLE IF NOT EXISTS raid_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
-  party_index INTEGER NOT NULL, -- 1공대, 2공대 ...
+  party_index INTEGER NOT NULL, -- 1, 2 ...
   role TEXT NOT NULL,           -- 'buffer' | 'dealer'
   slot_index INTEGER NOT NULL,  -- 각 역할 내 순번
   nickname TEXT NOT NULL,
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
 CREATE INDEX IF NOT EXISTS idx_lineups_key
 ON raid_lineups(date_kst, raid_key, party_index);
 
-/* 비활성 공대 목록 */
+/* 비활성  목록 */
 CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -522,16 +522,14 @@ function layout(body, title = "레이드 예약 사이트") {
 /* 공대 카드 기본 박스 – 색은 기존과 동일 */
 .partyCard{
   position:relative;
-  flex:1 1 calc(10% - 10px);
-  min-width:120px;
-  max-width:200px;
+  flex:1 1 calc(12.5% - 10px); /* 8개 분할 */
+  min-width:160px;            /* 모바일 대비 */
+  max-width:220px;
   background:#020617;
   border-radius:14px;
   border:1px solid rgba(148,163,255,.4);
   padding:12px 12px 10px;
 }
-
-
 
 /* 카드 상단 (n공대 + 삭제 버튼) */
 .partyHeader{
