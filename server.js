@@ -523,9 +523,9 @@ function layout(body, title = "레이드 예약 사이트") {
 .partyCard{
   position:relative;
 
-  width:180px;
-  flex:0 0 180px;   
-  max-width:180px;
+  width:120px;
+  flex:0 0 120px;   
+  max-width:120px;
 
   background:#020617;
   border-radius:14px;
