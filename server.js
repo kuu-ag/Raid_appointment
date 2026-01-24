@@ -1953,22 +1953,32 @@ app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
   );
 });
 
-// Admin: 일괄삭제 (공대 편성표는 유지)
+// Admin: 일괄삭제 (해당 레이드의 신청 + 신청 기반 편성 인원 삭제)
 app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  const sort = String(req.body.sort || "time");
-  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
+const raid = String(req.body.raid || "");
+const sort = String(req.body.sort || "time");
 
-  const activeDay = getActiveDay(raid);
-  db.prepare("DELETE FROM applications WHERE date_kst=? AND raid_key=?").run(
-    activeDay,
-    raid
-  );
+if (!raidByKey(raid)) {
+return res.redirect(`${ADMIN_BASE}/raid`);
+}
 
-  return res.redirect(
-    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
-  );
-});
+const activeDay = getActiveDay(raid);
+
+db.prepare(
+"DELETE FROM applications WHERE date_kst=? AND raid_key=?"
+).run(activeDay, raid);
+
+db.prepare(
+`
+DELETE FROM raid_lineups
+WHERE date_kst=? AND raid_key=?
+AND application_id IS NOT NULL
+`
+).run(activeDay, raid);
+
+return res.redirect(
+`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
+);
 
 // Admin: 공대 편성표 관리
 app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
