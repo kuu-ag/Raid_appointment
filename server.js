@@ -1979,7 +1979,7 @@ AND application_id IS NOT NULL
 return res.redirect(
 `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
 );
-
+});
 // Admin: 공대 편성표 관리
 app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
