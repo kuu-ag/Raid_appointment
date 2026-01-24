@@ -1448,8 +1448,6 @@ else info.dealSlots.add(slotIndex);
 // 🔧 이 공대에 이 닉네임이 들어갔다고 표시 → 다음부터 이 공대는 스킵
 info.names.add(nickname);
 }
-}
-
 
 assignSeats("buffer", app.buffer_count || 0);
 assignSeats("dealer", app.dealer_count || 0);
