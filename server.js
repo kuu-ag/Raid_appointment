@@ -40,15 +40,17 @@ const GRADE_OPTIONS = [
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
+  { key: "log", label: "통나무" }, // 신규 등급
   { key: "normal", label: "일반 치즈" },
 ];
 
-// 정렬 우선순위: 스트리머 > 불타는 > 분홍 > 노란 > 일반
+// 정렬 우선순위: 스트리머 > 불타는 > 분홍 > 노란/통나무 > 일반
 const GRADE_SORT = {
   streamer: 0,
   burning: 1,
   pink: 2,
   yellow: 3,
+  log: 3, // 노란 치즈와 동급
   normal: 4,
 };
 
@@ -80,7 +82,8 @@ CREATE TABLE IF NOT EXISTS applications (
 
   confirmed INTEGER NOT NULL DEFAULT 0,
   comment TEXT NOT NULL DEFAULT '',
-  request_note TEXT NOT NULL DEFAULT ''
+  request_note TEXT NOT NULL DEFAULT '',
+  start_party INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
@@ -134,6 +137,11 @@ ensureColumn(
   "applications",
   "is_streamer",
   "is_streamer INTEGER NOT NULL DEFAULT 0"
+);
+ensureColumn(
+  "applications",
+  "start_party",
+  "start_party INTEGER NOT NULL DEFAULT 1"
 );
 
 // 유틸 함수
@@ -925,9 +933,11 @@ app.get("/reserve", requireViewerOk, (req, res) => {
             }
 
             <div class="field fieldFull">
-              <label>요청사항 (선택)</label>
-              <textarea name="request_note"
-                placeholder="예) 3깃수부터 참여 가능 / 자리 관련 요청 등"></textarea>
+              <label>원하는 시작 기수 (선택)</label>
+              <input
+                name="start_party"
+                inputmode="numeric"
+                placeholder="예) 3 (3기수부터 참여 희망 시)"/>
             </div>
           </div>
 
@@ -938,7 +948,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 
         <div class="muted" style="margin-top:12px;">
           - 치즈 색깔을 “치즈 선택” 그대로 두면 등록이 안 됩니다.<br/>
-          - 요청사항은 선택이며 비워도 등록됩니다.<br/>
+          - 원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다.<br/>
           - ${
             isUp
               ? "업둥교환은 딜/버퍼 수 대신 1업둥, 2업둥 체크박스로 신청합니다. (둘 다 선택 가능)"
@@ -977,7 +987,15 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const buffer_count = Number(req.body.buffer_count);
   const up1 = req.body.up1 ? 1 : 0;
   const up2 = req.body.up2 ? 1 : 0;
-  const request_note = String(req.body.request_note || "");
+
+  // 원하는 시작 기수 (선택)
+  let start_party = parseInt(String(req.body.start_party || "").trim(), 10);
+  if (!Number.isInteger(start_party) || start_party < 1) {
+    start_party = 1;
+  }
+  if (start_party > 99) {
+    start_party = 99;
+  }
 
   const validGradeKeys = new Set(GRADE_OPTIONS.map((g) => g.key));
   if (!viewer_grade || !validGradeKeys.has(viewer_grade) || viewer_grade === "") {
@@ -1020,8 +1038,8 @@ app.post("/reserve", requireViewerOk, (req, res) => {
        viewer_grade, chzzk_nickname, adventure_name,
        dealer_count, buffer_count,
        up1, up2,
-       confirmed, comment, request_note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?)
+       confirmed, comment, request_note, start_party)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', '', ?)
   `
   ).run(
     nowISO(),
@@ -1034,7 +1052,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     isUp ? 0 : buffer_count,
     isUp ? up1 : 0,
     isUp ? up2 : 0,
-    request_note
+    start_party
   );
 
   return res.send(
@@ -1321,6 +1339,9 @@ function applyLineupForApplication(appId, confirmed) {
   const raidKey = app.raid_key;
   if (raidKey === "updoong") return; // 업둥은 편성표 사용 안 함
 
+  // 원하는 시작 기수 (없으면 1)
+  const startParty = Math.max(1, Number(app.start_party || 1));
+
   const cfg = getRaidConfig(raidKey);
   const dateKst = app.date_kst;
   const disabledSet = getDisabledPartySet(raidKey, dateKst);
@@ -1370,8 +1391,8 @@ function applyLineupForApplication(appId, confirmed) {
     const perParty =
       role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
 
-    // 기존 공대 먼저 탐색
-    for (let idx = 1; idx <= maxPartyIndex; idx++) {
+    // 기존 공대 먼저 탐색 (원하는 시작 기수 이상만)
+    for (let idx = startParty; idx <= maxPartyIndex; idx++) {
       if (disabledSet.has(idx)) continue;
 
       let info = partyInfo.get(idx);
@@ -1390,8 +1411,8 @@ function applyLineupForApplication(appId, confirmed) {
       }
     }
 
-    // 빈자리가 없으면 새 공대 생성
-    let newIdx = maxPartyIndex + 1;
+    // 빈자리가 없으면 새 공대 생성 (원하는 시작 기수 이상에서)
+    let newIdx = Math.max(maxPartyIndex + 1, startParty);
     while (disabledSet.has(newIdx)) newIdx++;
     maxPartyIndex = newIdx;
 
@@ -1687,8 +1708,8 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
     dateKst,
     raid,
     "streamer",
-    "스트리머",
-    "스트리머",
+    "암종호",   // 스트리머 닉네임
+    "암종호",   // 스트리머 모험단명
     dealer_count,
     buffer_count
   );
@@ -1815,7 +1836,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                 ? `<th class="center">1업둥</th><th class="center">2업둥</th>`
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
-            <th>요청사항</th>
+            <th>원하는 시작 기수</th>
             <th>코멘트</th>
             <th class="center">삭제</th>
           </tr>
@@ -1827,7 +1848,11 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                     const formId = `confirmForm_${a.id}`;
                     const checked = a.confirmed === 1 ? "checked" : "";
                     const commentVal = String(a.comment || "");
-                    const reqVal = String(a.request_note || "");
+                    const startPartyNum = Number(a.start_party || 0);
+                    const startPartyHtml =
+                      startPartyNum > 1
+                        ? `${esc(startPartyNum)}기수부터`
+                        : `<span class="muted">-</span>`;
 
                     return `
                       <tr>
@@ -1860,7 +1885,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                                <td class="center">${esc(a.buffer_count)}</td>`
                         }
 
-                        <td>${reqVal ? esc(reqVal) : `<span class="muted">-</span>`}</td>
+                        <td>${startPartyHtml}</td>
 
                         <td>
                           <form method="POST" action="${esc(
@@ -1896,7 +1921,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
         <div class="muted" style="margin-top:12px;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
-          - “요청사항”은 시청자가 작성한 내용(선택)이며, 스트리머 확인용입니다.<br/>
+          - “원하는 시작 기수”는 선택 항목이며, 자동 배치 시 해당 기수부터 배치를 시작하기 위한 참고용입니다.<br/>
           - 업둥교환의 1업둥/2업둥 필터를 사용하면 해당 업둥만 치즈색깔 순으로 정렬됩니다.
         </div>
       </div>
@@ -1955,31 +1980,32 @@ app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
 
 // Admin: 일괄삭제 (해당 레이드의 신청 + 신청 기반 편성 인원 삭제)
 app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
-const raid = String(req.body.raid || "");
-const sort = String(req.body.sort || "time");
+  const raid = String(req.body.raid || "");
+  const sort = String(req.body.sort || "time");
 
-if (!raidByKey(raid)) {
-return res.redirect(`${ADMIN_BASE}/raid`);
-}
+  if (!raidByKey(raid)) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
 
-const activeDay = getActiveDay(raid);
+  const activeDay = getActiveDay(raid);
 
-db.prepare(
-"DELETE FROM applications WHERE date_kst=? AND raid_key=?"
-).run(activeDay, raid);
+  db.prepare(
+    "DELETE FROM applications WHERE date_kst=? AND raid_key=?"
+  ).run(activeDay, raid);
 
-db.prepare(
-`
+  db.prepare(
+    `
 DELETE FROM raid_lineups
 WHERE date_kst=? AND raid_key=?
 AND application_id IS NOT NULL
 `
-).run(activeDay, raid);
+  ).run(activeDay, raid);
 
-return res.redirect(
-`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
-);
+  return res.redirect(
+    `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`
+  );
 });
+
 // Admin: 공대 편성표 관리
 app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
