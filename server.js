@@ -1122,10 +1122,20 @@ app.get("/check", (req, res) => {
   const apps = db
     .prepare(
       `
-      SELECT * FROM applications
-      WHERE date_kst=? AND raid_key=?
-      ORDER BY datetime(created_at) ASC
-    `
+        SELECT * FROM applications
+        WHERE date_kst=? AND raid_key=?
+        ORDER BY
+          CASE viewer_grade
+            WHEN 'streamer' THEN 0
+            WHEN 'burning' THEN 1
+            WHEN 'pink' THEN 2
+            WHEN 'yellow' THEN 3
+            WHEN 'log' THEN 3
+            WHEN 'normal' THEN 4
+            ELSE 999
+          END ASC,
+          datetime(created_at) ASC
+      `
     )
     .all(activeDay, raid);
 
@@ -1564,7 +1574,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
             (r) =>
               `<a class="btn" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
                 r.key
-              )}&sort=time">${esc(r.label)}</a>`
+              )}&sort=grade">${esc(r.label)}</a>`
           ).join("")}
         </div>
 
@@ -1720,7 +1730,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
 // Admin: 신청목록
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
-  const sort = String(req.query.sort || "time");
+  const sort = String(req.query.sort || "grade");
   const upFilter = req.query.up === "1" ? "1" : req.query.up === "2" ? "2" : "";
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
