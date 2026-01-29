@@ -731,9 +731,17 @@ app.get("/", (req, res) => {
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">메인 로비</div>
             <div class="muted">레이드를 선택 → 인증키 입력 → 예약 신청</div>
           </div>
-          <div class="row">
-            <a class="btn btnGhost" href="/lineup">공대편성표 보기</a>
-            <a class="btn btnGhost" href="/check">예약확인</a>
+        <div class="row">
+          <a class="btn"
+             style="
+                background:linear-gradient(135deg,#2563eb,#3b82f6);
+                border-color:rgba(99,102,241,.8);
+             "
+             href="/lineup">
+             공대편성표 보기
+          </a>
+          <a class="btn btnGhost" href="/check">예약확인</a>
+            </div>
           </div>
         </div>
 
