@@ -743,7 +743,6 @@ app.get("/", (req, res) => {
           <a class="btn btnGhost" href="/check">예약확인</a>
             </div>
           </div>
-        </div>
 
         <div class="divider"></div>
 
