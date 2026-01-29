@@ -1,4 +1,4 @@
-// server.js (ESM / "type": "module")
+    // server.js (ESM / "type": "module")
 "use strict";
 
 import express from "express";
@@ -677,6 +677,31 @@ function layout(body, title = "레이드 예약 사이트") {
 
     @media (max-width:520px){
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
+    }
+     {
+      box-shadow: none !important;
+      text-shadow: none !important;
+      }
+        .btn,
+        .box,
+        .partyCard,
+        .upPartyCard,
+        table,
+        input,
+        select,
+        textarea,
+        .slotInput,
+        .slotStatic,
+        .upGroupBox,
+        .upPartySlots,
+    .title {
+      box-shadow: none !important;
+    }
+        input,
+        select,
+        textarea,
+        .slotInput {
+      box-shadow: none !important;
     }
   </style>
   <script>
