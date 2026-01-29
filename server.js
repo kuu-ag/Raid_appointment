@@ -30,7 +30,6 @@ const RAID_OPTIONS = [
   { key: "dirige", label: "디레지에" },
   { key: "dirige-hard", label: "디레지에-악연" },
   { key: "inhwagongjeon", label: "이내황혼전" },
-  { key: "nabel", label: "인공신 : 나벨" },
   { key: "nabel-hard", label: "나벨 - 하드모드" },
   { key: "updoong", label: "업둥교환" },
 ];
@@ -40,7 +39,7 @@ const GRADE_OPTIONS = [
   { key: "burning", label: "불타는 치즈" },
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
-  { key: "log", label: "통나무" }, // 신규 등급
+  { key: "log", label: "통나무" },
   { key: "normal", label: "일반 치즈" },
 ];
 
@@ -50,7 +49,7 @@ const GRADE_SORT = {
   burning: 1,
   pink: 2,
   yellow: 3,
-  log: 3, // 노란 치즈와 동급
+  log: 3,
   normal: 4,
 };
 
