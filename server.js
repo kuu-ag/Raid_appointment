@@ -1009,7 +1009,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
               <input
                 name="start_party"
                 inputmode="numeric"
-                placeholder="예) 3 (3기수부터 참여 희망 시)"/>
+                placeholder="예) 3 (시작 원하는 기수 숫자만 작성!!)"/>
             </div>
           </div>
 
