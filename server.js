@@ -1,10 +1,3 @@
-콘텐츠로 건너뛰기
-채팅 기록
-
-
-
-
-나의 말:
 // server.js (ESM / "type": "module")
 "use strict";
 
