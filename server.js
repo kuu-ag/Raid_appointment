@@ -1465,9 +1465,9 @@ function applyLineupForApplication(appId, confirmed) {
       info.names.add(nickname); // 이 공대에는 이 닉네임 다시 못 들어가게
     }
   }
-
-  assignSeats("buffer", app.buffer_count || 0);
+ 
   assignSeats("dealer", app.dealer_count || 0);
+  assignSeats("buffer", app.buffer_count || 0);
 }
 
 // Admin: 기본 라우팅
