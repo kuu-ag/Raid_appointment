@@ -34,7 +34,7 @@ const RAID_OPTIONS = [
   { key: "dirige-hard", label: "디레지에-악연" },
   { key: "inhwagongjeon", label: "이내황혼전" },
   { key: "nabel-hard", label: "나벨 - 하드모드" },
-  { key: "updoong", label: "업둥벞교" },
+  { key: "updoong", label: "업둥교환" },
 ];
 
 const GRADE_OPTIONS = [
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS applications (
 
   is_streamer INTEGER NOT NULL DEFAULT 0,
 
-  -- 업둥벞교 전용 (2업둥 1개/2개)
+  -- 업둥교환 전용 (2업둥 1개/2개)
   up2 INTEGER NOT NULL DEFAULT 0,
   up22 INTEGER NOT NULL DEFAULT 0,
 
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
 CREATE INDEX IF NOT EXISTS idx_lineups_key
 ON raid_lineups(date_kst, raid_key, party_index);
 
-/* 비활성 공대 (일반 레이드 + 업둥벞교 공대도 같이 사용) */
+/* 비활성 공대 (일반 레이드 + 업둥교환 공대도 같이 사용) */
 CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   UNIQUE(date_kst, raid_key, party_index)
 );
 
-/* 업둥벞교 편성표 (버퍼/딜러 구분 없음, slot_index 연속 저장) */
+/* 업둥교환 편성표 (버퍼/딜러 구분 없음, slot_index 연속 저장) */
 CREATE TABLE IF NOT EXISTS up_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -152,7 +152,7 @@ ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT
 ensureColumn("applications", "is_streamer", "is_streamer INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "start_party", "start_party INTEGER NOT NULL DEFAULT 1");
 
-// 업둥벞교 2업둥 1개/2개
+// 업둥교환 2업둥 1개/2개
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up22", "up22 INTEGER NOT NULL DEFAULT 0");
 
@@ -607,7 +607,7 @@ function layout(body, title = "레이드 예약 사이트") {
     .slotStatic.slotEmpty{ opacity:.4; }
 
     /* =====================
-       업둥벞교: 12명=1공대, 세로형 카드 + 4명 단위 구분(이미지 스타일)
+       업둥교환: 12명=1공대, 세로형 카드 + 4명 단위 구분(이미지 스타일)
     ====================== */
     .upPartyGrid{
       display:flex;
@@ -697,7 +697,7 @@ function layout(body, title = "레이드 예약 사이트") {
       f.submit();
     }
     function deleteUpParty(partyIndex){
-      const msg = partyIndex + "공대를 삭제(비활성)하시겠습니까?\\n(업둥벞교는 12명=1공대이며, 삭제된 공대는 자동배치/수동저장 모두 건너뜁니다.)";
+      const msg = partyIndex + "공대를 삭제(비활성)하시겠습니까?\\n(업둥교환는 12명=1공대이며, 삭제된 공대는 자동배치/수동저장 모두 건너뜁니다.)";
       if(!confirm(msg)) return;
       const f = document.getElementById("deleteUpPartyForm");
       if(!f) return;
@@ -801,7 +801,7 @@ app.get("/", (req, res) => {
         <div class="muted" style="margin-top:12px;">
           - 일반 레이드 한 회차 정원: 3버퍼 / 9딜러 (총 12명)<br/>
           - 이내황혼전은 2버퍼 / 6딜러 (총 8명)<br/>
-          - 업둥벞교는 공대당 12명이며, 4명 단위로 구분 표시됩니다.<br/>
+          - 업둥교환는 공대당 12명이며, 4명 단위로 구분 표시됩니다.<br/>
           - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
       </div>
@@ -998,7 +998,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
           - 원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다.<br/>
           - ${
             isUp
-              ? "업둥벞교는 2업둥(1개/2개)로 신청합니다. (둘 중 하나는 반드시 체크)"
+              ? "업둥교환는 2업둥(1개/2개)로 신청합니다. (둘 중 하나는 반드시 체크)"
               : "등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다."
           }
         </div>
@@ -1065,7 +1065,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     if (!up2 && !up22) {
       return res.redirect(
         `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
-          "업둥벞교는 2업둥(1개/2개) 중 하나를 반드시 체크해야 합니다."
+          "업둥교환는 2업둥(1개/2개) 중 하나를 반드시 체크해야 합니다."
         )}`
       );
     }
@@ -1437,7 +1437,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 
   let html = `
     <div class="muted" style="margin-bottom:10px;">
-      - 업둥벞교는 <b>12명=1공대</b>이며, <b>4명 단위</b>로 구분 표시됩니다.<br/>
+      - 업둥교환는 <b>12명=1공대</b>이며, <b>4명 단위</b>로 구분 표시됩니다.<br/>
       - 공대 내 같은 닉네임은 1번만 들어갑니다. (2업둥(2개)은 다음 공대로 넘어가서 배치)
     </div>
     <div class="upPartyGrid">
@@ -1491,7 +1491,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 }
 
 // =====================
-// 업둥벞교 자동배치 (confirmed=1 기반, 12명=1공대, 공대 내 중복 닉네임 금지)
+// 업둥교환 자동배치 (confirmed=1 기반, 12명=1공대, 공대 내 중복 닉네임 금지)
 // - up22(2개)면 "두 번째 칸"은 반드시 다음 공대로 이동 (동일 공대 중복 금지 조건 때문에 자동 충족)
 // - 비활성 공대는 건너뜀
 // =====================
@@ -1589,7 +1589,7 @@ function applyLineupForApplication(appId, confirmed) {
   const raidKey = appRow.raid_key;
   const dateKst = appRow.date_kst;
 
-  // 업둥벞교: 테이블(up_lineups) 자동 재구성
+  // 업둥교환: 테이블(up_lineups) 자동 재구성
   if (raidKey === "updoong") {
     // 특정 신청자의 기존 배치 흔적 제거(안전)
     db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=? AND application_id=?`).run(dateKst, appId);
@@ -2096,7 +2096,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <div class="muted" style="margin-top:12px;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - “원하는 시작 기수”는 선택 항목이며, 자동 배치 시 해당 기수부터 배치를 시작하기 위한 참고용입니다.<br/>
-          - 업둥벞교 필터에서 “2업둥(1개)”는 1개 + 2개가 함께 표시됩니다.
+          - 업둥교환 필터에서 “2업둥(1개)”는 1개 + 2개가 함께 표시됩니다.
         </div>
       </div>
     `,
@@ -2182,7 +2182,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  // 업둥벞교 라인업 (12명=1공대)
+  // 업둥교환 라인업 (12명=1공대)
   if (raid === "updoong") {
     const map = getUpLineupMap(dateKst);
     const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2203,7 +2203,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
         <div class="box">
           <div class="row sp">
             <div>
-              <div style="font-weight:900;font-size:20px;margin-bottom:6px;">업둥벞교 편성표 관리</div>
+              <div style="font-weight:900;font-size:20px;margin-bottom:6px;">업둥교환 편성표 관리</div>
               <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(dateKst)}</b></div>
             </div>
             <div class="row">
@@ -2211,7 +2211,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
               <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
                 <input type="hidden" name="raid" value="${esc(raid)}"/>
                 <button class="btn btnDanger" type="submit"
-                  onclick="return confirm('업둥벞교 편성표/공대 비활성 상태를 초기화합니다.\\n(편성표가 비워지고, 삭제된 공대도 복구됩니다)');">
+                  onclick="return confirm('업둥교환 편성표/공대 비활성 상태를 초기화합니다.\\n(편성표가 비워지고, 삭제된 공대도 복구됩니다)');">
                   편성표 초기화
                 </button>
               </form>
@@ -2241,7 +2241,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           </div>
         </div>
       `,
-        "업둥벞교 편성표"
+        "업둥교환 편성표"
       )
     );
     return;
@@ -2536,7 +2536,7 @@ app.get("/lineup", (req, res) => {
   const raidObj = raidByKey(raid);
   const dateKst = getActiveDay(raid);
 
-  // 업둥벞교 라인업 (12명=1공대, 4명 단위 구분)
+  // 업둥교환 라인업 (12명=1공대, 4명 단위 구분)
   if (raid === "updoong") {
     const map = getUpLineupMap(dateKst);
     const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2556,7 +2556,7 @@ app.get("/lineup", (req, res) => {
         <div class="box">
           <div class="row sp">
             <div>
-              <div style="font-weight:900;font-size:20px;margin-bottom:6px;">업둥벞교 편성표</div>
+              <div style="font-weight:900;font-size:20px;margin-bottom:6px;">업둥교환 편성표</div>
               <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(dateKst)}</b></div>
             </div>
             <a class="btn btnGhost" href="/">메인</a>
@@ -2572,7 +2572,7 @@ app.get("/lineup", (req, res) => {
           </div>
         </div>
       `,
-        "업둥벞교 편성표"
+        "업둥교환 편성표"
       )
     );
   }
