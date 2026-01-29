@@ -731,34 +731,34 @@ app.get("/", (req, res) => {
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">메인 로비</div>
             <div class="muted">레이드를 선택 → 인증키 입력 → 예약 신청</div>
           </div>
-        <div class="row">
-          <a class="btn"
-             style="
-                background:linear-gradient(135deg,#2563eb,#3b82f6);
-                border-color:rgba(99,102,241,.8);
-             "
-             href="/lineup">
-             공대편성표 보기
-          </a>
-          <a class="btn btnGhost" href="/check">예약확인</a>
-            </div>
+          <div class="row">
+            <a class="btn"
+               style="
+                  background:linear-gradient(135deg,#2563eb,#3b82f6);
+                  border-color:rgba(99,102,241,.8);
+               "
+               href="/lineup">
+               공대편성표 보기
+            </a>
+            <a class="btn btnGhost" href="/check">예약확인</a>
           </div>
+        </div>
 
         <div class="divider"></div>
 
         <div class="row" style="gap:12px;">
           ${RAID_OPTIONS.map(
             (r) =>
-              `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">${esc(
-                r.label
-              )}</a>`
+              `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">
+                ${esc(r.label)}
+              </a>`
           ).join("")}
         </div>
 
         <div class="muted" style="margin-top:12px;">
           - 일반 레이드 한 회차 정원: 3버퍼 / 9딜러 (총 12명)<br/>
           - 이내황혼전은 2버퍼 / 6딜러 (총 8명)<br/>
-          - 업둥교환은 <b>2업둥 갯수(1개/2개)</b>로 신청합니다.<br/>
+          - 업둥교환은 2업둥 갯수(1개/2개)로 신청합니다.<br/>
           - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
       </div>
