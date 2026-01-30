@@ -703,6 +703,23 @@ function layout(body, title = "레이드 예약 사이트") {
         .slotInput {
       box-shadow: none !important;
     }
+
+.upPartySlots .upGroupBox:nth-of-type(1) {
+  background: rgba(255, 99, 99, 0.12);
+  border-color: rgba(255, 99, 99, 0.35);
+}
+
+/* 5~8 : 연한 노란색 */
+.upPartySlots .upGroupBox:nth-of-type(2) {
+  background: rgba(255, 215, 100, 0.14);
+  border-color: rgba(255, 215, 100, 0.4);
+}
+
+/* 9~12 : 연한 초록색 */
+.upPartySlots .upGroupBox:nth-of-type(3) {
+  background: rgba(100, 220, 140, 0.14);
+  border-color: rgba(100, 220, 140, 0.4);
+}
   </style>
   <script>
     function submitOnChange(formId){
