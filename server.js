@@ -1516,91 +1516,88 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 }
 
 // =====================
-// 업둥교환 자동배치 (confirmed=1 기반, 12명=1공대, 공대 내 중복 닉네임 금지)
-// - up22(2개)면 "두 번째 칸"은 반드시 다음 공대로 이동 (동일 공대 중복 금지 조건 때문에 자동 충족)
+// 업둥교환 자동배치 (최대 2공대)
+// 규칙:
+// - 2업둥 1개  → 1공대만
+// - 2업둥 2개  → 1공대 + 2공대
+// - 공대당 최대 12명
+// - 같은 공대 내 닉네임 중복 금지
 // - 비활성 공대는 건너뜀
 // =====================
 function rebuildUpdoongLineup(dateKst) {
-  // 비활성 공대
   const disabledSet = getDisabledPartySet("updoong", dateKst);
 
-  // 먼저 자동 자리 싹 지우고 다시 만듦
-  db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
+  // 기존 자동배치 전부 삭제
+  db.prepare(
+    `DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`
+  ).run(dateKst);
 
-  const confirmedApps = db
+  // confirmed 신청자만
+  const apps = db
     .prepare(
       `
-      SELECT id, chzzk_nickname, up22
+      SELECT id, chzzk_nickname, up2, up22, created_at
       FROM applications
-      WHERE raid_key='updoong' AND date_kst=? AND confirmed=1
+      WHERE raid_key='updoong'
+        AND date_kst=?
+        AND confirmed=1
       ORDER BY datetime(created_at) ASC, id ASC
     `
     )
     .all(dateKst);
 
-  const insert = db.prepare(
-    `
-    INSERT INTO up_lineups(date_kst, raid_key, slot_index, nickname, application_id, created_at)
-    VALUES(?, 'updoong', ?, ?, ?, ?)
-  `
-  );
+  // 공대는 최대 2개
+  const parties = {
+    1: [],
+    2: [],
+  };
 
-  const partyCountMap = new Map(); // party -> usedCount
-  const partyNameSet = new Map(); // party -> Set(names)
-
-  function getUsedCount(party) {
-    return partyCountMap.get(party) || 0;
-  }
-  function getNameSet(party) {
-    if (!partyNameSet.has(party)) partyNameSet.set(party, new Set());
-    return partyNameSet.get(party);
-  }
-  function isPartyFull(party) {
-    return getUsedCount(party) >= 12;
-  }
-  function addToParty(party, name) {
-    const used = getUsedCount(party);
-    const slotIndex = (party - 1) * 12 + (used + 1);
-    partyCountMap.set(party, used + 1);
-    getNameSet(party).add(name);
-    return slotIndex;
+  function canAdd(party, name) {
+    if (disabledSet.has(party)) return false;
+    if (parties[party].length >= 12) return false;
+    if (parties[party].includes(name)) return false;
+    return true;
   }
 
-  function findPartyForName(startParty, name) {
-    // startParty부터 현재 생성된 공대까지 훑고, 없으면 신규 공대 생성
-    let p = Math.max(1, startParty);
-    while (disabledSet.has(p)) p++;
-
-    // 무한 루프 방지: 상한은 동적으로 늘리되 안전하게 처리
-    for (let guard = 0; guard < 9999; guard++) {
-      if (!disabledSet.has(p)) {
-        const names = getNameSet(p);
-        if (!isPartyFull(p) && !names.has(name)) return p;
-      }
-      p++;
-      while (disabledSet.has(p)) p++;
-    }
-    return p;
-  }
-
-  // 배치 시작: 기본 1공대
-  let startParty = 1;
-
-  for (const a of confirmedApps) {
+  for (const a of apps) {
     const name = String(a.chzzk_nickname || "").trim();
     if (!name) continue;
 
-    const cnt = a.up22 === 1 ? 2 : 1;
-
-    for (let k = 0; k < cnt; k++) {
-      const party = findPartyForName(startParty, name);
-
-      // 첫 배치가 되면, 다음 사람들도 여기부터 탐색하도록 startParty 갱신
-      startParty = party;
-
-      const slotIndex = addToParty(party, name);
-      insert.run(dateKst, slotIndex, name, a.id, nowISO());
+    // 2업둥(2개): 1 + 2공대
+    if (a.up22 === 1) {
+      if (canAdd(1, name)) parties[1].push(name);
+      if (canAdd(2, name)) parties[2].push(name);
+      continue;
     }
+
+    // 2업둥(1개): 1공대만
+    if (a.up2 === 1) {
+      if (canAdd(1, name)) parties[1].push(name);
+    }
+  }
+
+  const insert = db.prepare(
+    `
+    INSERT INTO up_lineups
+      (date_kst, raid_key, slot_index, nickname, application_id, created_at)
+    VALUES (?, 'updoong', ?, ?, ?, ?)
+  `
+  );
+
+  // slot_index로 변환해서 저장
+  for (let p = 1; p <= 2; p++) {
+    if (disabledSet.has(p)) continue;
+
+    const base = (p - 1) * 12;
+    parties[p].forEach((name, idx) => {
+      insert.run(
+        dateKst,
+        base + idx + 1,
+        name,
+        null,
+        nowISO()
+      );
+    });
   }
 }
 
