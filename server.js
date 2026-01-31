@@ -720,16 +720,6 @@ function layout(body, title = "레이드 예약 사이트") {
   background: rgba(100, 220, 140, 0.14);
   border-color: rgba(100, 220, 140, 0.4);
 }
-.partyHeader .partyDeleteBtn,
-.upPartyDeleteBtn {
-  border-radius: 6px !important;   /* ← 핵심 */
-  padding: 4px 8px;
-}
-
-/* X 버튼 (기수 닫기 등) */
-.btnDanger {
-  border-radius: 6px !important;
-}
   </style>
   <script>
     function submitOnChange(formId){
