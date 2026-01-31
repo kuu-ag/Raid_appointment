@@ -34,7 +34,7 @@ const RAID_OPTIONS = [
   { key: "dirige-hard", label: "디레지에-악연" },
   { key: "inhwagongjeon", label: "이내황혼전" },
   { key: "nabel-hard", label: "나벨 - 하드모드" },
-  { key: "updoong", label: "업둥교환" },
+  { key: "updoong", label: "" },
 ];
 
 const GRADE_OPTIONS = [
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS applications (
 
   is_streamer INTEGER NOT NULL DEFAULT 0,
 
-  -- 업둥교환 전용 (2업둥 1개/2개)
+  --  전용 (2업둥 1개/2개)
   up2 INTEGER NOT NULL DEFAULT 0,
   up22 INTEGER NOT NULL DEFAULT 0,
 
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
 CREATE INDEX IF NOT EXISTS idx_lineups_key
 ON raid_lineups(date_kst, raid_key, party_index);
 
-/* 비활성 공대 (일반 레이드 + 업둥교환 공대도 같이 사용) */
+/* 비활성 공대 (일반 레이드 +  공대도 같이 사용) */
 CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   UNIQUE(date_kst, raid_key, party_index)
 );
 
-/* 업둥교환 편성표 (버퍼/딜러 구분 없음, slot_index 연속 저장) */
+/*  편성표 (버퍼/딜러 구분 없음, slot_index 연속 저장) */
 CREATE TABLE IF NOT EXISTS up_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -1533,91 +1533,108 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 }
 
 // =====================
-// 업둥교환 자동배치 (최대 2공대)
-// 규칙:
-// - 2업둥 1개  → 1공대만
-// - 2업둥 2개  → 1공대 + 2공대
-// - 공대당 최대 12명
-// - 같은 공대 내 닉네임 중복 금지
+// 업둥교환 자동배치 (confirmed=1 기반)
+// - 12명=1공대
+// - 최대 2공대까지만 생성 (총 24칸)
+// - up22(2개)이면 2칸 배치 (가능하면 다른 공대, 같은 공대 중복 닉네임 금지 유지)
+// - up2(1개)도 1공대가 꽉 차면 2공대로 넘어갈 수 있음 ✅
 // - 비활성 공대는 건너뜀
 // =====================
 function rebuildUpdoongLineup(dateKst) {
+  const MAX_PARTY = 2;          // ✅ 업둥교환은 최대 2공대
+  const SLOTS_PER_PARTY = 12;
+
   const disabledSet = getDisabledPartySet("updoong", dateKst);
 
-  // 기존 자동배치 전부 삭제
-  db.prepare(
-    `DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`
-  ).run(dateKst);
+  // 전부 삭제 후 재구성
+  db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
 
-  // confirmed 신청자만
-  const apps = db
+  // 등록완료만 대상으로 created_at 순서대로
+  const confirmedApps = db
     .prepare(
       `
-      SELECT id, chzzk_nickname, up2, up22, created_at
+      SELECT id, chzzk_nickname, up2, up22
       FROM applications
-      WHERE raid_key='updoong'
-        AND date_kst=?
-        AND confirmed=1
+      WHERE raid_key='updoong' AND date_kst=? AND confirmed=1
       ORDER BY datetime(created_at) ASC, id ASC
     `
     )
     .all(dateKst);
 
-  // 공대는 최대 2개
-  const parties = {
-    1: [],
-    2: [],
-  };
-
-  function canAdd(party, name) {
-    if (disabledSet.has(party)) return false;
-    if (parties[party].length >= 12) return false;
-    if (parties[party].includes(name)) return false;
-    return true;
-  }
-
-  for (const a of apps) {
-    const name = String(a.chzzk_nickname || "").trim();
-    if (!name) continue;
-
-    // 2업둥(2개): 1 + 2공대
-    if (a.up22 === 1) {
-      if (canAdd(1, name)) parties[1].push(name);
-      if (canAdd(2, name)) parties[2].push(name);
-      continue;
-    }
-
-    // 2업둥(1개): 1공대만
-    if (a.up2 === 1) {
-      if (canAdd(1, name)) parties[1].push(name);
-    }
-  }
-
   const insert = db.prepare(
     `
-    INSERT INTO up_lineups
-      (date_kst, raid_key, slot_index, nickname, application_id, created_at)
-    VALUES (?, 'updoong', ?, ?, ?, ?)
+    INSERT INTO up_lineups(date_kst, raid_key, slot_index, nickname, application_id, created_at)
+    VALUES(?, 'updoong', ?, ?, ?, ?)
   `
   );
 
-  // slot_index로 변환해서 저장
-  for (let p = 1; p <= 2; p++) {
-    if (disabledSet.has(p)) continue;
+  // party별 사용칸 / 닉네임 중복 방지용 Set
+  const usedCount = new Map(); // party -> number
+  const nameSet = new Map();   // party -> Set
 
-    const base = (p - 1) * 12;
-    parties[p].forEach((name, idx) => {
-      insert.run(
-        dateKst,
-        base + idx + 1,
-        name,
-        null,
-        nowISO()
-      );
-    });
+  function getUsed(p) {
+    return usedCount.get(p) || 0;
+  }
+  function getNames(p) {
+    if (!nameSet.has(p)) nameSet.set(p, new Set());
+    return nameSet.get(p);
+  }
+  function isFull(p) {
+    return getUsed(p) >= SLOTS_PER_PARTY;
+  }
+  function add(p, name, appId) {
+    const slot = (p - 1) * SLOTS_PER_PARTY + (getUsed(p) + 1);
+    usedCount.set(p, getUsed(p) + 1);
+    getNames(p).add(name);
+    insert.run(dateKst, slot, name, appId, nowISO());
+  }
+
+  // ✅ "1공대 고정" 같은 규칙을 두지 않고,
+  // 1공대부터 채우되 꽉 차면 2공대로 넘어가도록 "첫 빈 공대" 탐색
+  function findFirstAvailableParty(name) {
+    for (let p = 1; p <= MAX_PARTY; p++) {
+      if (disabledSet.has(p)) continue;
+      if (isFull(p)) continue;
+      // 기존 정책 유지: 같은 공대에 같은 닉네임 2번 금지
+      if (getNames(p).has(name)) continue;
+      return p;
+    }
+    return 0; // 자리 없음
+  }
+
+  // ✅ up22의 2번째 칸은 "가능하면 다른 공대"로 보냄
+  function findAvailablePartyPreferNext(name, baseParty) {
+    // baseParty 다음 공대부터 먼저 찾고
+    for (let p = baseParty + 1; p <= MAX_PARTY; p++) {
+      if (disabledSet.has(p)) continue;
+      if (isFull(p)) continue;
+      if (getNames(p).has(name)) continue;
+      return p;
+    }
+    // 없으면 다시 1~MAX에서 찾기
+    return findFirstAvailableParty(name);
+  }
+
+  for (const a of confirmedApps) {
+    const name = String(a.chzzk_nickname || "").trim();
+    if (!name) continue;
+
+    // 2개 체크면 2칸, 아니면 1칸
+    const cnt = a.up22 === 1 ? 2 : 1;
+
+    // 1번째 칸
+    const p1 = findFirstAvailableParty(name);
+    if (!p1) continue; // 자리 없으면 스킵(최대 2공대 제한)
+    add(p1, name, a.id);
+
+    // 2번째 칸 (up22일 때만)
+    if (cnt === 2) {
+      const p2 = findAvailablePartyPreferNext(name, p1);
+      if (!p2) continue; // 두 번째 자리 없으면 그냥 1칸만 배치된 상태로 끝
+      add(p2, name, a.id);
+    }
   }
 }
-
 // =====================
 // Apply lineup for single application
 // =====================
