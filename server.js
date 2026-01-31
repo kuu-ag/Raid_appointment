@@ -1537,11 +1537,11 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 // - 12명=1공대
 // - 최대 2공대까지만 생성 (총 24칸)
 // - up22(2개)이면 2칸 배치 (가능하면 다른 공대, 같은 공대 중복 닉네임 금지 유지)
-// - up2(1개)도 1공대가 꽉 차면 2공대로 넘어갈 수 있음 ✅
+// - up2(1개)도 1공대가 꽉 차면 2공대로 넘어갈 수 있음 
 // - 비활성 공대는 건너뜀
 // =====================
 function rebuildUpdoongLineup(dateKst) {
-  const MAX_PARTY = 2;          // ✅ 업둥교환은 최대 2공대
+  const MAX_PARTY = 2;          //  업둥교환은 최대 2공대
   const SLOTS_PER_PARTY = 12;
 
   const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -1589,7 +1589,7 @@ function rebuildUpdoongLineup(dateKst) {
     insert.run(dateKst, slot, name, appId, nowISO());
   }
 
-  // ✅ "1공대 고정" 같은 규칙을 두지 않고,
+  //  "1공대 고정" 같은 규칙을 두지 않고,
   // 1공대부터 채우되 꽉 차면 2공대로 넘어가도록 "첫 빈 공대" 탐색
   function findFirstAvailableParty(name) {
     for (let p = 1; p <= MAX_PARTY; p++) {
@@ -1602,7 +1602,7 @@ function rebuildUpdoongLineup(dateKst) {
     return 0; // 자리 없음
   }
 
-  // ✅ up22의 2번째 칸은 "가능하면 다른 공대"로 보냄
+  //  up22의 2번째 칸은 "가능하면 다른 공대"로 보냄
   function findAvailablePartyPreferNext(name, baseParty) {
     // baseParty 다음 공대부터 먼저 찾고
     for (let p = baseParty + 1; p <= MAX_PARTY; p++) {
