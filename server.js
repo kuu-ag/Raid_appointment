@@ -34,7 +34,7 @@ const RAID_OPTIONS = [
   { key: "dirige-hard", label: "디레지에-악연" },
   { key: "inhwagongjeon", label: "이내황혼전" },
   { key: "nabel-hard", label: "나벨 - 하드모드" },
-  { key: "updoong", label: "" },
+  { key: "updoong", label: "업둥교환" },
 ];
 
 const GRADE_OPTIONS = [
