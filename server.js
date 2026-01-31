@@ -1370,7 +1370,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
         ${
           editable && adminMode
             ? isDisabled
-              ? `<span class="chip bad">삭제된 공대</span>`
+              ? `<span class="chip bad">X</span>`
               : `<button class="partyDeleteBtn" type="button" onclick="deleteParty('${esc(
                   raidKey
                 )}', ${p});">삭제</button>`
@@ -1496,7 +1496,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
           ${
             editable && adminMode
               ? isDisabled
-                ? `<span class="chip bad">삭제된 공대</span>`
+                ? `<span class="chip bad">X</span>`
                 : `<button class="upPartyDeleteBtn" type="button" onclick="deleteUpParty(${p})">삭제</button>`
               : ""
           }
@@ -1731,9 +1731,9 @@ function applyLineupForApplication(appId, confirmed) {
     }
   }
 
-  // ✅ 딜러 먼저, 그 다음 버퍼
-  assignSeats("dealer", appRow.dealer_count || 0);
+  //  버퍼 우선 예약 후, 딜러 배치
   assignSeats("buffer", appRow.buffer_count || 0);
+  assignSeats("dealer", appRow.dealer_count || 0);
 }
 
 // =====================
