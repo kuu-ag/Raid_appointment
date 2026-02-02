@@ -2054,8 +2054,8 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <div class="divider"></div>
             <div class="row" style="gap:8px; margin-bottom:6px;">
               <a class="btn ${!upFilter ? "" : "btnGhost"}" href="${esc(upFilterAllLink)}">전체</a>
-              <a class="btn ${upFilter === "1" ? "" : "btnGhost"}" href="${esc(upFilter1Link)}">2업둥(1개)</a>
-              <a class="btn ${upFilter === "2" ? "" : "btnGhost"}" href="${esc(upFilter2Link)}">2업둥(2개)</a>
+              <a class="btn ${upFilter === "1" ? "" : "btnGhost"}" href="${esc(upFilter1Link)}">1세트</a>
+              <a class="btn ${upFilter === "2" ? "" : "btnGhost"}" href="${esc(upFilter2Link)}">2세트</a>
             </div>
           `
             : ""
@@ -2075,7 +2075,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <th>모험단 이름</th>
             ${
               isUp
-                ? `<th class="center">2업둥(1개)</th><th class="center">2업둥(2개)</th>`
+                ? `<th class="center">1세트</th><th class="center">2세트</th>`
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
             <th>원하는 시작 기수</th>
