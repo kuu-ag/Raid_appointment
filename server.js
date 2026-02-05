@@ -996,13 +996,13 @@ app.get("/reserve", requireViewerOk, (req, res) => {
               isUp
                 ? `
                   <div class="field">
-                    <label>2업둥 (1개)</label>
+                    <label>1세트</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up2"/>
                     </label>
                   </div>
                   <div class="field">
-                    <label>2업둥 (2개)</label>
+                    <label>2세트</label>
                     <label class="bigCheck">
                       <input type="checkbox" name="up22"/>
                     </label>
