@@ -756,7 +756,7 @@ function layout(body, title = "레이드 예약 사이트") {
       <div class="titleInner">
         <div class="titleMain">
           <div class="titleLogo">
-            <span class="accent">DevonVail</span> RAID
+            <span class="accent">던파의 왕 데본베일의 생일을 진심으로 축하합니다!</span> RAID
           </div>
           <div class="titleSub">레이드 예약 시스템</div>
         </div>
