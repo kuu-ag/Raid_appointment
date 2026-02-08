@@ -756,12 +756,12 @@ function layout(body, title = "레이드 예약 사이트") {
       <div class="titleInner">
         <div class="titleMain">
           <div class="titleLogo">
-            <span class="accent">DevonVail</span> RAID
+            <span class="accent">DnF</span> RAID
           </div>
           <div class="titleSub">레이드 예약 시스템</div>
         </div>
         <div class="titleBadge">
-          <span>Made by 🧭뿡빵띠</span>
+          <span>Made by 🧭</span>
         </div>
       </div>
     </div>
