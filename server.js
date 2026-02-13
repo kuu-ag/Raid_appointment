@@ -346,10 +346,11 @@ function layout(body, title = "레이드 예약 사이트") {
     .btnGhost:hover{
       background:var(--btn-hover);
     }
-    .btnDanger{
+     .btnDanger{
       background:var(--danger);
       border-color:rgba(248,113,113,.7);
-      border-radius:6px; /* 더 각지게 */
+      border-radius:999px;
+      padding:9px 14px;
     }
     .btnDanger:hover{
       background:var(--danger-hover);
