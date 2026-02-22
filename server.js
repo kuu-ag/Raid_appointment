@@ -522,9 +522,9 @@ function layout(body, title = "레이드 예약 사이트") {
     .partyGrid{ display:flex; flex-wrap:wrap; gap:14px; }
     .partyCard{
       position:relative;
-      width:140px;
-      flex:0 0 140px;
-      max-width:140px;
+      width:120px;
+      flex:0 0 120px;
+      max-width:120px;
       background:#020617;
       border-radius:14px;
       border:1px solid rgba(148,163,255,.4);
@@ -616,12 +616,11 @@ function layout(body, title = "레이드 예약 사이트") {
       align-items:flex-start;
     }
 
-    /* ✅ 카드 디자인: 레퍼런스 느낌(패널 3개 구조) + 너비 살짝 증가(닉네임칸 좁음 해결) */
     .upPartyCard{
       position:relative;
-      width:140px;          /* ✅ 180 → 140 (너비 보강) */
-      flex:0 0 140px;
-      max-width:140px;
+      width:120px;         
+      flex:0 0 120px;
+      max-width:120px;
       background:rgba(10,16,32,.98);
       border-radius:18px;
       border:1px solid rgba(148,163,255,.35);
