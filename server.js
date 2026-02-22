@@ -804,7 +804,7 @@ function layout(body, title = "레이드 예약 사이트") {
 /* ===== 업둥교환: 닉네임 칸(슬롯) 기존 스타일로 복구 ===== */
 .upPartyCard .slotInput{
   width:100%;
-  padding:6px 10px;
+  padding:6px 6px;
   font-size:13px;
   border-radius:999px;
   border:1px solid rgba(71,85,105,.95);
