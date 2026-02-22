@@ -607,7 +607,7 @@ function layout(body, title = "레이드 예약 사이트") {
     .slotStatic.slotEmpty{ opacity:.4; }
 
     /* =====================
-       업둥교환: 12명=1공대, 세로형 카드 + 4명 단위 구분
+       업둥교환: 12명=1세트, 세로형 카드 + 4명 단위 구분
     ====================== */
     .upPartyGrid{
       display:flex;
@@ -615,229 +615,124 @@ function layout(body, title = "레이드 예약 사이트") {
       gap:14px;
       align-items:flex-start;
     }
+
+    /* ✅ 카드 디자인: 레퍼런스 느낌(패널 3개 구조) + 너비 살짝 증가(닉네임칸 좁음 해결) */
     .upPartyCard{
       position:relative;
-      width:120px;
-      flex:0 0 120px;
-      max-width:120px;
-      background:#020617;
-      border-radius:14px;
+      width:140px;          /* ✅ 180 → 140 (너비 보강) */
+      flex:0 0 140px;
+      max-width:140px;
+      background:rgba(10,16,32,.98);
+      border-radius:18px;
       border:1px solid rgba(148,163,255,.35);
-      padding:12px 12px 12px;
+      padding:12px;
       box-shadow:0 10px 26px rgba(0,0,0,.35);
     }
     .upPartyCard.disabled{
       opacity:.5;
       filter:saturate(.65);
     }
+
     .upPartyHeader{
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:space-between;
       margin-bottom:10px;
+      gap:8px;
     }
     .upPartyTitle{
-      font-size:22px;
+      font-size:20px;
       font-weight:900;
       letter-spacing:.02em;
-      line-height:1;
+      line-height:1.05;
+      word-break:keep-all;
     }
+
+    /* 삭제 버튼: 레퍼런스처럼 빨간 pill */
     .upPartyDeleteBtn{
       flex-shrink:0;
       font-size:11px;
-      padding:3px 7px;
-      border-radius:6px;
-      background:#b91c1c;
-      border:1px solid rgba(255,120,120,0.6);
+      padding:6px 9px;
+      border-radius:10px;
+      background:#ff2d2d;
+      border:0;
       color:white;
       cursor:pointer;
       white-space:nowrap;
     }
-    .upPartyDeleteBtn:hover{ background:#dc2626; }
+    .upPartyDeleteBtn:hover{ filter:brightness(1.05); }
 
     .upPartySlots{
       display:flex;
       flex-direction:column;
       gap:12px;
-      padding:10px;
+      padding:0;
       border-radius:12px;
-      background:rgba(15,23,42,.55);
-      border:1px solid rgba(15,23,42,.9);
+      background:transparent;
+      border:0;
     }
+
+    /* ✅ 그룹 패널: 모양/여백만 레퍼런스처럼. 색상은 기존 nth-of-type 그대로 사용 */
     .upGroupBox{
       display:flex;
       flex-direction:column;
-      gap:10px;
-      padding:10px;
-      border-radius:12px;
-      background:rgba(2,6,23,.55);
-      border:1px solid rgba(148,163,255,.25);
-      box-shadow:0 6px 16px rgba(0,0,0,.25) inset;
+      gap:8px;
+      padding:12px;
+      border-radius:16px;
+      border:1px solid rgba(148,163,255,.18);
+      box-shadow:none;
+    }
+
+    /* ✅ 닉네임 칸: 기존 pill 스타일 유지 + 내부 padding 줄여 실제 입력 영역 넓힘 */
+    .upPartyCard .slotInput{
+      width:100%;
+      padding:6px 6px;                 /* ✅ 기존 10px → 6px */
+      margin:0;
+      font-size:13px;
+      border-radius:999px;
+      border:1px solid rgba(71,85,105,.95);
+      background:#020617;
+      color:var(--text);
+      box-shadow:none;
+    }
+    .upPartyCard .slotInput::placeholder{ color:rgba(148,163,255,.6); }
+    .upPartyCard .slotInput:focus{
+      border-color:var(--accent);
+      outline:none;
+      box-shadow:none;
+    }
+
+    .upPartyCard .slotStatic{
+      width:100%;
+      padding:6px 6px;                 /* ✅ */
+      margin:0;
+      font-size:13px;
+      border-radius:999px;
+      border:1px solid rgba(30,64,175,.9);
+      background:#020617;
+      color:var(--text);
+      text-align:center;
+      box-shadow:none;
+    }
+    .upPartyCard .slotStatic.slotEmpty{ opacity:.4; }
+
+    /* 기존 그룹 색상 유지 (1~4 / 5~8 / 9~12) */
+    .upPartySlots .upGroupBox:nth-of-type(1) {
+      background: rgba(255, 99, 99, 0.12);
+      border-color: rgba(255, 99, 99, 0.35);
+    }
+    .upPartySlots .upGroupBox:nth-of-type(2) {
+      background: rgba(255, 215, 100, 0.14);
+      border-color: rgba(255, 215, 100, 0.4);
+    }
+    .upPartySlots .upGroupBox:nth-of-type(3) {
+      background: rgba(100, 220, 140, 0.14);
+      border-color: rgba(100, 220, 140, 0.4);
     }
 
     @media (max-width:520px){
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
     }
-    * {
-      box-shadow: none !important;
-      text-shadow: none !important;
-      }
-        .btn,
-        .box,
-        .partyCard,
-        .upPartyCard,
-        table,
-        input,
-        select,
-        textarea,
-        .slotInput,
-        .slotStatic,
-        .upGroupBox,
-        .upPartySlots,
-    .title {
-      box-shadow: none !important;
-    }
-        input,
-        select,
-        textarea,
-        .slotInput {
-      box-shadow: none !important;
-    }
-
-.upPartySlots .upGroupBox:nth-of-type(1) {
-  background: rgba(255, 99, 99, 0.12);
-  border-color: rgba(255, 99, 99, 0.35);
-}
-
-/* 5~8 : 연한 노란색 */
-.upPartySlots .upGroupBox:nth-of-type(2) {
-  background: rgba(255, 215, 100, 0.14);
-  border-color: rgba(255, 215, 100, 0.4);
-}
-
-/* 9~12 : 연한 초록색 */
-.upPartySlots .upGroupBox:nth-of-type(3) {
-  background: rgba(100, 220, 140, 0.14);
-  border-color: rgba(100, 220, 140, 0.4);
-}
-/* =========================
-   업둥교환 카드 디자인(2번째 이미지 스타일)
-   - 색상 기준(1~4/5~8/9~12)은 기존 nth-of-type 유지
-========================= */
-
-/* 카드: 큰 둥근 사각형 + 여백 */
-.upPartyCard{
-  width:120px;                 
-  flex:0 0 120px;
-  max-width:120px;
-  padding:14px;
-  border-radius:18px;
-  background:rgba(10,16,32,.98);
-  border:1px solid rgba(148,163,255,.35);
-}
-
-.upPartyHeader{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  margin-bottom:12px;
-}
-
-.upPartyTitle{
-  font-size:18px;
-  font-weight:900;
-  letter-spacing:.02em;
-  line-height:1;
-  color:rgba(255,255,255,.95);
-}
-
-/* 삭제 버튼: 이미지처럼 빨간 pill */
-.upPartyDeleteBtn{
-  font-size:12px;
-  padding:6px 10px;
-  border-radius:10px;
-  background:#ff2d2d;
-  border:0;
-  color:#fff;
-  cursor:pointer;
-  white-space:nowrap;
-}
-.upPartyDeleteBtn:hover{ filter:brightness(1.05); }
-
-/* 슬롯 영역: 카드 안쪽 여백 */
-.upPartySlots{
-  padding:0;
-  background:transparent;
-  border:0;
-  gap:14px;
-}
-
-/* 4명 그룹 패널: '색상'은 기존 nth-of-type 그대로 사용
-   여기서는 패널의 모양/여백만 이미지처럼 */
-.upGroupBox{
-  padding:14px;
-  border-radius:16px;
-  border:0;
-  box-shadow:none;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-
-/* placeholder 느낌(빈칸) */
-.upPartyCard .slotStatic.slotEmpty{
-  opacity:.8;
-  color:rgba(17,24,39,.55);
-}
-
-/* 관리자 입력칸 포커스(과한 글로우 제거 + 깔끔하게) */
-.upPartyCard .slotInput:focus{
-  outline:none;
-  box-shadow:0 0 0 2px rgba(255,255,255,.55);
-}
-
-/* 비활성 세트는 기존처럼 흐리게 */
-.upPartyCard.disabled{
-  opacity:.5;
-  filter:saturate(.65);
-}
-/* ===== 업둥교환: 닉네임 칸(슬롯) 기존 스타일로 복구 ===== */
-.upPartyCard .slotInput{
-  width:100%;
-  padding:6px 6px;
-  font-size:13px;
-  border-radius:999px;
-  border:1px solid rgba(71,85,105,.95);
-  background:#020617;
-  color:var(--text);
-  box-shadow:none;
-}
-
-.upPartyCard .slotInput::placeholder{
-  color:rgba(148,163,255,.6);
-}
-
-.upPartyCard .slotInput:focus{
-  border-color:var(--accent);
-  outline:none;
-  box-shadow:none;
-}
-
-.upPartyCard .slotStatic{
-  width:100%;
-  padding:6px 10px;
-  font-size:13px;
-  border-radius:999px;
-  border:1px solid rgba(30,64,175,.9);
-  background:#020617;
-  color:var(--text);
-  text-align:center;
-  box-shadow:none;
-}
-
-.upPartyCard .slotStatic.slotEmpty{
-  opacity:.4;
-}
   </style>
   <script>
     function submitOnChange(formId){
@@ -857,7 +752,7 @@ function layout(body, title = "레이드 예약 사이트") {
       f.submit();
     }
     function deleteUpParty(partyIndex){
-      const msg = partyIndex + "공대를 삭제(비활성)하시겠습니까?\\n(업둥교환는 12명=1공대이며, 삭제된 공대는 자동배치/수동저장 모두 건너뜁니다.)";
+      const msg = partyIndex + "세트를 삭제(비활성)하시겠습니까?\\n(업둥교환는 12명=1세트이며, 삭제된 세트는 자동배치/수동저장 모두 건너뜁니다.)";
       if(!confirm(msg)) return;
       const f = document.getElementById("deleteUpPartyForm");
       if(!f) return;
@@ -961,7 +856,7 @@ app.get("/", (req, res) => {
         <div class="muted" style="margin-top:12px;">
           - 일반 레이드 한 회차 정원: 3버퍼 / 9딜러 (총 12명)<br/>
           - 이내황혼전은 2버퍼 / 6딜러 (총 8명)<br/>
-          - 업둥교환는 공대당 12명이며, 4명 단위로 구분 표시됩니다.<br/>
+          - 업둥교환는 세트당 12명이며, 4명 단위로 구분 표시됩니다.<br/>
           - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
         </div>
       </div>
@@ -1530,7 +1425,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 }
 
 // =====================
-// Updoong helpers (12명=1공대)
+// Updoong helpers (12명=1세트)
 // =====================
 function upPartyFromSlot(slotIndex) {
   const s = Number(slotIndex) || 1;
@@ -1586,7 +1481,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
     // viewer read-only
     return name
       ? `<div class="slotStatic">${esc(name)}</div>`
-      : `<div class="slotStatic slotEmpty">빈칸</div>`;
+      : `<div class="slotStatic slotEmpty">닉네임</div>`;
   };
 
   const allIndices = Array.from(new Set([...Array.from({ length: partyCount }, (_, i) => i + 1), ...Array.from(disabledSet)])).sort((a, b) => a - b);
@@ -1596,8 +1491,8 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 
   let html = `
     <div class="muted" style="margin-bottom:10px;">
-      - 업둥교환는 <b>12명=1공대</b>이며, <b>4명 단위</b>로 구분 표시됩니다.<br/>
-      - 공대 내 같은 닉네임은 1번만 들어갑니다. (2업둥(2개)은 다음 공대로 넘어가서 배치)
+      - 업둥교환는 <b>12명=1세트</b>이며, <b>4명 단위</b>로 구분 표시됩니다.<br/>
+      - 공대 내 같은 닉네임은 1번만 들어갑니다. (2업둥(2개)은 다음 세트로 넘어가서 배치)
     </div>
     <div class="upPartyGrid">
   `;
@@ -1653,7 +1548,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 // 업둥교환 자동배치 (confirmed=1 기반)
 // =====================
 function rebuildUpdoongLineup(dateKst) {
-  const MAX_PARTY = 2;          //  업둥교환은 최대 2공대
+  const MAX_PARTY = 2;          //  업둥교환은 최대 2세트
   const SLOTS_PER_PARTY = 12;
 
   const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2180,7 +2075,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const upFilter1Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=1`;
   const upFilter2Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=2`;
 
-  // 일괄등록 버튼(4개)
+  // ✅ 일괄등록 버튼은 레이드 버튼처럼(btnGhost) 보이게
   const bulkUpHidden = isUp && (upFilter === "1" || upFilter === "2") ? `<input type="hidden" name="up" value="${esc(upFilter)}"/>` : "";
 
   const bulkButtonsHtml = `
@@ -2196,7 +2091,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
         <input type="hidden" name="group" value="burning"/>
-        <button class="btn btnPrimary" type="submit">불타는 치즈 일괄 등록</button>
+        <button class="btn btnGhost" type="submit">불타는 치즈 일괄 등록</button>
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
@@ -2205,7 +2100,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
         <input type="hidden" name="group" value="pink"/>
-        <button class="btn btnPrimary" type="submit">분홍색 치즈 일괄 등록</button>
+        <button class="btn btnGhost" type="submit">분홍색 치즈 일괄 등록</button>
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
@@ -2214,7 +2109,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
         <input type="hidden" name="group" value="yellowlog"/>
-        <button class="btn btnPrimary" type="submit">노란색 치즈&통나무 일괄 등록</button>
+        <button class="btn btnGhost" type="submit">노란색 치즈&통나무 일괄 등록</button>
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
@@ -2223,7 +2118,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
         <input type="hidden" name="group" value="normal"/>
-        <button class="btn btnPrimary" type="submit">일반치즈 일괄 등록</button>
+        <button class="btn btnGhost" type="submit">일반치즈 일괄 등록</button>
       </form>
     </div>
   `;
@@ -2473,7 +2368,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
               <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
                 <input type="hidden" name="raid" value="${esc(raid)}"/>
                 <button class="btn btnDanger" type="submit"
-                  onclick="return confirm('업둥교환 편성표/공대 비활성 상태를 초기화합니다.\\n(편성표가 비워지고, 삭제된 공대도 복구됩니다)');">
+                  onclick="return confirm('업둥교환 편성표/세트 비활성 상태를 초기화합니다.\\n(편성표가 비워지고, 삭제된 세트도 복구됩니다)');">
                   편성표 초기화
                 </button>
               </form>
@@ -2499,7 +2394,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <div class="muted" style="margin-top:12px;">
             - 빈 칸으로 저장하면 해당 슬롯은 비워집니다.<br/>
             - 자동배치는 “신청목록에서 등록완료 체크”를 기준으로 예약순으로 다시 채워집니다.<br/>
-            - 삭제된 공대(비활성)는 자동배치/수동저장 모두 건너뜁니다.
+            - 삭제된 세트(비활성)는 자동배치/수동저장 모두 건너뜁니다.
           </div>
         </div>
       `,
@@ -2825,7 +2720,7 @@ app.get("/lineup", (req, res) => {
           ${upHtml}
 
           <div class="muted" style="margin-top:12px;">
-            - 삭제된 공대는 비활성 상태입니다.<br/>
+            - 삭제된 세트는 비활성 상태입니다.<br/>
             - 편성은 스트리머가 수동/자동으로 조정할 수 있습니다.
           </div>
         </div>
