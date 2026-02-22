@@ -744,7 +744,7 @@ function layout(body, title = "레이드 예약 사이트") {
 }
 
 .upPartyTitle{
-  font-size:22px;
+  font-size:18px;
   font-weight:900;
   letter-spacing:.02em;
   line-height:1;
