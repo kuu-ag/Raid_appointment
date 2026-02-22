@@ -725,13 +725,49 @@ function layout(body, title = "레이드 예약 사이트") {
     @media (max-width:520px){
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
     }
-    *,
-    *::before,
-    *::after{
-      box-shadow:none !important;
-      text-shadow:none !important;
-      filter:none !important;
-    }
+/* 카드류 */
+.box,
+.title,
+.partyCard,
+.upPartyCard,
+table{
+  box-shadow: none !important;
+  filter: none !important;         /* drop-shadow까지 제거 */
+}
+
+/* 버튼류 */
+.btn,
+.partyHeader .partyDeleteBtn,
+.upPartyDeleteBtn{
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* hover에서 다시 생기는 shadow도 제거 */
+.btn:hover,
+.btn:active,
+.partyHeader .partyDeleteBtn:hover,
+.upPartyDeleteBtn:hover{
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* 입력칸/내부 슬롯도 혹시 남아있으면 제거 */
+input,
+select,
+textarea,
+.slotInput,
+.slotStatic{
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+/* 텍스트/글로우가 섞여 있으면 이것도 제거(선택) */
+.titleLogo,
+.titleBadge,
+.chip{
+  text-shadow: none !important;
+}
   </style>
   <script>
     function submitOnChange(formId){
