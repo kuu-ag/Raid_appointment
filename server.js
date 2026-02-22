@@ -720,6 +720,107 @@ function layout(body, title = "레이드 예약 사이트") {
   background: rgba(100, 220, 140, 0.14);
   border-color: rgba(100, 220, 140, 0.4);
 }
+/* =========================
+   업둥교환 카드 디자인(2번째 이미지 스타일)
+   - 색상 기준(1~4/5~8/9~12)은 기존 nth-of-type 유지
+========================= */
+
+/* 카드: 큰 둥근 사각형 + 여백 */
+.upPartyCard{
+  width:120px;                 
+  flex:0 0 120px;
+  max-width:120px;
+  padding:14px;
+  border-radius:18px;
+  background:rgba(10,16,32,.98);
+  border:1px solid rgba(148,163,255,.35);
+}
+
+.upPartyHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:12px;
+}
+
+.upPartyTitle{
+  font-size:22px;
+  font-weight:900;
+  letter-spacing:.02em;
+  line-height:1;
+  color:rgba(255,255,255,.95);
+}
+
+/* 삭제 버튼: 이미지처럼 빨간 pill */
+.upPartyDeleteBtn{
+  font-size:12px;
+  padding:6px 10px;
+  border-radius:10px;
+  background:#ff2d2d;
+  border:0;
+  color:#fff;
+  cursor:pointer;
+  white-space:nowrap;
+}
+.upPartyDeleteBtn:hover{ filter:brightness(1.05); }
+
+/* 슬롯 영역: 카드 안쪽 여백 */
+.upPartySlots{
+  padding:0;
+  background:transparent;
+  border:0;
+  gap:14px;
+}
+
+/* 4명 그룹 패널: '색상'은 기존 nth-of-type 그대로 사용
+   여기서는 패널의 모양/여백만 이미지처럼 */
+.upGroupBox{
+  padding:14px;
+  border-radius:16px;
+  border:0;
+  box-shadow:none;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+/* 슬롯(입력/표시): 밝은 회색 라운드 사각형 */
+.upPartyCard .slotInput,
+.upPartyCard .slotStatic{
+  background:rgba(235,235,235,.95);
+  color:#111827;
+  border:0;
+  border-radius:12px;
+  padding:10px 12px;
+  font-size:13px;
+  line-height:1;
+  text-align:left;
+}
+
+/* placeholder 느낌(빈칸) */
+.upPartyCard .slotStatic.slotEmpty{
+  opacity:.8;
+  color:rgba(17,24,39,.55);
+}
+
+/* 관리자 입력칸 포커스(과한 글로우 제거 + 깔끔하게) */
+.upPartyCard .slotInput:focus{
+  outline:none;
+  box-shadow:0 0 0 2px rgba(255,255,255,.55);
+}
+
+/* 비활성 세트는 기존처럼 흐리게 */
+.upPartyCard.disabled{
+  opacity:.5;
+  filter:saturate(.65);
+}
+
+/*  기존 그룹 색상은 너 코드 그대로 유지됨
+   (아래는 이미 네 코드에 있는 nth-of-type 색이 살아있어야 함)
+   .upPartySlots .upGroupBox:nth-of-type(1) { ... }
+   .upPartySlots .upGroupBox:nth-of-type(2) { ... }
+   .upPartySlots .upGroupBox:nth-of-type(3) { ... }
+*/
   </style>
   <script>
     function submitOnChange(formId){
@@ -1491,7 +1592,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
     html += `
       <div class="upPartyCard ${isDisabled ? "disabled" : ""}">
         <div class="upPartyHeader">
-          <div class="upPartyTitle">${p}공대</div>
+          <div class="upPartyTitle">${p}세트</div>
           ${
             editable && adminMode
               ? isDisabled
