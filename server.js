@@ -647,7 +647,6 @@ function layout(body, title = "레이드 예약 사이트") {
       word-break:keep-all;
     }
 
-    /* 삭제 버튼: 레퍼런스처럼 빨간 pill */
     .upPartyDeleteBtn{
       flex-shrink:0;
       font-size:11px;
@@ -671,7 +670,6 @@ function layout(body, title = "레이드 예약 사이트") {
       border:0;
     }
 
-    /* ✅ 그룹 패널: 모양/여백만 레퍼런스처럼. 색상은 기존 nth-of-type 그대로 사용 */
     .upGroupBox{
       display:flex;
       flex-direction:column;
@@ -682,10 +680,9 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:none;
     }
 
-    /* ✅ 닉네임 칸: 기존 pill 스타일 유지 + 내부 padding 줄여 실제 입력 영역 넓힘 */
     .upPartyCard .slotInput{
       width:100%;
-      padding:6px 6px;                 /* ✅ 기존 10px → 6px */
+      padding:6px 6px;                 
       margin:0;
       font-size:13px;
       border-radius:999px;
@@ -703,7 +700,7 @@ function layout(body, title = "레이드 예약 사이트") {
 
     .upPartyCard .slotStatic{
       width:100%;
-      padding:6px 6px;                 /* ✅ */
+      padding:6px 6px;                 
       margin:0;
       font-size:13px;
       border-radius:999px;
@@ -728,7 +725,13 @@ function layout(body, title = "레이드 예약 사이트") {
       background: rgba(100, 220, 140, 0.14);
       border-color: rgba(100, 220, 140, 0.4);
     }
-
+    .upPartyCard .slotInput,
+    .upPartyCard .slotStatic{
+      padding:8px 12px !important;
+      font-size:14px !important;
+      min-height:34px;
+      box-sizing:border-box;
+    }
     @media (max-width:520px){
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
     }
