@@ -724,14 +724,6 @@ function layout(body, title = "레이드 예약 사이트") {
     .upPartySlots .upGroupBox:nth-of-type(3) {
       background: rgba(100, 220, 140, 0.14);
       border-color: rgba(100, 220, 140, 0.4);
-    }
-    .upPartyCard .slotInput,
-    .upPartyCard .slotStatic{
-      padding:8px 12px !important;
-      font-size:14px !important;
-      min-height:34px;
-      box-sizing:border-box;
-    }
     @media (max-width:520px){
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
     }
