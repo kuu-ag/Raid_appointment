@@ -784,19 +784,6 @@ function layout(body, title = "레이드 예약 사이트") {
   gap:10px;
 }
 
-/* 슬롯(입력/표시): 밝은 회색 라운드 사각형 */
-.upPartyCard .slotInput,
-.upPartyCard .slotStatic{
-  background:rgba(235,235,235,.95);
-  color:#111827;
-  border:0;
-  border-radius:12px;
-  padding:10px 12px;
-  font-size:13px;
-  line-height:1;
-  text-align:left;
-}
-
 /* placeholder 느낌(빈칸) */
 .upPartyCard .slotStatic.slotEmpty{
   opacity:.8;
@@ -814,13 +801,43 @@ function layout(body, title = "레이드 예약 사이트") {
   opacity:.5;
   filter:saturate(.65);
 }
+/* ===== 업둥교환: 닉네임 칸(슬롯) 기존 스타일로 복구 ===== */
+.upPartyCard .slotInput{
+  width:100%;
+  padding:6px 10px;
+  font-size:13px;
+  border-radius:999px;
+  border:1px solid rgba(71,85,105,.95);
+  background:#020617;
+  color:var(--text);
+  box-shadow:none;
+}
 
-/*  기존 그룹 색상은 너 코드 그대로 유지됨
-   (아래는 이미 네 코드에 있는 nth-of-type 색이 살아있어야 함)
-   .upPartySlots .upGroupBox:nth-of-type(1) { ... }
-   .upPartySlots .upGroupBox:nth-of-type(2) { ... }
-   .upPartySlots .upGroupBox:nth-of-type(3) { ... }
-*/
+.upPartyCard .slotInput::placeholder{
+  color:rgba(148,163,255,.6);
+}
+
+.upPartyCard .slotInput:focus{
+  border-color:var(--accent);
+  outline:none;
+  box-shadow:none;
+}
+
+.upPartyCard .slotStatic{
+  width:100%;
+  padding:6px 10px;
+  font-size:13px;
+  border-radius:999px;
+  border:1px solid rgba(30,64,175,.9);
+  background:#020617;
+  color:var(--text);
+  text-align:center;
+  box-shadow:none;
+}
+
+.upPartyCard .slotStatic.slotEmpty{
+  opacity:.4;
+}
   </style>
   <script>
     function submitOnChange(formId){
