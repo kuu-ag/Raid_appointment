@@ -711,8 +711,6 @@ function layout(body, title = "레이드 예약 사이트") {
       box-shadow:none;
     }
     .upPartyCard .slotStatic.slotEmpty{ opacity:.4; }
-
-    /* 기존 그룹 색상 유지 (1~4 / 5~8 / 9~12) */
     .upPartySlots .upGroupBox:nth-of-type(1) {
       background: rgba(255, 99, 99, 0.12);
       border-color: rgba(255, 99, 99, 0.35);
@@ -726,6 +724,13 @@ function layout(body, title = "레이드 예약 사이트") {
       border-color: rgba(100, 220, 140, 0.4);
     @media (max-width:520px){
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
+    }
+    *,
+    *::before,
+    *::after{
+      box-shadow:none !important;
+      text-shadow:none !important;
+      filter:none !important;
     }
   </style>
   <script>
