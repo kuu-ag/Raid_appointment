@@ -982,7 +982,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     padding:16px;
   }
 }
-    }
+    
   </style>
   <script>
     function submitOnChange(formId){
@@ -1275,7 +1275,7 @@ res.send(
     "예약 신청",
     { activeRaid: raid, hideSidebar: false }
   )
-);
+  });
 
 // =====================
 // Viewer: reserve save
