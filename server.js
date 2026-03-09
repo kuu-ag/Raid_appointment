@@ -237,7 +237,6 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
     return `
       <aside class="sidebar">
         <div class="thumbnail">
-          <span class="on-air admin-badge">● Admin</span>
           <img src="/images/streamer_profile.png" alt="관리자 썸네일"
                onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
         </div>
@@ -253,7 +252,6 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
   return `
     <aside class="sidebar">
       <div class="thumbnail">
-        <span class="on-air admin-badge">● Admin</span>
         <img src="${esc(thumbImg)}" alt="썸네일"
              onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
       </div>
