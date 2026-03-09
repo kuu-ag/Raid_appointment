@@ -26,18 +26,11 @@ const PORT = Number(process.env.PORT || 3000);
 const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
+const IS_PROD = process.env.NODE_ENV === "production";
 
 // =====================
 // Options
 // =====================
-const RAID_OPTIONS = [
-  { key: "dirige", label: "디레지에", img: "/images/dirige.png" },
-  { key: "dirige-hard", label: "디레지에 : 악연", img: "/images/dirige_hard.png" },
-  { key: "inhwagongjeon", label: "이내황혼전", img: "/images/inhwagongjeon.png" },
-  { key: "nabel-hard", label: "인공신 나벨 : 하드", img: "/images/nabel_hard.png" },
-  { key: "updoong", label: "업둥교환", img: "/images/updoong.png" },
-];
-
 const GRADE_OPTIONS = [
   { key: "", label: "치즈 선택" },
   { key: "burning", label: "불타는 치즈" },
@@ -56,6 +49,59 @@ const GRADE_SORT = {
   normal: 4,
 };
 
+const DEFAULT_RAIDS = [
+  {
+    raid_key: "dirige",
+    label: "디레지에",
+    img: "/images/dirige.png",
+    default_buffer_slots: 3,
+    default_dealer_slots: 9,
+    raid_type: "normal",
+    sort_order: 1,
+    is_custom: 0,
+  },
+  {
+    raid_key: "dirige-hard",
+    label: "디레지에 : 악연",
+    img: "/images/dirige_hard.png",
+    default_buffer_slots: 3,
+    default_dealer_slots: 9,
+    raid_type: "normal",
+    sort_order: 2,
+    is_custom: 0,
+  },
+  {
+    raid_key: "inhwagongjeon",
+    label: "이내황혼전",
+    img: "/images/inhwagongjeon.png",
+    default_buffer_slots: 2,
+    default_dealer_slots: 6,
+    raid_type: "normal",
+    sort_order: 3,
+    is_custom: 0,
+  },
+  {
+    raid_key: "nabel-hard",
+    label: "인공신 나벨 : 하드",
+    img: "/images/nabel_hard.png",
+    default_buffer_slots: 3,
+    default_dealer_slots: 9,
+    raid_type: "normal",
+    sort_order: 4,
+    is_custom: 0,
+  },
+  {
+    raid_key: "updoong",
+    label: "업둥교환",
+    img: "/images/updoong.png",
+    default_buffer_slots: 0,
+    default_dealer_slots: 0,
+    raid_type: "updoong",
+    sort_order: 5,
+    is_custom: 0,
+  },
+];
+
 // =====================
 // DB init
 // =====================
@@ -64,6 +110,23 @@ const __dirname = path.dirname(__filename);
 const db = new Database(path.join(__dirname, "data.sqlite"));
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS raids (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  raid_key TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  img TEXT NOT NULL DEFAULT '',
+  default_buffer_slots INTEGER NOT NULL DEFAULT 3,
+  default_dealer_slots INTEGER NOT NULL DEFAULT 9,
+  raid_type TEXT NOT NULL DEFAULT 'normal',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  is_custom INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_raids_active_sort
+ON raids(is_active, sort_order, id);
+
 CREATE TABLE IF NOT EXISTS applications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at TEXT NOT NULL,
@@ -134,20 +197,6 @@ CREATE TABLE IF NOT EXISTS up_lineups (
 
 CREATE INDEX IF NOT EXISTS idx_up_lineups_key
 ON up_lineups(date_kst, raid_key, slot_index);
-
-CREATE TABLE IF NOT EXISTS raid_party_templates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  date_kst TEXT NOT NULL,
-  raid_key TEXT NOT NULL,
-  party_index INTEGER NOT NULL,
-  buffer_slots INTEGER NOT NULL,
-  dealer_slots INTEGER NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(date_kst, raid_key, party_index)
-);
-
-CREATE INDEX IF NOT EXISTS idx_party_templates_key
-ON raid_party_templates(date_kst, raid_key, party_index);
 `);
 
 function ensureColumn(table, colName, colDDL) {
@@ -161,6 +210,45 @@ ensureColumn("applications", "is_streamer", "is_streamer INTEGER NOT NULL DEFAUL
 ensureColumn("applications", "start_party", "start_party INTEGER NOT NULL DEFAULT 1");
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up22", "up22 INTEGER NOT NULL DEFAULT 0");
+
+ensureColumn("raids", "img", "img TEXT NOT NULL DEFAULT ''");
+ensureColumn("raids", "default_buffer_slots", "default_buffer_slots INTEGER NOT NULL DEFAULT 3");
+ensureColumn("raids", "default_dealer_slots", "default_dealer_slots INTEGER NOT NULL DEFAULT 9");
+ensureColumn("raids", "raid_type", "raid_type TEXT NOT NULL DEFAULT 'normal'");
+ensureColumn("raids", "sort_order", "sort_order INTEGER NOT NULL DEFAULT 0");
+ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
+ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
+ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
+
+function seedDefaultRaids() {
+  const insert = db.prepare(`
+    INSERT INTO raids
+      (raid_key, label, img, default_buffer_slots, default_dealer_slots, raid_type, sort_order, is_active, is_custom, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    ON CONFLICT(raid_key) DO UPDATE SET
+      label=excluded.label,
+      img=excluded.img,
+      default_buffer_slots=excluded.default_buffer_slots,
+      default_dealer_slots=excluded.default_dealer_slots,
+      raid_type=excluded.raid_type,
+      sort_order=excluded.sort_order,
+      is_active=1
+  `);
+
+  for (const r of DEFAULT_RAIDS) {
+    insert.run(
+      r.raid_key,
+      r.label,
+      r.img,
+      r.default_buffer_slots,
+      r.default_dealer_slots,
+      r.raid_type,
+      r.sort_order,
+      r.is_custom,
+      nowISO()
+    );
+  }
+}
 
 // =====================
 // Utils
@@ -184,12 +272,36 @@ function esc(v) {
     .replaceAll("'", "&#39;");
 }
 
-function raidByKey(key) {
-  return RAID_OPTIONS.find((r) => r.key === key);
+function getRaidOptions(includeInactive = false) {
+  const sql = includeInactive
+    ? `
+      SELECT *
+      FROM raids
+      ORDER BY sort_order ASC, id ASC
+    `
+    : `
+      SELECT *
+      FROM raids
+      WHERE is_active=1
+      ORDER BY sort_order ASC, id ASC
+    `;
+  return db.prepare(sql).all();
+}
+
+function raidByKey(key, includeInactive = false) {
+  if (!key) return null;
+  const sql = includeInactive
+    ? `SELECT * FROM raids WHERE raid_key=?`
+    : `SELECT * FROM raids WHERE raid_key=? AND is_active=1`;
+  return db.prepare(sql).get(key) || null;
 }
 
 function raidImage(key) {
-  return raidByKey(key)?.img || "/images/placeholder.png";
+  return raidByKey(key)?.img || "";
+}
+
+function raidDisplayType(raidKey) {
+  return raidByKey(raidKey)?.raid_type || "normal";
 }
 
 function gradeLabel(key) {
@@ -214,48 +326,45 @@ function getDisabledPartySet(raidKey, dateKst) {
   const rows = db
     .prepare("SELECT party_index FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?")
     .all(raidKey, dateKst);
-  return new Set(rows.map((r) => Number(r.party_index)));
-}
-
-function getDefaultRaidConfig(raidKey) {
-  if (raidKey === "inhwagongjeon") return { buffersPerParty: 2, dealersPerParty: 6 };
-  return { buffersPerParty: 3, dealersPerParty: 9 };
+  return new Set(rows.map((r) => r.party_index));
 }
 
 function getRaidConfig(raidKey) {
-  return getDefaultRaidConfig(raidKey);
+  const raid = raidByKey(raidKey);
+  if (!raid) return { buffersPerParty: 3, dealersPerParty: 9 };
+  if (raid.raid_type === "updoong") return { buffersPerParty: 0, dealersPerParty: 0 };
+  return {
+    buffersPerParty: Math.max(0, Number(raid.default_buffer_slots || 0)),
+    dealersPerParty: Math.max(0, Number(raid.default_dealer_slots || 0)),
+  };
 }
 
-function getPartyTemplateRows(raidKey, dateKst) {
-  return db.prepare(`
-    SELECT *
-    FROM raid_party_templates
-    WHERE raid_key=? AND date_kst=?
-    ORDER BY party_index ASC
-  `).all(raidKey, dateKst);
-}
+function buildRaidCard(r, href) {
+  const hasImg = String(r.img || "").trim() !== "";
+  const cardInner = hasImg
+    ? `
+      <img src="${esc(r.img)}" alt="${esc(r.label)}"
+           onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;raid-card-fallback&quot;>${esc(
+             r.label
+           )}</div>';">
+      <div class="label">${esc(r.label)}</div>
+    `
+    : `
+      <div class="raid-card-fallback">
+        <div style="font-size:18px;font-weight:800;">${esc(r.label)}</div>
+        <div style="font-size:12px;opacity:.85;margin-top:6px;">${
+          r.raid_type === "updoong"
+            ? "커스텀"
+            : `${esc(r.default_buffer_slots)}버퍼 / ${esc(r.default_dealer_slots)}딜러`
+        }</div>
+      </div>
+    `;
 
-function getPartyTemplateMap(raidKey, dateKst) {
-  const rows = getPartyTemplateRows(raidKey, dateKst);
-  const map = new Map();
-  for (const row of rows) {
-    map.set(Number(row.party_index), {
-      buffersPerParty: Math.max(0, Number(row.buffer_slots || 0)),
-      dealersPerParty: Math.max(0, Number(row.dealer_slots || 0)),
-    });
-  }
-  return map;
-}
-
-function getPartyConfig(raidKey, dateKst, partyIndex, templateMap = null) {
-  const defaults = getDefaultRaidConfig(raidKey);
-  const map = templateMap || getPartyTemplateMap(raidKey, dateKst);
-  return map.get(Number(partyIndex)) || defaults;
-}
-
-function getMaxPartyIndexFromTemplateMap(templateMap) {
-  const keys = Array.from(templateMap.keys());
-  return keys.length ? Math.max(...keys) : 0;
+  return `
+    <a class="raid-card ${hasImg ? "" : "raid-card-text"}" href="${esc(href)}">
+      ${cardInner}
+    </a>
+  `;
 }
 
 // =====================
@@ -268,8 +377,14 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
     return `
       <aside class="sidebar">
         <div class="thumbnail">
-          <img src="${esc(thumbImg)}" alt="썸네일"
-               onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>이미지 준비중</div>';">
+          ${
+            thumbImg
+              ? `<img src="${esc(thumbImg)}" alt="썸네일"
+                   onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>${
+                     activeRaid ? esc(raidByKey(activeRaid)?.label || "이미지 준비중") : "이미지 준비중"
+                   }</div>';">`
+              : `<div class="thumb-fallback">${activeRaid ? esc(raidByKey(activeRaid)?.label || "커스텀") : "이미지 준비중"}</div>`
+          }
         </div>
         <a href="/" class="side-btn">메인 로비</a>
         <a href="/lineup" class="side-btn">공대 편성표</a>
@@ -289,24 +404,28 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         </div>
         <button type="button" class="side-btn" onclick="openModal('modal-auth')">인증키 설정</button>
         <button type="button" class="side-btn" onclick="openModal('modal-streamer')">스트리머 예약</button>
+        <button type="button" class="side-btn" onclick="openModal('modal-custom-raid')">커스텀 레이드 추가</button>
         <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
         <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
       </aside>
     `;
   }
 
-  const canCustomParty = activeRaid && activeRaid !== "updoong";
-
   return `
     <aside class="sidebar">
       <div class="thumbnail">
-        <img src="${esc(thumbImg)}" alt="썸네일"
-             onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
+        ${
+          thumbImg
+            ? `<img src="${esc(thumbImg)}" alt="썸네일"
+                 onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>${esc(
+                   raidByKey(activeRaid)?.label || "관리자 패널"
+                 )}</div>';">`
+            : `<div class="thumb-fallback">${esc(raidByKey(activeRaid)?.label || "커스텀 레이드")}</div>`
+        }
       </div>
       <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">관리자 로비</a>
       <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
       <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
-      ${canCustomParty ? `<button type="button" class="side-btn" onclick="openModal('modal-custom-party')">커스텀 공대 추가</button>` : ""}
       <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
     </aside>
   `;
@@ -440,6 +559,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       padding:18px;
       text-align:center;
       line-height:1.5;
+      font-weight:700;
+      color:#dbe4ff;
     }
 
     .side-btn{
@@ -631,21 +752,40 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       font-weight:700;
       font-size:15px;
     }
+    .raid-card-text{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+      background:linear-gradient(180deg, rgba(60,65,120,.9), rgba(38,40,77,.95));
+    }
+    .raid-card-fallback{
+      width:100%;
+      height:100%;
+      min-height:210px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      text-align:center;
+      color:#dbe4ff;
+      padding:20px;
+      line-height:1.5;
+    }
 
     .partyGrid{
       display:flex;
       flex-wrap:wrap;
       gap:14px;
-      align-items:flex-start;
     }
     .partyCard{
       width:120px;
-      flex:0 0 auto;
+      flex:0 0 120px;
+      max-width:120px;
       background:rgba(2,6,23,.56);
       border-radius:14px;
       border:1px solid rgba(148,163,255,.22);
       padding:12px 12px 10px;
-      min-width:120px;
     }
     .partyHeader{
       display:flex;
@@ -708,11 +848,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       text-align:center;
     }
     .slotStatic.slotEmpty{ opacity:.45; }
-    .partyMeta{
-      margin-top:4px;
-      font-size:11px;
-      color:#cbd5e1;
-    }
 
     .upPartyGrid{
       display:flex;
@@ -809,7 +944,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     .modal-overlay.active{ display:flex; }
     .modal-content{
       width:min(760px, calc(100vw - 32px));
-      max-height:calc(100vh - 48px);
+      max-height:calc(100vh - 40px);
       overflow:auto;
       background:linear-gradient(180deg, rgba(27,28,59,.98), rgba(24,25,52,.98));
       border:1px solid var(--accent);
@@ -870,23 +1005,27 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       padding:20px 22px 22px;
       background:rgba(18,20,90,.38);
     }
+
     .reserve-form{
       display:flex;
       flex-direction:column;
       gap:18px;
       width:100%;
     }
+
     .reserve-card{
       background:var(--reserve-card);
       border-radius:14px;
       padding:18px 22px;
       width:100%;
     }
+
     .reserve-auth-row{
       display:flex;
       align-items:center;
       gap:18px;
     }
+
     .reserve-auth-label{
       width:160px;
       flex-shrink:0;
@@ -899,14 +1038,17 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       white-space:nowrap;
       font-size:15px;
     }
+
     .reserve-line{
       display:flex;
       align-items:center;
       gap:18px;
     }
+
     .reserve-line + .reserve-line{
       margin-top:16px;
     }
+
     .reserve-label{
       width:160px;
       flex-shrink:0;
@@ -919,10 +1061,12 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       white-space:nowrap;
       font-size:15px;
     }
+
     .reserve-field{
       flex:1;
       min-width:0;
     }
+
     .reserve-input,
     .reserve-select{
       background:var(--reserve-input) !important;
@@ -932,6 +1076,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       height:42px;
       width:100%;
     }
+
     .reserve-mini{
       background:var(--reserve-input) !important;
       color:#fff !important;
@@ -943,14 +1088,17 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       text-align:center;
       padding:0 6px !important;
     }
+
     .reserve-start{
       width:92px;
       min-width:92px;
     }
+
     .reserve-input::placeholder,
     .reserve-mini::placeholder{
       color:#ececf3 !important;
     }
+
     .reserve-meta-row{
       display:flex;
       align-items:center;
@@ -960,6 +1108,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       margin-top:18px;
       width:100%;
     }
+
     .reserve-meta-item{
       display:flex;
       align-items:center;
@@ -968,11 +1117,13 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       font-size:15px;
       white-space:nowrap;
     }
+
     .reserve-submit-wrap{
       display:flex;
       justify-content:center;
       margin-top:2px;
     }
+
     .reserve-submit{
       min-width:180px;
       min-height:44px;
@@ -984,10 +1135,12 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       font-weight:700;
       cursor:pointer;
     }
+
     .reserve-submit:hover{
       background:#6067ab;
       border-color:var(--accent);
     }
+
     .reserve-foot{
       color:#c6c9db;
       font-size:14px;
@@ -1181,7 +1334,7 @@ function requireAdmin(req, res, next) {
         `
         <div class="box">
           <div class="bad"><b>ADMIN_KEY가 설정되지 않았습니다.</b></div>
-          <div class="muted">Render Environment Variables에 ADMIN_KEY를 추가하세요.</div>
+          <div class="muted">Environment Variables에 ADMIN_KEY를 추가하세요.</div>
         </div>
       `,
         "오류",
@@ -1201,15 +1354,8 @@ app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 // Viewer: main
 // =====================
 app.get("/", (req, res) => {
-  const cardsHtml = RAID_OPTIONS.map(
-    (r) => `
-      <a class="raid-card" href="/reserve?raid=${encodeURIComponent(r.key)}">
-        <img src="${esc(r.img)}" alt="${esc(r.label)}"
-             onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
-        <div class="label">${esc(r.label)}</div>
-      </a>
-    `
-  ).join("");
+  const raids = getRaidOptions();
+  const cardsHtml = raids.map((r) => buildRaidCard(r, `/reserve?raid=${encodeURIComponent(r.raid_key)}`)).join("");
 
   res.send(
     layout(
@@ -1230,9 +1376,9 @@ app.get("/", (req, res) => {
         <div class="raid-grid">${cardsHtml}</div>
 
         <div class="muted" style="margin-top:14px;">
-          - 일반 레이드는 기본 3버퍼 / 9딜러 구성입니다.<br/>
-          - 이내황혼전은 2버퍼 / 6딜러입니다.<br/>
-          - 업둥교환은 12명 = 1세트로 표시됩니다.
+          - 일반 레이드는 각 레이드의 기본 버퍼/딜러 수 기준으로 편성됩니다.<br/>
+          - 업둥교환은 12명 = 1세트로 표시됩니다.<br/>
+          - 이미지가 없는 커스텀 레이드는 텍스트 카드로 표시됩니다.
         </div>
       </div>
     `,
@@ -1249,7 +1395,7 @@ app.get("/reserve", (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  const isUp = raid === "updoong";
+  const isUp = raidObj.raid_type === "updoong";
   const err = String(req.query.err || "");
   const activeDay = getActiveDay(raid);
 
@@ -1296,7 +1442,6 @@ app.get("/reserve", (req, res) => {
                 <input
                   name="chzzk_nickname"
                   class="reserve-input"
-                  placeholder=""
                   required
                   maxlength="40"/>
               </div>
@@ -1310,7 +1455,6 @@ app.get("/reserve", (req, res) => {
                 <input
                   name="adventure_name"
                   class="reserve-input"
-                  placeholder=""
                   required
                   maxlength="60"/>
               </div>
@@ -1348,7 +1492,6 @@ app.get("/reserve", (req, res) => {
                       name="dealer_count"
                       class="reserve-mini"
                       inputmode="numeric"
-                      placeholder=""
                       required />
                   </label>
 
@@ -1358,7 +1501,6 @@ app.get("/reserve", (req, res) => {
                       name="buffer_count"
                       class="reserve-mini"
                       inputmode="numeric"
-                      placeholder=""
                       required />
                   </label>
 
@@ -1405,7 +1547,7 @@ app.post("/reserve", (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
 
-  const isUp = raid === "updoong";
+  const isUp = raidObj.raid_type === "updoong";
 
   const activeRow = getActiveCodeRow(raid);
   const code = String(req.body.code || "").trim();
@@ -1560,6 +1702,10 @@ app.get("/check", (req, res) => {
   const raidObj = raidByKey(raid);
 
   if (!raidObj) {
+    const cards = getRaidOptions()
+      .map((r) => buildRaidCard(r, `/check?raid=${encodeURIComponent(r.raid_key)}`))
+      .join("");
+
     return res.send(
       layout(
         `
@@ -1572,17 +1718,7 @@ app.get("/check", (req, res) => {
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="raid-grid">
-            ${RAID_OPTIONS.map(
-              (r) => `
-                <a class="raid-card" href="/check?raid=${encodeURIComponent(r.key)}">
-                  <img src="${esc(r.img)}" alt="${esc(r.label)}"
-                       onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
-                  <div class="label">${esc(r.label)}</div>
-                </a>
-              `
-            ).join("")}
-          </div>
+          <div class="raid-grid">${cards}</div>
         </div>
       `,
         "예약확인"
@@ -1590,7 +1726,7 @@ app.get("/check", (req, res) => {
     );
   }
 
-  const isUp = raid === "updoong";
+  const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
   const apps = db
     .prepare(
@@ -1688,39 +1824,21 @@ app.get("/check", (req, res) => {
 function buildPartyMap(lineups) {
   const map = new Map();
   for (const row of lineups) {
-    const p = Number(row.party_index);
+    const p = row.party_index;
     if (!map.has(p)) map.set(p, { buffers: {}, dealers: {} });
     const entry = map.get(p);
-    if (row.role === "buffer") entry.buffers[Number(row.slot_index)] = row.nickname;
-    else entry.dealers[Number(row.slot_index)] = row.nickname;
+    if (row.role === "buffer") entry.buffers[row.slot_index] = row.nickname;
+    else entry.dealers[row.slot_index] = row.nickname;
   }
   return map;
 }
 
-function renderPartyCards({
-  raidKey,
-  dateKst,
-  partyMap,
-  editable,
-  adminMode,
-  disabledSet = new Set(),
-  templateMap = new Map(),
-  minPartyCount = 0,
-}) {
-  const indexSet = new Set([
-    ...Array.from(partyMap.keys()),
-    ...Array.from(disabledSet),
-    ...Array.from(templateMap.keys()),
-  ]);
+function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disabledSet = new Set() }) {
+  const buffersPerParty = cfg.buffersPerParty;
+  const dealersPerParty = cfg.dealersPerParty;
 
-  const highestExisting = indexSet.size ? Math.max(...Array.from(indexSet)) : 0;
-  const finalMax = Math.max(highestExisting, minPartyCount);
-
-  if (finalMax <= 0) {
-    return `<div class="muted">편성된 공대가 없습니다.</div>`;
-  }
-
-  for (let i = 1; i <= finalMax; i++) indexSet.add(i);
+  const indexSet = new Set([...Array.from(partyMap.keys()), ...Array.from(disabledSet)]);
+  if (indexSet.size === 0) return `<div class="muted">편성된 공대가 없습니다.</div>`;
 
   const allIndices = Array.from(indexSet).sort((a, b) => a - b);
   const activeIndices = allIndices.filter((i) => !disabledSet.has(i));
@@ -1733,10 +1851,6 @@ function renderPartyCards({
     const data = partyMap.get(p) || { buffers: {}, dealers: {} };
     const isDisabled = disabledSet.has(p);
     const disableInputs = editable && adminMode && isDisabled;
-    const cfg = getPartyConfig(raidKey, dateKst, p, templateMap);
-    const buffersPerParty = cfg.buffersPerParty;
-    const dealersPerParty = cfg.dealersPerParty;
-    const isCustom = templateMap.has(p);
 
     html += `<div class="partyCard">
       <div class="partyHeader">
@@ -1752,37 +1866,28 @@ function renderPartyCards({
         }
       </div>
 
-      <div class="partyMeta">${isCustom ? `커스텀 ${buffersPerParty}버퍼 / ${dealersPerParty}딜러` : `${buffersPerParty}버퍼 / ${dealersPerParty}딜러`}</div>
       <div class="partyBody">`;
 
     html += `<div class="slotSection"><div class="slotSectionTitle">버퍼</div>`;
-    if (buffersPerParty <= 0) {
-      html += `<div class="slotStatic slotEmpty">없음</div>`;
-    } else {
-      for (let b = 1; b <= buffersPerParty; b++) {
-        const bName = data.buffers[b] || "";
-        if (editable && adminMode) {
-          if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-          else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
-        } else {
-          html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">버퍼</div>`;
-        }
+    for (let b = 1; b <= buffersPerParty; b++) {
+      const bName = data.buffers[b] || "";
+      if (editable && adminMode) {
+        if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
+      } else {
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">버퍼</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
 
     html += `<div class="slotSection"><div class="slotSectionTitle">딜러</div>`;
-    if (dealersPerParty <= 0) {
-      html += `<div class="slotStatic slotEmpty">없음</div>`;
-    } else {
-      for (let d = 1; d <= dealersPerParty; d++) {
-        const dName = data.dealers[d] || "";
-        if (editable && adminMode) {
-          if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-          else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
-        } else {
-          html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">딜러</div>`;
-        }
+    for (let d = 1; d <= dealersPerParty; d++) {
+      const dName = data.dealers[d] || "";
+      if (editable && adminMode) {
+        if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
+      } else {
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">딜러</div>`;
       }
     }
     html += `</div></div></div>`;
@@ -2014,13 +2119,13 @@ function applyLineupForApplication(appId, confirmed) {
   const raidKey = appRow.raid_key;
   const dateKst = appRow.date_kst;
 
-  if (raidKey === "updoong") {
+  if (raidDisplayType(raidKey) === "updoong") {
     db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=? AND application_id=?`).run(dateKst, appId);
     rebuildUpdoongLineup(dateKst);
     return;
   }
 
-  const templateMap = getPartyTemplateMap(raidKey, dateKst);
+  const cfg = getRaidConfig(raidKey);
   const disabledSet = getDisabledPartySet(raidKey, dateKst);
   const startParty = Math.max(1, Number(appRow.start_party || 1));
 
@@ -2039,21 +2144,22 @@ function applyLineupForApplication(appId, confirmed) {
     .all(raidKey, dateKst);
 
   const partyInfo = new Map();
-  let maxPartyIndex = Math.max(0, getMaxPartyIndexFromTemplateMap(templateMap));
+  let maxPartyIndex = 0;
 
   for (const row of rows) {
-    const partyIndex = Number(row.party_index);
-    if (!partyInfo.has(partyIndex)) {
-      partyInfo.set(partyIndex, { bufSlots: new Set(), dealSlots: new Set(), names: new Set() });
+    if (!partyInfo.has(row.party_index)) {
+      partyInfo.set(row.party_index, { bufSlots: new Set(), dealSlots: new Set(), names: new Set() });
     }
-    const info = partyInfo.get(partyIndex);
-    if (row.role === "buffer") info.bufSlots.add(Number(row.slot_index));
-    else info.dealSlots.add(Number(row.slot_index));
+    const info = partyInfo.get(row.party_index);
+    if (row.role === "buffer") info.bufSlots.add(row.slot_index);
+    else info.dealSlots.add(row.slot_index);
     info.names.add(row.nickname);
-    if (partyIndex > maxPartyIndex) maxPartyIndex = partyIndex;
+    if (row.party_index > maxPartyIndex) maxPartyIndex = row.party_index;
   }
 
   function findOrCreatePartyWithSpace(role, nickname) {
+    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
+
     for (let idx = startParty; idx <= maxPartyIndex; idx++) {
       if (disabledSet.has(idx)) continue;
 
@@ -2065,12 +2171,8 @@ function applyLineupForApplication(appId, confirmed) {
 
       if (info.names.has(nickname)) continue;
 
-      const cfg = getPartyConfig(raidKey, dateKst, idx, templateMap);
-      const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
-      if (perParty <= 0) continue;
-
       const used = role === "buffer" ? info.bufSlots.size : info.dealSlots.size;
-      if (used < perParty) return { idx, info, cfg };
+      if (used < perParty) return { idx, info };
     }
 
     let newIdx = Math.max(maxPartyIndex + 1, startParty);
@@ -2079,8 +2181,7 @@ function applyLineupForApplication(appId, confirmed) {
 
     const info = { bufSlots: new Set(), dealSlots: new Set(), names: new Set() };
     partyInfo.set(newIdx, info);
-    const cfg = getPartyConfig(raidKey, dateKst, newIdx, templateMap);
-    return { idx: newIdx, info, cfg };
+    return { idx: newIdx, info };
   }
 
   const insert = db.prepare(
@@ -2092,16 +2193,16 @@ function applyLineupForApplication(appId, confirmed) {
   );
 
   function assignSeats(role, count) {
+    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
+    if (perParty <= 0) return;
+
     const nickname = appRow.chzzk_nickname;
 
     for (let i = 0; i < count; i++) {
       const result = findOrCreatePartyWithSpace(role, nickname);
       if (!result) return;
 
-      const { idx, info, cfg } = result;
-      const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
-      if (perParty <= 0) continue;
-
+      const { idx, info } = result;
       const slots = role === "buffer" ? info.bufSlots : info.dealSlots;
 
       let slotIndex = 1;
@@ -2114,8 +2215,8 @@ function applyLineupForApplication(appId, confirmed) {
     }
   }
 
-  assignSeats("buffer", Number(appRow.buffer_count || 0));
-  assignSeats("dealer", Number(appRow.dealer_count || 0));
+  assignSeats("buffer", appRow.buffer_count || 0);
+  assignSeats("dealer", appRow.dealer_count || 0);
 }
 
 // =====================
@@ -2178,7 +2279,7 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
   res.cookie("admin_key", key, {
     httpOnly: true,
     sameSite: "lax",
-    secure: true,
+    secure: IS_PROD,
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
   return res.redirect(`${ADMIN_BASE}/raid`);
@@ -2190,15 +2291,12 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
 });
 
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
-  const cardsHtml = RAID_OPTIONS.map(
-    (r) => `
-      <a class="raid-card" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(r.key)}&sort=grade">
-        <img src="${esc(r.img)}" alt="${esc(r.label)}"
-             onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
-        <div class="label">${esc(r.label)}</div>
-      </a>
-    `
-  ).join("");
+  const raids = getRaidOptions();
+  const cardsHtml = raids
+    .map((r) => buildRaidCard(r, `${ADMIN_BASE}/list?raid=${encodeURIComponent(r.raid_key)}&sort=grade`))
+    .join("");
+
+  const customRaidRows = getRaidOptions(true);
 
   const modalHtml = `
     <div class="modal-overlay" id="modal-auth">
@@ -2214,7 +2312,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
             <div class="muted" style="margin-bottom:6px;">레이드</div>
             <select name="raid" required>
               <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+              ${raids.map((r) => `<option value="${esc(r.raid_key)}">${esc(r.label)}</option>`).join("")}
             </select>
           </div>
 
@@ -2250,7 +2348,10 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
             <div class="muted" style="margin-bottom:6px;">레이드</div>
             <select name="raid" required>
               <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+              ${raids
+                .filter((r) => r.raid_type !== "updoong")
+                .map((r) => `<option value="${esc(r.raid_key)}">${esc(r.label)}</option>`)
+                .join("")}
             </select>
           </div>
 
@@ -2272,6 +2373,88 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         </form>
       </div>
     </div>
+
+    <div class="modal-overlay" id="modal-custom-raid">
+      <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal('modal-custom-raid')">✕</button>
+        <div class="modal-header">
+          <h3>커스텀 레이드 추가</h3>
+          <p>이미지 없이 텍스트 카드로 표시되는 새 레이드를 추가할 수 있습니다.</p>
+        </div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/raid/add" class="modal-form">
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">레이드 이름</div>
+              <input name="label" placeholder="예) 커스텀 레이드" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">레이드 key</div>
+              <input name="raid_key" placeholder="예) custom-raid-1" required />
+            </div>
+          </div>
+
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">기본 버퍼 수</div>
+              <input name="default_buffer_slots" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">기본 딜러 수</div>
+              <input name="default_dealer_slots" inputmode="numeric" placeholder="예) 7" required />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:flex-end; margin-top:4px;">
+            <button type="button" class="btn btnGhost" onclick="closeModal('modal-custom-raid')">닫기</button>
+            <button type="submit" class="btn btnPrimary">추가</button>
+          </div>
+        </form>
+
+        <div class="divider"></div>
+        <div style="font-weight:700;margin-bottom:8px;">현재 레이드 목록</div>
+
+        <table>
+          <tr>
+            <th>레이드 이름</th>
+            <th>key</th>
+            <th class="center">형태</th>
+            <th class="center">버퍼</th>
+            <th class="center">딜러</th>
+            <th class="center">상태</th>
+            <th class="center">삭제</th>
+          </tr>
+          ${customRaidRows
+            .map((r) => {
+              const canDelete = Number(r.is_custom) === 1;
+              return `
+                <tr>
+                  <td>${esc(r.label)}</td>
+                  <td>${esc(r.raid_key)}</td>
+                  <td class="center">${r.raid_type === "updoong" ? "업둥형" : "일반형"}</td>
+                  <td class="center">${r.raid_type === "updoong" ? "-" : esc(r.default_buffer_slots)}</td>
+                  <td class="center">${r.raid_type === "updoong" ? "-" : esc(r.default_dealer_slots)}</td>
+                  <td class="center">${Number(r.is_active) === 1 ? "활성" : "비활성"}</td>
+                  <td class="center">
+                    ${
+                      canDelete
+                        ? `
+                          <form method="POST" action="${esc(ADMIN_BASE)}/raid/delete" style="margin:0;"
+                                onsubmit="return confirm('정말 ${esc(r.label)} 레이드를 삭제할까요?');">
+                            <input type="hidden" name="raid_key" value="${esc(r.raid_key)}"/>
+                            <button class="btn btnDanger" type="submit">삭제</button>
+                          </form>
+                        `
+                        : `<span class="muted">기본</span>`
+                    }
+                  </td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </table>
+      </div>
+    </div>
   `;
 
   res.send(
@@ -2281,7 +2464,7 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:700;font-size:20px;margin-bottom:6px;">관리자 메인</div>
-            <div class="muted">좌측 메뉴에서 인증키 설정과 스트리머 예약을 팝업으로 열 수 있습니다.</div>
+            <div class="muted">좌측 메뉴에서 인증키 설정, 스트리머 예약, 커스텀 레이드 추가를 열 수 있습니다.</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
@@ -2294,9 +2477,9 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="divider"></div>
 
         <div class="muted">
-          - 레이드를 선택하면 좌측 썸네일이 해당 레이드 이미지로 바뀝니다.<br/>
-          - 좌측의 <b>인증키 설정</b> 버튼: 진행일/인증키 등록 팝업<br/>
-          - 좌측의 <b>스트리머 예약</b> 버튼: 스트리머 캐릭터 등록 팝업
+          - 커스텀 레이드는 이미지 없이 텍스트 카드로 표시됩니다.<br/>
+          - 업둥교환 외 모든 커스텀 레이드는 일반 공대 편성 구조를 따릅니다.<br/>
+          - 커스텀 레이드 삭제 시 관련 신청/편성/인증키도 함께 삭제됩니다.
         </div>
       </div>
 
@@ -2306,6 +2489,65 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
       { isAdmin: true, activeRaid: "admin_lobby" }
     )
   );
+});
+
+app.post(`${ADMIN_BASE}/raid/add`, requireAdmin, (req, res) => {
+  const label = String(req.body.label || "").trim();
+  const raid_key = String(req.body.raid_key || "").trim().toLowerCase();
+  const default_buffer_slots = Math.floor(Number(req.body.default_buffer_slots || 0));
+  const default_dealer_slots = Math.floor(Number(req.body.default_dealer_slots || 0));
+
+  if (!label || !raid_key) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  if (!/^[a-z0-9_-]{2,40}$/.test(raid_key)) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  if (
+    !Number.isInteger(default_buffer_slots) ||
+    !Number.isInteger(default_dealer_slots) ||
+    default_buffer_slots < 0 ||
+    default_buffer_slots > 12 ||
+    default_dealer_slots < 0 ||
+    default_dealer_slots > 20
+  ) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  const exists = raidByKey(raid_key, true);
+  if (exists) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  const maxSort = db.prepare(`SELECT MAX(sort_order) AS mx FROM raids`).get()?.mx || 0;
+
+  db.prepare(`
+    INSERT INTO raids
+      (raid_key, label, img, default_buffer_slots, default_dealer_slots, raid_type, sort_order, is_active, is_custom, created_at)
+    VALUES (?, ?, '', ?, ?, 'normal', ?, 1, 1, ?)
+  `).run(raid_key, label, default_buffer_slots, default_dealer_slots, Number(maxSort) + 1, nowISO());
+
+  return res.redirect(`${ADMIN_BASE}/raid`);
+});
+
+app.post(`${ADMIN_BASE}/raid/delete`, requireAdmin, (req, res) => {
+  const raid_key = String(req.body.raid_key || "").trim();
+  const raid = raidByKey(raid_key, true);
+
+  if (!raid || Number(raid.is_custom) !== 1) {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  db.prepare(`DELETE FROM raids WHERE raid_key=?`).run(raid_key);
+  db.prepare(`DELETE FROM day_codes WHERE raid_key=?`).run(raid_key);
+  db.prepare(`DELETE FROM applications WHERE raid_key=?`).run(raid_key);
+  db.prepare(`DELETE FROM raid_lineups WHERE raid_key=?`).run(raid_key);
+  db.prepare(`DELETE FROM raid_disabled_parties WHERE raid_key=?`).run(raid_key);
+  db.prepare(`DELETE FROM up_lineups WHERE raid_key=?`).run(raid_key);
+
+  return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
 app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
@@ -2334,7 +2576,7 @@ app.post(`${ADMIN_BASE}/code`, requireAdmin, (req, res) => {
 app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidObj || raidObj.raid_type === "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
 
   let dealer_count = Number(req.body.dealer_count || "0");
   let buffer_count = Number(req.body.buffer_count || "0");
@@ -2362,59 +2604,6 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   ).run(nowISO(), dateKst, raid, "streamer", "암종호", "암종호", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
-});
-
-app.post(`${ADMIN_BASE}/party-template/add`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  if (!raidByKey(raid) || raid === "updoong") {
-    return res.redirect(`${ADMIN_BASE}/raid`);
-  }
-
-  const dateKst = getActiveDay(raid);
-  const partyIndex = Math.floor(Number(req.body.party_index || 0));
-  const bufferSlots = Math.floor(Number(req.body.buffer_slots || 0));
-  const dealerSlots = Math.floor(Number(req.body.dealer_slots || 0));
-
-  if (
-    !Number.isInteger(partyIndex) || partyIndex < 1 || partyIndex > 99 ||
-    !Number.isInteger(bufferSlots) || bufferSlots < 0 || bufferSlots > 12 ||
-    !Number.isInteger(dealerSlots) || dealerSlots < 0 || dealerSlots > 12
-  ) {
-    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
-  }
-
-  db.prepare(`
-    INSERT INTO raid_party_templates
-      (date_kst, raid_key, party_index, buffer_slots, dealer_slots, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(date_kst, raid_key, party_index)
-    DO UPDATE SET
-      buffer_slots=excluded.buffer_slots,
-      dealer_slots=excluded.dealer_slots
-  `).run(dateKst, raid, partyIndex, bufferSlots, dealerSlots, nowISO());
-
-  return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
-});
-
-app.post(`${ADMIN_BASE}/party-template/delete`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  if (!raidByKey(raid) || raid === "updoong") {
-    return res.redirect(`${ADMIN_BASE}/raid`);
-  }
-
-  const dateKst = getActiveDay(raid);
-  const partyIndex = Math.floor(Number(req.body.party_index || 0));
-
-  if (!Number.isInteger(partyIndex) || partyIndex < 1) {
-    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
-  }
-
-  db.prepare(`
-    DELETE FROM raid_party_templates
-    WHERE date_kst=? AND raid_key=? AND party_index=?
-  `).run(dateKst, raid, partyIndex);
-
-  return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
 app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
@@ -2456,7 +2645,7 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   `
   ).run(dateKst, raid, ...gradeKeys);
 
-  if (raid === "updoong") {
+  if (raidDisplayType(raid) === "updoong") {
     rebuildUpdoongLineup(dateKst);
   } else {
     for (const r of targetRows) applyLineupForApplication(Number(r.id), true);
@@ -2473,7 +2662,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
 
-  const isUp = raid === "updoong";
+  const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
 
   const gradeHeaderLink =
@@ -2698,7 +2887,7 @@ app.post(`${ADMIN_BASE}/delete`, requireAdmin, (req, res) => {
     db.prepare("DELETE FROM raid_lineups WHERE application_id=?").run(id);
     db.prepare("DELETE FROM up_lineups WHERE application_id=?").run(id);
   }
-  if (raid === "updoong") rebuildUpdoongLineup(getActiveDay("updoong"));
+  if (raidDisplayType(raid) === "updoong") rebuildUpdoongLineup(getActiveDay("updoong"));
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
@@ -2714,7 +2903,6 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   db.prepare(`DELETE FROM raid_lineups WHERE date_kst=? AND raid_key=? AND application_id IS NOT NULL`).run(activeDay, raid);
   db.prepare(`DELETE FROM up_lineups WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
   db.prepare(`DELETE FROM raid_disabled_parties WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
-  db.prepare(`DELETE FROM raid_party_templates WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
 
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
@@ -2726,7 +2914,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  if (raid === "updoong") {
+  if (raidObj.raid_type === "updoong") {
     const map = getUpLineupMap(dateKst);
     const disabledSet = getDisabledPartySet("updoong", dateKst);
 
@@ -2783,6 +2971,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
     );
   }
 
+  const cfg = getRaidConfig(raid);
   const lineups = db
     .prepare(
       `
@@ -2794,96 +2983,15 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
     .all(raid, dateKst);
 
   const disabledSet = getDisabledPartySet(raid, dateKst);
-  const templateMap = getPartyTemplateMap(raid, dateKst);
   const partyMap = buildPartyMap(lineups);
-  const highestPartyIndex = Math.max(
-    0,
-    ...Array.from(partyMap.keys()),
-    ...Array.from(disabledSet),
-    ...Array.from(templateMap.keys())
-  );
-
   const partyCardsHtml = renderPartyCards({
     raidKey: raid,
-    dateKst,
     partyMap,
+    cfg,
     editable: true,
     adminMode: true,
     disabledSet,
-    templateMap,
-    minPartyCount: highestPartyIndex,
   });
-
-  const templateRows = getPartyTemplateRows(raid, dateKst);
-
-  const customPartyModalHtml = `
-    <div class="modal-overlay" id="modal-custom-party">
-      <div class="modal-content">
-        <button type="button" class="modal-close" onclick="closeModal('modal-custom-party')">✕</button>
-        <div class="modal-header">
-          <h3>커스텀 공대 추가</h3>
-          <p>기수별로 버퍼/딜러 수를 직접 설정할 수 있습니다.</p>
-        </div>
-
-        <form method="POST" action="${esc(ADMIN_BASE)}/party-template/add" class="modal-form">
-          <input type="hidden" name="raid" value="${esc(raid)}"/>
-
-          <div class="modal-row">
-            <div>
-              <div class="muted" style="margin-bottom:6px;">기수</div>
-              <input name="party_index" inputmode="numeric" placeholder="예) 1" required />
-            </div>
-            <div>
-              <div class="muted" style="margin-bottom:6px;">버퍼 수</div>
-              <input name="buffer_slots" inputmode="numeric" placeholder="예) 1" required />
-            </div>
-            <div>
-              <div class="muted" style="margin-bottom:6px;">딜러 수</div>
-              <input name="dealer_slots" inputmode="numeric" placeholder="예) 7" required />
-            </div>
-          </div>
-
-          <div class="row" style="justify-content:flex-end; margin-top:4px;">
-            <button type="button" class="btn btnGhost" onclick="closeModal('modal-custom-party')">닫기</button>
-            <button type="submit" class="btn btnPrimary">저장</button>
-          </div>
-        </form>
-
-        <div class="divider"></div>
-
-        <div style="font-weight:700; margin-bottom:8px;">현재 커스텀 공대 목록</div>
-        ${
-          templateRows.length
-            ? `
-              <table>
-                <tr>
-                  <th class="center">기수</th>
-                  <th class="center">버퍼</th>
-                  <th class="center">딜러</th>
-                  <th class="center">삭제</th>
-                </tr>
-                ${templateRows.map((row) => `
-                  <tr>
-                    <td class="center">${esc(row.party_index)}</td>
-                    <td class="center">${esc(row.buffer_slots)}</td>
-                    <td class="center">${esc(row.dealer_slots)}</td>
-                    <td class="center">
-                      <form method="POST" action="${esc(ADMIN_BASE)}/party-template/delete" style="margin:0;"
-                            onsubmit="return confirm('${esc(row.party_index)}기수 커스텀 공대를 삭제할까요?');">
-                        <input type="hidden" name="raid" value="${esc(raid)}"/>
-                        <input type="hidden" name="party_index" value="${esc(row.party_index)}"/>
-                        <button class="btn btnDanger" type="submit">삭제</button>
-                      </form>
-                    </td>
-                  </tr>
-                `).join("")}
-              </table>
-            `
-            : `<div class="muted">등록된 커스텀 공대가 없습니다.</div>`
-        }
-      </div>
-    </div>
-  `;
 
   res.send(
     layout(
@@ -2892,14 +3000,17 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">공대 편성표 관리</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(dateKst)}</b></div>
+            <div class="muted">
+              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(dateKst)}</b>
+              <span class="chip">${esc(cfg.buffersPerParty)}버퍼 / ${esc(cfg.dealersPerParty)}딜러</span>
+            </div>
           </div>
           <div class="row">
             <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(raid)}&sort=grade">신청목록</a>
             <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <button class="btn btnDanger" type="submit"
-                onclick="return confirm('현재 레이드의 공대 진행도와 커스텀 공대 구성을 모두 초기화합니다.');">
+                onclick="return confirm('현재 레이드의 공대 진행도를 모두 초기화합니다.');">
                 공대 진행도 초기화
               </button>
             </form>
@@ -2910,7 +3021,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
         <form method="POST" action="${esc(ADMIN_BASE)}/lineup/save">
           <input type="hidden" name="raid" value="${esc(raid)}"/>
-          <input type="hidden" name="party_count" value="${esc(highestPartyIndex)}"/>
+          <input type="hidden" name="party_count" value="${Math.max(0, ...partyMap.keys()) || 0}"/>
           ${partyCardsHtml}
           <div class="row" style="margin-top:16px;">
             <button class="btn" type="submit">수동 수정 내용 저장</button>
@@ -2922,8 +3033,6 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
       </div>
-
-      ${customPartyModalHtml}
     `,
       "공대 편성표",
       { isAdmin: true, activeRaid: raid, autoRefresh: true }
@@ -2937,7 +3046,7 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  if (raid === "updoong") {
+  if (raidDisplayType(raid) === "updoong") {
     db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
     db.prepare(`DELETE FROM raid_disabled_parties WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
     return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
@@ -2945,7 +3054,6 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
 
   db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
   db.prepare("DELETE FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
-  db.prepare("DELETE FROM raid_party_templates WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
@@ -2954,9 +3062,9 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
+  const cfg = getRaidConfig(raid);
   const partyCount = Number(req.body.party_count || 0) || 0;
   const disabledSet = getDisabledPartySet(raid, dateKst);
-  const templateMap = getPartyTemplateMap(raid, dateKst);
 
   db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
 
@@ -2970,7 +3078,6 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
 
   for (let p = 1; p <= partyCount; p++) {
     if (disabledSet.has(p)) continue;
-    const cfg = getPartyConfig(raid, dateKst, p, templateMap);
 
     for (let b = 1; b <= cfg.buffersPerParty; b++) {
       const name = String(req.body[`b_${p}_${b}`] || "").trim();
@@ -3102,9 +3209,13 @@ app.post(`${ADMIN_BASE}/lineup/delete-up-party`, requireAdmin, (req, res) => {
 // =====================
 app.get("/lineup", (req, res) => {
   const raid = String(req.query.raid || "");
-  const hasRaid = !!raidByKey(raid);
+  const raidObj = raidByKey(raid);
 
-  if (!hasRaid) {
+  if (!raidObj) {
+    const cards = getRaidOptions()
+      .map((r) => buildRaidCard(r, `/lineup?raid=${encodeURIComponent(r.raid_key)}`))
+      .join("");
+
     return res.send(
       layout(
         `
@@ -3117,17 +3228,7 @@ app.get("/lineup", (req, res) => {
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="raid-grid">
-            ${RAID_OPTIONS.map(
-              (r) => `
-                <a class="raid-card" href="/lineup?raid=${encodeURIComponent(r.key)}">
-                  <img src="${esc(r.img)}" alt="${esc(r.label)}"
-                       onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
-                  <div class="label">${esc(r.label)}</div>
-                </a>
-              `
-            ).join("")}
-          </div>
+          <div class="raid-grid">${cards}</div>
         </div>
       `,
         "공대 편성표"
@@ -3135,10 +3236,9 @@ app.get("/lineup", (req, res) => {
     );
   }
 
-  const raidObj = raidByKey(raid);
   const dateKst = getActiveDay(raid);
 
-  if (raid === "updoong") {
+  if (raidObj.raid_type === "updoong") {
     const map = getUpLineupMap(dateKst);
     const disabledSet = getDisabledPartySet("updoong", dateKst);
 
@@ -3173,6 +3273,7 @@ app.get("/lineup", (req, res) => {
     );
   }
 
+  const cfg = getRaidConfig(raid);
   const lineups = db
     .prepare(
       `
@@ -3184,24 +3285,14 @@ app.get("/lineup", (req, res) => {
     .all(raid, dateKst);
 
   const disabledSet = getDisabledPartySet(raid, dateKst);
-  const templateMap = getPartyTemplateMap(raid, dateKst);
   const partyMap = buildPartyMap(lineups);
-  const highestPartyIndex = Math.max(
-    0,
-    ...Array.from(partyMap.keys()),
-    ...Array.from(disabledSet),
-    ...Array.from(templateMap.keys())
-  );
-
   const partyCardsHtml = renderPartyCards({
     raidKey: raid,
-    dateKst,
     partyMap,
+    cfg,
     editable: false,
     adminMode: false,
     disabledSet,
-    templateMap,
-    minPartyCount: highestPartyIndex,
   });
 
   res.send(
@@ -3211,7 +3302,10 @@ app.get("/lineup", (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">공대 편성표</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(dateKst)}</b></div>
+            <div class="muted">
+              레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(dateKst)}</b>
+              <span class="chip">${esc(cfg.buffersPerParty)}버퍼 / ${esc(cfg.dealersPerParty)}딜러</span>
+            </div>
           </div>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
@@ -3236,6 +3330,8 @@ app.get("/health", (req, res) =>
 // =====================
 // Start
 // =====================
+seedDefaultRaids();
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Admin secret url: ${ADMIN_BASE}`);
