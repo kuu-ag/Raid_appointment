@@ -918,7 +918,268 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       flex:1;
       min-width:140px;
     }
+    /* =========================
+   Viewer Reserve Screen
+========================= */
+.reserve-screen{
+  display:flex;
+  gap:22px;
+  align-items:stretch;
+}
 
+.reserve-left{
+  width:220px;
+  flex-shrink:0;
+  border:1px solid var(--border-glow);
+  border-radius:14px;
+  padding:14px;
+  background:rgba(38,40,77,.55);
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+
+.reserve-left-thumb{
+  position:relative;
+  width:100%;
+  aspect-ratio:1 / 1;
+  border-radius:12px;
+  overflow:hidden;
+  background:#3c3f74;
+  border:1px solid rgba(148,163,255,.16);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#e5e7eb;
+  text-align:center;
+  font-size:14px;
+  line-height:1.5;
+}
+.reserve-left-thumb img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.reserve-left-menu{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.reserve-left-menu .nav-btn{
+  width:100%;
+  min-height:44px;
+  border:1px solid rgba(148,163,255,.16);
+  background:#46497d;
+  border-radius:10px;
+  color:#f8fafc;
+  font-size:14px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  transition:.15s ease;
+}
+.reserve-left-menu .nav-btn:hover{
+  background:#555a93;
+  border-color:var(--accent);
+}
+
+.reserve-right{
+  flex:1;
+  border:1px solid var(--border-glow);
+  border-radius:14px;
+  padding:18px 22px;
+  background:rgba(38,40,77,.42);
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+}
+
+.reserve-top-auth{
+  margin-left:auto;
+  width:min(430px, 100%);
+  background:#4a4f86;
+  border-radius:12px;
+  padding:10px 14px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.reserve-top-auth-label{
+  min-width:150px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:14px;
+  font-weight:700;
+  color:#fff;
+}
+.reserve-top-auth input{
+  background:#8e90aa;
+  color:#fff;
+}
+.reserve-top-auth input::placeholder{
+  color:#d1d5db;
+}
+
+.reserve-main{
+  display:flex;
+  gap:26px;
+  align-items:flex-start;
+}
+
+.reserve-hero-card{
+  width:172px;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.reserve-hero-image{
+  width:100%;
+  aspect-ratio:1 / 1;
+  border-radius:12px;
+  overflow:hidden;
+  background:#2d315f;
+  border:1px solid rgba(148,163,255,.14);
+  position:relative;
+}
+.reserve-hero-image img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+.reserve-hero-title{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  padding:12px 10px 10px;
+  background:linear-gradient(transparent, rgba(0,0,0,.85));
+  text-align:center;
+  font-weight:800;
+  font-size:15px;
+}
+
+.reserve-form-wrap{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+
+.reserve-info-card{
+  background:#4a4f86;
+  border-radius:12px;
+  padding:14px 16px;
+}
+
+.reserve-field-row{
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+.reserve-field-row + .reserve-field-row{
+  margin-top:12px;
+}
+.reserve-field-label{
+  width:150px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:#fff;
+  font-weight:700;
+  font-size:14px;
+}
+.reserve-field-input{
+  flex:1;
+}
+
+.reserve-inline-row{
+  display:flex;
+  align-items:center;
+  gap:18px;
+  flex-wrap:wrap;
+}
+.reserve-inline-group{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:#fff;
+  font-size:14px;
+  white-space:nowrap;
+}
+.reserve-inline-group input{
+  width:38px;
+  min-width:38px;
+  height:24px;
+  padding:0 6px;
+  text-align:center;
+  background:#8e90aa;
+}
+
+.reserve-inline-group.reserve-start-group input{
+  width:78px;
+  min-width:78px;
+}
+.reserve-submit-wrap{
+  margin-top:4px;
+}
+.reserve-submit-btn{
+  min-width:172px;
+  min-height:46px;
+  background:#4a4f86;
+  border:1px solid rgba(148,163,255,.18);
+  border-radius:10px;
+  color:#fff;
+  font-size:15px;
+  font-weight:700;
+}
+.reserve-submit-btn:hover{
+  background:#5b61a0;
+  border-color:var(--accent);
+}
+
+.reserve-select,
+.reserve-text{
+  background:#8e90aa !important;
+  color:#fff !important;
+}
+.reserve-select::placeholder,
+.reserve-text::placeholder{
+  color:#e5e7eb !important;
+}
+
+@media (max-width: 980px){
+  .reserve-screen{
+    flex-direction:column;
+  }
+  .reserve-left{
+    width:100%;
+  }
+  .reserve-main{
+    flex-direction:column;
+  }
+  .reserve-hero-card{
+    width:100%;
+    max-width:240px;
+  }
+  .reserve-top-auth{
+    margin-left:0;
+  }
+  .reserve-field-row{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .reserve-field-label{
+    width:auto;
+  }
+  .reserve-field-input{
+    width:100%;
+  }
+}
     @media (max-width:1120px){
       .content-wrapper{ flex-direction:column; }
       .sidebar{ width:100%; }
@@ -1185,101 +1446,159 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   const isUp = raid === "updoong";
   const err = String(req.query.err || "");
   const activeDay = getActiveDay(raid);
+  const codeRow = getActiveCodeRow(raid);
+  const currentCode = codeRow?.code || "";
 
   res.send(
     layout(
       `
-      <div class="box">
-        <div class="row sp">
-          <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약 신청</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
-            ${err ? `<div class="bad" style="margin-top:8px;"><b>${esc(err)}</b></div>` : ""}
-          </div>
-          <div class="row">
-            <a class="btn btnGhost" href="/">메인</a>
-            <a class="btn btnGhost" href="/check?raid=${encodeURIComponent(raid)}">예약확인</a>
-          </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="/reserve">
-          <input type="hidden" name="raid" value="${esc(raid)}"/>
-
-          <div class="formGrid">
-
-            <div class="field">
-              <label>치즈 색깔</label>
-              <select name="viewer_grade" required>
-                ${GRADE_OPTIONS.map(
-                  (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
-                ).join("")}
-              </select>
-            </div>
-
-            <div class="field">
-              <label>치지직 닉네임</label>
-              <input name="chzzk_nickname" placeholder="치지직 닉네임" required maxlength="40"/>
-            </div>
-
-            <div class="field">
-              <label>모험단 이름</label>
-              <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
-            </div>
-
-            ${
-              isUp
-                ? `
-                  <div class="field">
-                    <label>1세트</label>
-                    <label class="bigCheck">
-                      <input type="checkbox" name="up2"/>
-                    </label>
-                  </div>
-                  <div class="field">
-                    <label>2세트</label>
-                    <label class="bigCheck">
-                      <input type="checkbox" name="up22"/>
-                    </label>
-                  </div>
-                `
-                : `
-                  <div class="field">
-                    <label>딜러 갯수</label>
-                    <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
-                  </div>
-
-                  <div class="field">
-                    <label>버퍼 갯수</label>
-                    <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
-                  </div>
-                `
-            }
-
-            <div class="field fieldFull">
-              <label>원하는 시작 기수 (선택)</label>
-              <input
-                name="start_party"
-                inputmode="numeric"
-                placeholder="예) 3 (시작 원하는 기수 숫자만 작성!!)"/>
-            </div>
+      <div class="reserve-screen">
+        <aside class="reserve-left">
+          <div class="reserve-left-thumb">
+            <span class="on-air">● On Air</span>
+            <img src="/images/streamer_profile.png" alt="치지직 라이브 방송 썸네일"
+                 onerror="this.style.display='none'; this.parentNode.innerHTML='<div>치지직 라이브<br/>방송 썸네일</div>';">
           </div>
 
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" type="submit">등록</button>
+          <div class="reserve-left-menu">
+            <a href="/" class="nav-btn">메인 로비</a>
+            <a href="/lineup?raid=${encodeURIComponent(raid)}" class="nav-btn">공격대 편성표</a>
+            <a href="/check?raid=${encodeURIComponent(raid)}" class="nav-btn">예약 상황 확인</a>
           </div>
-        </form>
+        </aside>
 
-        <div class="muted" style="margin-top:12px;">
-          - 치즈 색깔을 “치즈 선택” 그대로 두면 등록이 안 됩니다.<br/>
-          - 원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다.<br/>
-          - ${
-            isUp
-              ? "업둥교환는 2업둥(1개/2개)로 신청합니다. (둘 중 하나는 반드시 체크)"
-              : "등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다."
+        <section class="reserve-right">
+          <div class="reserve-top-auth">
+            <div class="reserve-top-auth-label">🔐 인증키 입력</div>
+            <input class="reserve-text" value="${esc(currentCode)}" placeholder="스트리머가 공지한 인증키 입력" readonly />
+          </div>
+
+          ${
+            err
+              ? `<div class="bad" style="margin-top:-4px;"><b>${esc(err)}</b></div>`
+              : ``
           }
-        </div>
+
+          <div class="reserve-main">
+            <div class="reserve-hero-card">
+              <div class="reserve-hero-image">
+                <img src="${esc(raidObj.img || "")}" alt="${esc(raidObj.label)}"
+                     onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;&quot;>${esc(raidObj.label)}</div>';">
+                <div class="reserve-hero-title">${esc(raidObj.label)}</div>
+              </div>
+            </div>
+
+            <form class="reserve-form-wrap" method="POST" action="/reserve">
+              <input type="hidden" name="raid" value="${esc(raid)}"/>
+
+              <div class="reserve-info-card">
+                <div class="reserve-field-row">
+                  <div class="reserve-field-label">🧀 치즈 색깔</div>
+                  <div class="reserve-field-input">
+                    <select name="viewer_grade" class="reserve-select" required>
+                      ${GRADE_OPTIONS.map(
+                        (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
+                      ).join("")}
+                    </select>
+                  </div>
+                </div>
+
+                <div class="reserve-field-row">
+                  <div class="reserve-field-label">🟩 치지직 닉네임</div>
+                  <div class="reserve-field-input">
+                    <input
+                      name="chzzk_nickname"
+                      class="reserve-text"
+                      placeholder="치지직 닉네임"
+                      required
+                      maxlength="40"/>
+                  </div>
+                </div>
+              </div>
+
+              <div class="reserve-info-card">
+                <div class="reserve-field-row">
+                  <div class="reserve-field-label">🎮 모험단 이름</div>
+                  <div class="reserve-field-input">
+                    <input
+                      name="adventure_name"
+                      class="reserve-text"
+                      placeholder="인게임 모험단명"
+                      required
+                      maxlength="60"/>
+                  </div>
+                </div>
+
+                <div class="reserve-field-row" style="margin-top:14px;">
+                  <div class="reserve-field-input" style="width:100%;">
+                    ${
+                      isUp
+                        ? `
+                          <div class="reserve-inline-row">
+                            <label class="reserve-inline-group">
+                              <span>1세트</span>
+                              <input type="checkbox" name="up2" style="width:22px; min-width:22px; height:22px;" />
+                            </label>
+                            <label class="reserve-inline-group">
+                              <span>2세트</span>
+                              <input type="checkbox" name="up22" style="width:22px; min-width:22px; height:22px;" />
+                            </label>
+                            <label class="reserve-inline-group reserve-start-group">
+                              <span>원하는 시작 기수</span>
+                              <input
+                                name="start_party"
+                                inputmode="numeric"
+                                placeholder="선택 사항" />
+                            </label>
+                          </div>
+                        `
+                        : `
+                          <div class="reserve-inline-row">
+                            <label class="reserve-inline-group">
+                              <span>딜러</span>
+                              <input
+                                name="dealer_count"
+                                inputmode="numeric"
+                                placeholder="" required />
+                            </label>
+
+                            <label class="reserve-inline-group">
+                              <span>버퍼</span>
+                              <input
+                                name="buffer_count"
+                                inputmode="numeric"
+                                placeholder="" required />
+                            </label>
+
+                            <label class="reserve-inline-group reserve-start-group">
+                              <span>원하는 시작 기수</span>
+                              <input
+                                name="start_party"
+                                inputmode="numeric"
+                                placeholder="선택 사항" />
+                            </label>
+                          </div>
+                        `
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <div class="reserve-submit-wrap">
+                <button class="reserve-submit-btn" type="submit">등록 완료</button>
+              </div>
+
+              <div class="muted" style="margin-top:6px;">
+                진행일: <b>${esc(activeDay)}</b><br/>
+                ${
+                  isUp
+                    ? "업둥교환는 2업둥(1개/2개) 중 하나 이상 체크해야 합니다."
+                    : "원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다."
+                }
+              </div>
+            </form>
+          </div>
+        </section>
       </div>
     `,
       "예약 신청",
@@ -1287,7 +1606,6 @@ app.get("/reserve", requireViewerOk, (req, res) => {
     )
   );
 });
-
 // =====================
 // Viewer: reserve save
 // =====================
