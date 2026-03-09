@@ -204,14 +204,12 @@ function getDisabledPartySet(raidKey, dateKst) {
 }
 
 function getRaidConfig(raidKey) {
-  if (raidKey === "inhwagongjeon") {
-    return { buffersPerParty: 2, dealersPerParty: 6 };
-  }
+  if (raidKey === "inhwagongjeon") return { buffersPerParty: 2, dealersPerParty: 6 };
   return { buffersPerParty: 3, dealersPerParty: 9 };
 }
 
 // =====================
-// Layout / Styles
+// Layout
 // =====================
 function buildSidebar(activeRaid = "", isAdmin = false) {
   const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
@@ -239,7 +237,6 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
           <img src="/images/streamer_profile.png" alt="관리자 썸네일"
                onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
         </div>
-
         <button type="button" class="side-btn" onclick="openModal('modal-auth')">인증키 설정</button>
         <button type="button" class="side-btn" onclick="openModal('modal-streamer')">스트리머 예약</button>
         <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
@@ -290,6 +287,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       --danger:#ef4444;
       --success:#10b981;
       --chip-bg:rgba(107,114,255,.12);
+      --reserve-card:#535791;
+      --reserve-input:#a7a9be;
     }
 
     *{ box-sizing:border-box; font-family:'Pretendard', sans-serif; }
@@ -301,7 +300,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
         linear-gradient(180deg, #0f1024 0%, #13142b 100%);
       color:var(--text-main);
       min-height:100vh;
-      padding:32px 18px;
+      padding:20px 18px;
     }
     a{ text-decoration:none; color:inherit; }
     img{ display:block; }
@@ -312,7 +311,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       margin:0 auto;
       display:flex;
       flex-direction:column;
-      gap:22px;
+      gap:20px;
     }
 
     .header{
@@ -334,7 +333,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     .header p{
       margin:6px 0 0;
       font-size:14px;
-      color:var(--text-muted);
+      color:var(--text-main);
     }
     .made-by{
       border:1px solid var(--border-glow);
@@ -353,7 +352,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     }
 
     .sidebar{
-      width:260px;
+      width:240px;
       flex-shrink:0;
       border:1px solid var(--border-glow);
       border-radius:16px;
@@ -362,6 +361,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       display:flex;
       flex-direction:column;
       gap:12px;
+      min-height:560px;
     }
 
     .thumbnail{
@@ -369,12 +369,10 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-radius:12px;
       height:180px;
       display:flex;
-      flex-direction:column;
       align-items:center;
       justify-content:center;
       color:var(--text-muted);
       font-size:14px;
-      position:relative;
       overflow:hidden;
       border:1px solid var(--border-glow);
     }
@@ -401,8 +399,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       transition:.15s ease;
       border:1px solid transparent;
       color:var(--text-main);
-      box-shadow:none !important;
       cursor:pointer;
+      box-shadow:none !important;
     }
     .side-btn:hover{
       background:var(--border-glow);
@@ -429,17 +427,13 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       overflow:hidden;
     }
 
-    .main-area.full{
-      width:100%;
-    }
+    .main-area.full{ width:100%; }
 
     .box{
       background:rgba(38,40,77,.72);
       border-radius:12px;
       padding:18px 20px;
       border:1px solid rgba(148,163,255,.15);
-      box-shadow:none !important;
-      filter:none !important;
     }
 
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
@@ -470,17 +464,13 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       gap:8px;
       font-size:13px;
       transition:.15s ease;
-      box-shadow:none !important;
-      filter:none !important;
     }
     .btn:hover{
       background:var(--border-glow);
       border-color:var(--accent);
       transform:translateY(-1px);
     }
-    .btnGhost{
-      background:rgba(255,255,255,.02);
-    }
+    .btnGhost{ background:rgba(255,255,255,.02); }
     .btnDanger{
       background:rgba(239,68,68,.18);
       border-color:rgba(239,68,68,.32);
@@ -510,7 +500,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border:1px solid rgba(148,163,255,.25);
       color:#c7d2fe;
       font-size:12px;
-      text-shadow:none !important;
     }
 
     input, textarea, select{
@@ -524,64 +513,28 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-radius:8px;
       outline:none;
       transition:.15s ease;
-      box-shadow:none !important;
-      filter:none !important;
     }
-    input::placeholder, textarea::placeholder{ color:#b4bbd2; }
+    input::placeholder, textarea::placeholder{ color:#d7dae7; }
     input:focus, textarea:focus, select:focus{
       border-color:var(--accent);
       background:#3d4173;
     }
-    textarea{
-      resize:vertical;
-      min-height:42px;
-    }
-    select option{
-      color:#111827;
-      background:white;
-    }
+    textarea{ resize:vertical; min-height:42px; }
+    select option{ color:#111827; background:white; }
 
-    .formGrid{
-      display:grid;
-      grid-template-columns:170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
-      gap:12px;
-      align-items:end;
-    }
-    .field label{
-      display:block;
+    .adminConfirm{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:5px 10px;
+      border-radius:999px;
+      background:rgba(2,6,23,.52);
+      border:1px solid rgba(148,163,255,.32);
+      cursor:pointer;
       font-size:12px;
-      color:#cbd5e1;
-      margin:0 0 6px 2px;
+      user-select:none;
     }
-    .fieldFull{ grid-column:1 / -1; }
-
-    table{
-      width:100%;
-      border-collapse:collapse;
-      overflow:hidden;
-      border-radius:12px;
-      border:1px solid rgba(148,163,255,.2);
-      background:rgba(17,24,39,.45);
-      box-shadow:none !important;
-      filter:none !important;
-    }
-    th,td{
-      border-bottom:1px solid var(--border-light);
-      padding:10px 10px;
-      text-align:left;
-      font-size:13px;
-      vertical-align:middle;
-    }
-    th{
-      background:rgba(2,6,23,.58);
-      font-weight:700;
-      font-size:12px;
-      letter-spacing:.03em;
-      color:#c7d2fe;
-      text-transform:uppercase;
-    }
-    tr:last-child td{ border-bottom:0; }
-    .center{ text-align:center; }
+    .adminConfirm input[type="checkbox"]{ width:20px; height:20px; margin:0; }
 
     .raid-grid{
       display:grid;
@@ -631,7 +584,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       gap:14px;
     }
     .partyCard{
-      position:relative;
       width:120px;
       flex:0 0 120px;
       max-width:120px;
@@ -639,8 +591,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-radius:14px;
       border:1px solid rgba(148,163,255,.22);
       padding:12px 12px 10px;
-      box-shadow:none !important;
-      filter:none !important;
     }
     .partyHeader{
       display:flex;
@@ -657,7 +607,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
-      pointer-events:none;
     }
     .partyHeader .partyDeleteBtn{
       flex-shrink:0;
@@ -669,7 +618,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       color:#fee2e2;
       cursor:pointer;
       white-space:nowrap;
-      box-shadow:none !important;
     }
     .partyHeader .partyDeleteBtn:hover{ background:rgba(239,68,68,.28); }
     .partyBody{ display:flex; flex-direction:column; gap:10px; }
@@ -697,17 +645,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-radius:999px;
       background:#141833;
       color:var(--text-main);
-      box-shadow:none !important;
-      filter:none !important;
     }
-    .slotInput{
-      border:1px solid rgba(71,85,105,.95);
-    }
-    .slotInput:focus{
-      border-color:var(--accent);
-      outline:none;
-      box-shadow:none !important;
-    }
+    .slotInput{ border:1px solid rgba(71,85,105,.95); }
     .slotInput[disabled]{ opacity:.45; cursor:not-allowed; }
     .slotStatic{
       border:1px solid rgba(59,130,246,.55);
@@ -722,7 +661,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       align-items:flex-start;
     }
     .upPartyCard{
-      position:relative;
       width:120px;
       flex:0 0 120px;
       max-width:120px;
@@ -730,13 +668,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-radius:18px;
       border:1px solid rgba(148,163,255,.22);
       padding:12px;
-      box-shadow:none !important;
-      filter:none !important;
     }
-    .upPartyCard.disabled{
-      opacity:.5;
-      filter:saturate(.65);
-    }
+    .upPartyCard.disabled{ opacity:.5; }
     .upPartyHeader{
       display:flex;
       align-items:flex-start;
@@ -747,9 +680,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     .upPartyTitle{
       font-size:20px;
       font-weight:900;
-      letter-spacing:.02em;
       line-height:1.05;
-      word-break:keep-all;
     }
     .upPartyDeleteBtn{
       flex-shrink:0;
@@ -761,17 +692,12 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       color:#fff;
       cursor:pointer;
       white-space:nowrap;
-      box-shadow:none !important;
     }
     .upPartyDeleteBtn:hover{ background:rgba(239,68,68,.3); }
     .upPartySlots{
       display:flex;
       flex-direction:column;
       gap:12px;
-      padding:0;
-      border-radius:12px;
-      background:transparent;
-      border:0;
     }
     .upGroupBox{
       display:flex;
@@ -790,13 +716,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-radius:999px;
       background:#141833;
       color:var(--text-main);
-      box-shadow:none !important;
     }
     .upPartyCard .slotInput{ border:1px solid rgba(71,85,105,.95); }
-    .upPartyCard .slotInput:focus{
-      border-color:var(--accent);
-      outline:none;
-    }
     .upPartyCard .slotStatic{
       border:1px solid rgba(59,130,246,.55);
       text-align:center;
@@ -825,9 +746,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       justify-content:center;
       backdrop-filter:blur(4px);
     }
-    .modal-overlay.active{
-      display:flex;
-    }
+    .modal-overlay.active{ display:flex; }
     .modal-content{
       width:min(560px, calc(100vw - 32px));
       background:linear-gradient(180deg, rgba(27,28,59,.98), rgba(24,25,52,.98));
@@ -836,9 +755,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       padding:22px 20px 18px;
       position:relative;
     }
-    .modal-header{
-      margin-bottom:16px;
-    }
+    .modal-header{ margin-bottom:16px; }
     .modal-header h3{
       margin:0 0 6px;
       font-size:18px;
@@ -884,166 +801,101 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       min-width:140px;
     }
 
-    /* =========================
-       Viewer Reserve Screen
-    ========================= */
-    .viewer-reserve-shell{
+    /* viewer reserve */
+    .reserve-shell{
       width:100%;
-      max-width:840px;
+      max-width:560px;
       margin:0 auto;
       border:1px solid var(--border-glow);
       border-radius:14px;
-      padding:18px;
-      background:rgba(18,20,90,.45);
+      padding:10px 10px 14px;
+      background:rgba(18,20,90,.36);
     }
-    .viewer-reserve-inner{
+    .reserve-form{
       display:flex;
-      gap:20px;
-      align-items:stretch;
+      flex-direction:column;
+      gap:16px;
     }
-    .viewer-reserve-left{
-      width:205px;
+    .reserve-card{
+      background:var(--reserve-card);
+      border-radius:12px;
+      padding:14px 18px;
+    }
+    .reserve-auth-row{
+      display:flex;
+      align-items:center;
+      gap:16px;
+    }
+    .reserve-auth-label{
+      width:124px;
       flex-shrink:0;
-      border:1px solid var(--border-glow);
-      border-radius:12px;
-      padding:14px;
-      background:rgba(38,40,77,.45);
       display:flex;
-      flex-direction:column;
-      gap:14px;
-    }
-    .viewer-raid-thumb{
-      width:100%;
-      aspect-ratio:1 / 1;
-      border-radius:12px;
-      overflow:hidden;
-      background:#3c3f74;
-      border:1px solid rgba(148,163,255,.15);
-      position:relative;
-    }
-    .viewer-raid-thumb img{
-      width:100%;
-      height:100%;
-      object-fit:cover;
-    }
-    .viewer-raid-thumb-title{
-      position:absolute;
-      left:0;
-      right:0;
-      bottom:0;
-      padding:12px 10px 10px;
-      background:linear-gradient(transparent, rgba(0,0,0,.85));
-      text-align:center;
-      font-weight:800;
-      font-size:14px;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      font-weight:700;
       color:#fff;
-    }
-    .viewer-left-menu{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    .viewer-left-menu .viewer-nav-btn{
-      width:100%;
-      min-height:42px;
-      border:1px solid rgba(148,163,255,.16);
-      background:#46497d;
-      border-radius:10px;
-      color:#f8fafc;
+      white-space:nowrap;
       font-size:14px;
-      font-weight:600;
+    }
+    .reserve-line{
+      display:flex;
+      align-items:center;
+      gap:16px;
+    }
+    .reserve-line + .reserve-line{
+      margin-top:14px;
+    }
+    .reserve-label{
+      width:124px;
+      flex-shrink:0;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      font-weight:700;
+      color:#fff;
+      white-space:nowrap;
+      font-size:14px;
+    }
+    .reserve-field{
+      flex:1;
+      min-width:0;
+    }
+    .reserve-input,
+    .reserve-select,
+    .reserve-mini{
+      background:var(--reserve-input) !important;
+      color:#fff !important;
+      border-radius:8px !important;
+      border:none !important;
+      height:40px;
+    }
+    .reserve-input::placeholder,
+    .reserve-mini::placeholder{
+      color:#ececf3 !important;
+    }
+    .reserve-mini{
+      width:36px;
+      min-width:36px;
+      text-align:center;
+      padding:0 6px !important;
+      height:26px;
+      border-radius:4px !important;
+    }
+    .reserve-start{
+      width:78px;
+      min-width:78px;
+    }
+    .reserve-meta-row{
       display:flex;
       align-items:center;
       justify-content:center;
-      text-align:center;
-      transition:.15s ease;
-    }
-    .viewer-left-menu .viewer-nav-btn:hover{
-      background:#555a93;
-      border-color:var(--accent);
-    }
-
-    .viewer-reserve-right{
-      flex:1;
-      border:1px solid var(--border-glow);
-      border-radius:12px;
-      padding:18px;
-      background:rgba(38,40,77,.35);
-      display:flex;
-      flex-direction:column;
-      gap:18px;
-    }
-
-    .viewer-auth-bar{
-      background:#4a4f86;
-      border-radius:10px;
-      padding:12px 16px;
-      display:flex;
-      align-items:center;
-      gap:12px;
-    }
-    .viewer-auth-label{
-      min-width:130px;
-      display:flex;
-      align-items:center;
       gap:8px;
-      font-size:14px;
-      font-weight:700;
-      color:#fff;
-      white-space:nowrap;
-    }
-    .viewer-auth-input{
-      flex:1;
-    }
-
-    .viewer-form-card{
-      background:#4a4f86;
-      border-radius:12px;
-      padding:16px 18px;
-    }
-    .viewer-form-row{
-      display:flex;
-      align-items:center;
-      gap:14px;
-    }
-    .viewer-form-row + .viewer-form-row{
-      margin-top:12px;
-    }
-    .viewer-form-label{
-      width:130px;
-      flex-shrink:0;
-      display:flex;
-      align-items:center;
-      gap:10px;
-      color:#fff;
-      font-weight:700;
-      font-size:14px;
-      white-space:nowrap;
-    }
-    .viewer-form-input{
-      flex:1;
-    }
-
-    .viewer-select,
-    .viewer-text,
-    .viewer-mini-input{
-      background:#989ab3 !important;
-      color:#fff !important;
-    }
-    .viewer-select::placeholder,
-    .viewer-text::placeholder,
-    .viewer-mini-input::placeholder{
-      color:#e5e7eb !important;
-    }
-
-    .viewer-inline-row{
-      display:flex;
-      align-items:center;
-      gap:14px;
       flex-wrap:wrap;
-      margin-left:130px;
+      margin-top:14px;
     }
-    .viewer-inline-item{
+    .reserve-meta-item{
       display:flex;
       align-items:center;
       gap:6px;
@@ -1051,28 +903,15 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       font-size:14px;
       white-space:nowrap;
     }
-    .viewer-mini-input{
-      width:34px;
-      min-width:34px;
-      height:24px;
-      padding:0 6px;
-      text-align:center;
-      border-radius:4px;
-    }
-    .viewer-start-input{
-      width:74px;
-      min-width:74px;
-    }
-
-    .viewer-submit-wrap{
+    .reserve-submit-wrap{
       display:flex;
       justify-content:center;
       margin-top:-2px;
     }
-    .viewer-submit-btn{
+    .reserve-submit{
       min-width:160px;
       min-height:42px;
-      background:#4a4f86;
+      background:#4f5591;
       border:1px solid rgba(148,163,255,.18);
       border-radius:10px;
       color:#fff;
@@ -1080,66 +919,48 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       font-weight:700;
       cursor:pointer;
     }
-    .viewer-submit-btn:hover{
-      background:#5b61a0;
+    .reserve-submit:hover{
+      background:#6067ab;
       border-color:var(--accent);
+    }
+    .reserve-foot{
+      color:#c6c9db;
+      font-size:13px;
+      line-height:1.6;
+      margin-top:8px;
     }
 
     @media (max-width:1120px){
       .content-wrapper{ flex-direction:column; }
-      .sidebar{ width:100%; }
+      .sidebar{ width:100%; min-height:auto; }
       .thumbnail{ height:160px; }
     }
-    @media (max-width:980px){
-      .formGrid{ grid-template-columns:1fr 1fr; }
-      .fieldFull{ grid-column:1 / -1; }
-      .viewer-reserve-inner{
-        flex-direction:column;
-      }
-      .viewer-reserve-left{
-        width:100%;
-      }
-      .viewer-form-row{
-        flex-direction:column;
-        align-items:flex-start;
-      }
-      .viewer-form-label{
-        width:auto;
-      }
-      .viewer-form-input{
-        width:100%;
-      }
-      .viewer-inline-row{
-        margin-left:0;
-      }
-      .viewer-auth-bar{
-        flex-direction:column;
-        align-items:stretch;
-      }
-      .viewer-auth-label{
-        min-width:0;
-      }
-    }
     @media (max-width:640px){
-      body{ padding:18px 12px; }
+      body{ padding:14px 10px; }
       .header{
-        padding:18px 18px;
+        padding:18px;
         flex-direction:column;
         align-items:flex-start;
       }
       .header h1{ font-size:24px; }
-      .main-area{ padding:18px; min-height:auto; }
+      .main-area{ padding:16px; min-height:auto; }
       .raid-grid{ grid-template-columns:1fr; }
-    }
-    @media (max-width:520px){
-      .formGrid{ grid-template-columns:1fr; }
-      .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
-      .modal-content{ width:calc(100vw - 20px); }
-      .viewer-reserve-shell{
-        padding:12px;
+      .reserve-auth-row,
+      .reserve-line{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:10px;
       }
-      .viewer-reserve-right{
-        padding:14px;
+      .reserve-auth-label,
+      .reserve-label{
+        width:auto;
+        justify-content:flex-start;
+      }
+      .reserve-field{
+        width:100%;
+      }
+      .reserve-meta-row{
+        justify-content:flex-start;
       }
     }
   </style>
@@ -1292,151 +1113,139 @@ app.get("/reserve", (req, res) => {
   res.send(
     layout(
       `
-      <div class="viewer-reserve-shell">
-        <div class="viewer-reserve-inner">
-          <aside class="viewer-reserve-left">
-            <div class="viewer-raid-thumb">
-              <img src="${esc(raidObj.img || "")}" alt="${esc(raidObj.label)}"
-                   onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;&quot;>${esc(raidObj.label)}</div>';">
-              <div class="viewer-raid-thumb-title">${esc(raidObj.label)}</div>
+      <div class="reserve-shell">
+        <form class="reserve-form" method="POST" action="/reserve">
+          <input type="hidden" name="raid" value="${esc(raid)}"/>
+
+          <div class="reserve-card">
+            <div class="reserve-auth-row">
+              <div class="reserve-auth-label">🔐 인증키 입력</div>
+              <div class="reserve-field">
+                <input
+                  name="code"
+                  class="reserve-input"
+                  placeholder="스트리머가 공지한 인증키 입력"
+                  required />
+              </div>
+            </div>
+          </div>
+
+          <div class="reserve-card">
+            <div class="reserve-line">
+              <div class="reserve-label">🧀 치즈 색깔</div>
+              <div class="reserve-field">
+                <select name="viewer_grade" class="reserve-select" required>
+                  ${GRADE_OPTIONS.map(
+                    (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
+                  ).join("")}
+                </select>
+              </div>
             </div>
 
-            <div class="viewer-left-menu">
-              <a href="/" class="viewer-nav-btn">메인 로비</a>
-              <a href="/lineup?raid=${encodeURIComponent(raid)}" class="viewer-nav-btn">공격대 편성표</a>
-              <a href="/check?raid=${encodeURIComponent(raid)}" class="viewer-nav-btn">예약 상황 확인</a>
+            <div class="reserve-line">
+              <div class="reserve-label">🟩 치지직 닉네임</div>
+              <div class="reserve-field">
+                <input
+                  name="chzzk_nickname"
+                  class="reserve-input"
+                  placeholder=""
+                  required
+                  maxlength="40"/>
+              </div>
             </div>
-          </aside>
+          </div>
 
-          <section class="viewer-reserve-right">
-            <form method="POST" action="/reserve">
-              <input type="hidden" name="raid" value="${esc(raid)}"/>
-
-              <div class="viewer-auth-bar">
-                <div class="viewer-auth-label">🔐 인증키 입력</div>
-                <div class="viewer-auth-input">
-                  <input
-                    name="code"
-                    class="viewer-text"
-                    placeholder="스트리머가 공지한 인증키 입력"
-                    required />
-                </div>
+          <div class="reserve-card">
+            <div class="reserve-line">
+              <div class="reserve-label">🎮 모험단 이름</div>
+              <div class="reserve-field">
+                <input
+                  name="adventure_name"
+                  class="reserve-input"
+                  placeholder=""
+                  required
+                  maxlength="60"/>
               </div>
-
-              ${err ? `<div class="bad" style="margin:12px 0 0;"><b>${esc(err)}</b></div>` : ``}
-
-              <div class="viewer-form-card" style="margin-top:18px;">
-                <div class="viewer-form-row">
-                  <div class="viewer-form-label">🧀 치즈 색깔</div>
-                  <div class="viewer-form-input">
-                    <select name="viewer_grade" class="viewer-select" required>
-                      ${GRADE_OPTIONS.map(
-                        (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
-                      ).join("")}
-                    </select>
-                  </div>
-                </div>
-
-                <div class="viewer-form-row">
-                  <div class="viewer-form-label">🟩 치지직 닉네임</div>
-                  <div class="viewer-form-input">
-                    <input
-                      name="chzzk_nickname"
-                      class="viewer-text"
-                      placeholder=""
-                      required
-                      maxlength="40"/>
-                  </div>
-                </div>
-              </div>
-
-              <div class="viewer-form-card" style="margin-top:18px;">
-                <div class="viewer-form-row">
-                  <div class="viewer-form-label">🎮 모험단 이름</div>
-                  <div class="viewer-form-input">
-                    <input
-                      name="adventure_name"
-                      class="viewer-text"
-                      placeholder=""
-                      required
-                      maxlength="60"/>
-                  </div>
-                </div>
-
-                ${
-                  isUp
-                    ? `
-                      <div class="viewer-inline-row" style="margin-top:16px;">
-                        <label class="viewer-inline-item">
-                          <span>1세트</span>
-                          <input type="checkbox" name="up2" style="width:22px; min-width:22px; height:22px;" />
-                        </label>
-
-                        <label class="viewer-inline-item">
-                          <span>2세트</span>
-                          <input type="checkbox" name="up22" style="width:22px; min-width:22px; height:22px;" />
-                        </label>
-
-                        <label class="viewer-inline-item">
-                          <span>원하는 시작 기수</span>
-                          <input
-                            name="start_party"
-                            class="viewer-mini-input viewer-start-input"
-                            inputmode="numeric"
-                            placeholder="선택 사항" />
-                        </label>
-                      </div>
-                    `
-                    : `
-                      <div class="viewer-inline-row" style="margin-top:16px;">
-                        <label class="viewer-inline-item">
-                          <span>딜러</span>
-                          <input
-                            name="dealer_count"
-                            class="viewer-mini-input"
-                            inputmode="numeric"
-                            placeholder=""
-                            required />
-                        </label>
-
-                        <label class="viewer-inline-item">
-                          <span>버퍼</span>
-                          <input
-                            name="buffer_count"
-                            class="viewer-mini-input"
-                            inputmode="numeric"
-                            placeholder=""
-                            required />
-                        </label>
-
-                        <label class="viewer-inline-item">
-                          <span>원하는 시작 기수</span>
-                          <input
-                            name="start_party"
-                            class="viewer-mini-input viewer-start-input"
-                            inputmode="numeric"
-                            placeholder="선택 사항" />
-                        </label>
-                      </div>
-                    `
-                }
-              </div>
-
-              <div class="viewer-submit-wrap" style="margin-top:16px;">
-                <button class="viewer-submit-btn" type="submit">등록 완료</button>
-              </div>
-            </form>
-
-            <div class="muted" style="margin-top:8px;">
-              진행일: <b>${esc(activeDay)}</b><br/>
-              ${
-                isUp
-                  ? "업둥교환는 1세트 또는 2세트 중 하나 이상 체크해야 합니다."
-                  : "원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다."
-              }
             </div>
-          </section>
-        </div>
+
+            ${
+              isUp
+                ? `
+                  <div class="reserve-meta-row">
+                    <label class="reserve-meta-item">
+                      <span>1세트</span>
+                      <input type="checkbox" name="up2" style="width:22px; min-width:22px; height:22px;" />
+                    </label>
+
+                    <label class="reserve-meta-item">
+                      <span>2세트</span>
+                      <input type="checkbox" name="up22" style="width:22px; min-width:22px; height:22px;" />
+                    </label>
+
+                    <label class="reserve-meta-item">
+                      <span>원하는 시작 기수</span>
+                      <input
+                        name="start_party"
+                        class="reserve-mini reserve-start"
+                        inputmode="numeric"
+                        placeholder="선택 사항" />
+                    </label>
+                  </div>
+                `
+                : `
+                  <div class="reserve-meta-row">
+                    <label class="reserve-meta-item">
+                      <span>딜러</span>
+                      <input
+                        name="dealer_count"
+                        class="reserve-mini"
+                        inputmode="numeric"
+                        placeholder=""
+                        required />
+                    </label>
+
+                    <label class="reserve-meta-item">
+                      <span>버퍼</span>
+                      <input
+                        name="buffer_count"
+                        class="reserve-mini"
+                        inputmode="numeric"
+                        placeholder=""
+                        required />
+                    </label>
+
+                    <label class="reserve-meta-item">
+                      <span>원하는 시작 기수</span>
+                      <input
+                        name="start_party"
+                        class="reserve-mini reserve-start"
+                        inputmode="numeric"
+                        placeholder="선택 사항" />
+                    </label>
+                  </div>
+                `
+            }
+          </div>
+
+          <div class="reserve-submit-wrap">
+            <button class="reserve-submit" type="submit">등록 완료</button>
+          </div>
+
+          ${
+            err
+              ? `<div class="bad"><b>${esc(err)}</b></div>`
+              : ``
+          }
+
+          <div class="reserve-foot">
+            진행일: <b>${esc(activeDay)}</b><br/>
+            ${
+              isUp
+                ? "업둥교환는 1세트 또는 2세트 중 하나를 반드시 체크해야 합니다."
+                : "원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다."
+            }
+          </div>
+        </form>
       </div>
     `,
       "예약 신청",
@@ -1933,12 +1742,11 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 }
 
 // =====================
-// 업둥교환 자동배치
+// Updoong auto lineup
 // =====================
 function rebuildUpdoongLineup(dateKst) {
   const MAX_PARTY = 2;
   const SLOTS_PER_PARTY = 12;
-
   const disabledSet = getDisabledPartySet("updoong", dateKst);
 
   db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
@@ -1964,23 +1772,18 @@ function rebuildUpdoongLineup(dateKst) {
   const usedCount = new Map();
   const nameSet = new Map();
 
-  function getUsed(p) {
-    return usedCount.get(p) || 0;
-  }
+  function getUsed(p) { return usedCount.get(p) || 0; }
   function getNames(p) {
     if (!nameSet.has(p)) nameSet.set(p, new Set());
     return nameSet.get(p);
   }
-  function isFull(p) {
-    return getUsed(p) >= SLOTS_PER_PARTY;
-  }
+  function isFull(p) { return getUsed(p) >= SLOTS_PER_PARTY; }
   function add(p, name, appId) {
     const slot = (p - 1) * SLOTS_PER_PARTY + (getUsed(p) + 1);
     usedCount.set(p, getUsed(p) + 1);
     getNames(p).add(name);
     insert.run(dateKst, slot, name, appId, nowISO());
   }
-
   function findFirstAvailableParty(name) {
     for (let p = 1; p <= MAX_PARTY; p++) {
       if (disabledSet.has(p)) continue;
@@ -1990,7 +1793,6 @@ function rebuildUpdoongLineup(dateKst) {
     }
     return 0;
   }
-
   function findAvailablePartyPreferNext(name, baseParty) {
     for (let p = baseParty + 1; p <= MAX_PARTY; p++) {
       if (disabledSet.has(p)) continue;
@@ -2006,7 +1808,6 @@ function rebuildUpdoongLineup(dateKst) {
     if (!name) continue;
 
     const cnt = a.up22 === 1 ? 2 : 1;
-
     const p1 = findFirstAvailableParty(name);
     if (!p1) continue;
     add(p1, name, a.id);
@@ -2130,7 +1931,7 @@ function applyLineupForApplication(appId, confirmed) {
 }
 
 // =====================
-// Admin routing
+// Admin routes
 // =====================
 app.get(ADMIN_BASE, (req, res) => {
   const key = String(req.cookies.admin_key || "");
@@ -2305,9 +2106,9 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         <div class="divider"></div>
 
         <div class="muted">
+          - 레이드를 선택하면 좌측 썸네일이 해당 레이드 이미지로 바뀝니다.<br/>
           - 좌측의 <b>인증키 설정</b> 버튼: 진행일/인증키 등록 팝업<br/>
-          - 좌측의 <b>스트리머 예약</b> 버튼: 스트리머 캐릭터 등록 팝업<br/>
-          - 레이드 카드를 누르면 해당 레이드 신청 목록으로 이동합니다.
+          - 좌측의 <b>스트리머 예약</b> 버튼: 스트리머 캐릭터 등록 팝업
         </div>
       </div>
 
@@ -2356,9 +2157,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   dealer_count = Math.max(0, Math.min(999, Math.floor(dealer_count)));
   buffer_count = Math.max(0, Math.min(999, Math.floor(buffer_count)));
 
-  if (dealer_count === 0 && buffer_count === 0) {
-    return res.redirect(`${ADMIN_BASE}/raid`);
-  }
+  if (dealer_count === 0 && buffer_count === 0) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
 
@@ -2383,8 +2182,7 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   const up = String(req.body.up || "");
   const group = String(req.body.group || "");
 
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
 
@@ -2420,9 +2218,7 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   if (raid === "updoong") {
     rebuildUpdoongLineup(dateKst);
   } else {
-    for (const r of targetRows) {
-      applyLineupForApplication(Number(r.id), true);
-    }
+    for (const r of targetRows) applyLineupForApplication(Number(r.id), true);
   }
 
   const upQS = up === "1" || up === "2" ? `&up=${encodeURIComponent(up)}` : "";
@@ -2444,16 +2240,11 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time${isUp && upFilter ? `&up=${encodeURIComponent(upFilter)}` : ""}`
       : `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=grade${isUp && upFilter ? `&up=${encodeURIComponent(upFilter)}` : ""}`;
 
-  let apps = db
-    .prepare(`SELECT * FROM applications WHERE date_kst=? AND raid_key=?`)
-    .all(activeDay, raid);
+  let apps = db.prepare(`SELECT * FROM applications WHERE date_kst=? AND raid_key=?`).all(activeDay, raid);
 
   if (isUp) {
-    if (upFilter === "1") {
-      apps = apps.filter((a) => a.up2 === 1 || a.up22 === 1);
-    } else if (upFilter === "2") {
-      apps = apps.filter((a) => a.up22 === 1);
-    }
+    if (upFilter === "1") apps = apps.filter((a) => a.up2 === 1 || a.up22 === 1);
+    else if (upFilter === "2") apps = apps.filter((a) => a.up22 === 1);
   }
 
   if (sort === "grade" || (isUp && upFilter)) {
@@ -2471,7 +2262,9 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const upFilter1Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=1`;
   const upFilter2Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=2`;
 
-  const bulkUpHidden = isUp && (upFilter === "1" || upFilter === "2") ? `<input type="hidden" name="up" value="${esc(upFilter)}"/>` : "";
+  const bulkUpHidden = isUp && (upFilter === "1" || upFilter === "2")
+    ? `<input type="hidden" name="up" value="${esc(upFilter)}"/>`
+    : "";
 
   const bulkButtonsHtml = `
     <div class="divider"></div>
@@ -2481,7 +2274,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
     </div>
     <div class="row" style="gap:8px;">
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('불타는 치즈 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('불타는 치즈 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2490,7 +2283,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('분홍색 치즈 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('분홍색 치즈 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2499,7 +2292,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('노란색 치즈 & 통나무 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('노란색 치즈 & 통나무 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2508,7 +2301,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('일반 치즈 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('일반 치즈 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2527,9 +2320,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">신청목록</div>
             <div class="muted">
               레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
-              <span class="chip">등록완료 ${
-                apps.filter((a) => a.confirmed === 1).length
-              }/${apps.length}</span>
+              <span class="chip">등록완료 ${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
             </div>
           </div>
           <div class="row">
@@ -2635,12 +2426,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
               : `<tr><td colspan="8" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
-
-        <div class="muted" style="margin-top:12px;">
-          - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
-          - “원하는 시작 기수”는 선택 항목이며, 자동 배치 시 해당 기수부터 배치를 시작하기 위한 참고용입니다.<br/>
-          - 업둥교환 필터에서 “2세트”는 2세트 체크 신청자만 표시됩니다.
-        </div>
       </div>
     `,
       "신청목록",
@@ -2686,15 +2471,7 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   const activeDay = getActiveDay(raid);
 
   db.prepare("DELETE FROM applications WHERE date_kst=? AND raid_key=?").run(activeDay, raid);
-
-  db.prepare(
-    `
-    DELETE FROM raid_lineups
-    WHERE date_kst=? AND raid_key=?
-    AND application_id IS NOT NULL
-  `
-  ).run(activeDay, raid);
-
+  db.prepare(`DELETE FROM raid_lineups WHERE date_kst=? AND raid_key=? AND application_id IS NOT NULL`).run(activeDay, raid);
   db.prepare(`DELETE FROM up_lineups WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
   db.prepare(`DELETE FROM raid_disabled_parties WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
 
@@ -2721,7 +2498,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
       minPartyCount: 1,
     });
 
-    res.send(
+    return res.send(
       layout(
         `
         <div class="box">
@@ -2735,7 +2512,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
               <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
                 <input type="hidden" name="raid" value="${esc(raid)}"/>
                 <button class="btn btnDanger" type="submit"
-                  onclick="return confirm('업둥교환 편성표/세트 비활성 상태를 초기화합니다.\\n(편성표가 비워지고, 삭제된 세트도 복구됩니다)');">
+                  onclick="return confirm('업둥교환 편성표/세트 비활성 상태를 초기화합니다.');">
                   편성표 초기화
                 </button>
               </form>
@@ -2757,19 +2534,12 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
             <input type="hidden" name="raid" value="updoong"/>
             <input type="hidden" id="deleteUpPartyIndexInput" name="party_index" value=""/>
           </form>
-
-          <div class="muted" style="margin-top:12px;">
-            - 빈 칸으로 저장하면 해당 슬롯은 비워집니다.<br/>
-            - 자동배치는 “신청목록에서 등록완료 체크”를 기준으로 예약순으로 다시 채워집니다.<br/>
-            - 삭제된 세트(비활성)는 자동배치/수동저장 모두 건너뜁니다.
-          </div>
         </div>
       `,
         "업둥교환 편성표",
         { isAdmin: true, activeRaid: raid }
       )
     );
-    return;
   }
 
   const cfg = getRaidConfig(raid);
@@ -2808,7 +2578,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
             <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <button class="btn btnDanger" type="submit"
-                onclick="return confirm('현재 레이드의 공대 진행도를 모두 초기화합니다.\\n모든 공대 편성이 삭제되고 비활성 상태도 해제되어 1공대부터 다시 편성할 수 있습니다.');">
+                onclick="return confirm('현재 레이드의 공대 진행도를 모두 초기화합니다.');">
                 공대 진행도 초기화
               </button>
             </form>
@@ -2830,12 +2600,6 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <input type="hidden" id="deleteRaidInput" name="raid" value="${esc(raid)}"/>
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
-
-        <div class="muted" style="margin-top:12px;">
-          - 빈 칸으로 두고 저장하면 해당 슬롯의 인원이 삭제됩니다.<br/>
-          - 공대 삭제 버튼을 누르면 해당 공대의 인원은 삭제되며, 공대 진행도 초기화를 하기 전까지 비활성 상태가 됩니다.<br/>
-          - “공대 진행도 초기화”를 누르면 이 레이드의 공대 편성이 모두 삭제되고 비활성 공대 설정도 해제됩니다.
-        </div>
       </div>
     `,
       "공대 편성표",
@@ -2846,8 +2610,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
 app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
 
@@ -2864,8 +2627,7 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
 
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
   const cfg = getRaidConfig(raid);
@@ -2886,14 +2648,12 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
     if (disabledSet.has(p)) continue;
 
     for (let b = 1; b <= cfg.buffersPerParty; b++) {
-      const key = `b_${p}_${b}`;
-      const name = String(req.body[key] || "").trim();
+      const name = String(req.body[`b_${p}_${b}`] || "").trim();
       if (!name) continue;
       insert.run(dateKst, raid, p, "buffer", b, name, nowISO());
     }
     for (let d = 1; d <= cfg.dealersPerParty; d++) {
-      const key = `d_${p}_${d}`;
-      const name = String(req.body[key] || "").trim();
+      const name = String(req.body[`d_${p}_${d}`] || "").trim();
       if (!name) continue;
       insert.run(dateKst, raid, p, "dealer", d, name, nowISO());
     }
@@ -2903,8 +2663,7 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
 });
 
 app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  if (raid !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
+  if (String(req.body.raid || "") !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay("updoong");
   const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2924,9 +2683,7 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   for (let i = 1; i <= maxSlot; i++) {
     const party = upPartyFromSlot(i);
     if (disabledSet.has(party)) continue;
-
-    const key = `u_${i}`;
-    const name = String(req.body[key] || "").trim();
+    const name = String(req.body[`u_${i}`] || "").trim();
     if (!name) continue;
     insert.run(dateKst, i, name, nowISO());
   }
@@ -2936,8 +2693,7 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
 
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const partyIndex = Number(req.body.party_index || 0);
   if (!partyIndex) return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
@@ -2971,7 +2727,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
 
     const newDealer = Math.max(0, Number(appRow.dealer_count || 0) - (u.usedDealers || 0));
     const newBuffer = Math.max(0, Number(appRow.buffer_count || 0) - (u.usedBuffers || 0));
-
     db.prepare(`UPDATE applications SET dealer_count=?, buffer_count=? WHERE id=?`).run(newDealer, newBuffer, appId);
   }
 
@@ -2989,8 +2744,7 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
 });
 
 app.post(`${ADMIN_BASE}/lineup/delete-up-party`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  if (raid !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
+  if (String(req.body.raid || "") !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
 
   const partyIndex = Number(req.body.party_index || 0);
   if (!partyIndex) return res.redirect(`${ADMIN_BASE}/lineup?raid=updoong`);
@@ -3085,13 +2839,7 @@ app.get("/lineup", (req, res) => {
           </div>
 
           <div class="divider"></div>
-
           ${upHtml}
-
-          <div class="muted" style="margin-top:12px;">
-            - 삭제된 세트는 비활성 상태입니다.<br/>
-            - 편성은 스트리머가 수동/자동으로 조정할 수 있습니다.
-          </div>
         </div>
       `,
         "업둥교환 편성표",
@@ -3101,7 +2849,6 @@ app.get("/lineup", (req, res) => {
   }
 
   const cfg = getRaidConfig(raid);
-
   const lineups = db
     .prepare(
       `
@@ -3136,13 +2883,7 @@ app.get("/lineup", (req, res) => {
         </div>
 
         <div class="divider"></div>
-
         ${partyCardsHtml}
-
-        <div class="muted" style="margin-top:12px;">
-          - 실제 진행 상황에 따라 스트리머가 수동으로 수정할 수 있습니다.<br/>
-          - 빈 공대가 보인다면 아직 편성이 이루어지지 않은 상태이거나, 삭제된 공대일 수 있습니다.
-        </div>
       </div>
     `,
       "공대 편성표",
