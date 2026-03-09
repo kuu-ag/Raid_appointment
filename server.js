@@ -34,7 +34,7 @@ const RAID_OPTIONS = [
   { key: "dirige", label: "디레지에", img: "/images/dirige.png" },
   { key: "dirige-hard", label: "디레지에-악연", img: "/images/dirige_hard.png" },
   { key: "inhwagongjeon", label: "이내황혼전", img: "/images/inhwagongjeon.png" },
-  { key: "nabel-hard", label: "나벨 - 하드모드", img: "/images/nabel_hard.png" },
+  { key: "nabel-hard", label: "나벨 - 하드", img: "/images/nabel_hard.png" },
   { key: "updoong", label: "업둥교환", img: "/images/updoong.png" },
 ];
 
@@ -1073,12 +1073,7 @@ app.get("/", (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:700;font-size:20px;margin-bottom:6px;">진행할 레이드를 선택하세요</div>
-            <div class="muted">레이드를 선택 → 인증키 입력 → 예약 신청</div>
-          </div>
-          <div class="row">
-            <a class="btn btnPrimary" href="/lineup">공대편성표 보기</a>
-            <a class="btn btnGhost" href="/check">예약확인</a>
-          </div>
+          </div
         </div>
 
         <div class="divider"></div>
