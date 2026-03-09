@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 dotenv.config();
 
 const app = express();
+app.use(express.static("public"));
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
@@ -30,11 +31,11 @@ const ADMIN_BASE = "/" + ADMIN_PATH;
 // Options
 // =====================
 const RAID_OPTIONS = [
-  { key: "dirige", label: "디레지에" },
-  { key: "dirige-hard", label: "디레지에-악연" },
-  { key: "inhwagongjeon", label: "이내황혼전" },
-  { key: "nabel-hard", label: "나벨 - 하드모드" },
-  { key: "updoong", label: "업둥교환" },
+  { key: "dirige", label: "디레지에", img: "/images/dirige.png" },
+  { key: "dirige-hard", label: "디레지에 : 악연", img: "/images/dirige_hard.png" },
+  { key: "inhwagongjeon", label: "이내황혼전", img: "/images/inhwagongjeon.png" },
+  { key: "nabel-hard", label: "인공신 나벨 : 하드", img: "/images/nabel_hard.png" },
+  { key: "updoong", label: "업둥교환", img: "/images/updoong.png" },
 ];
 
 const GRADE_OPTIONS = [
@@ -46,7 +47,6 @@ const GRADE_OPTIONS = [
   { key: "normal", label: "일반 치즈" },
 ];
 
-// 정렬 우선순위: 스트리머 > 불타는 > 분홍 > 노란/통나무 > 일반
 const GRADE_SORT = {
   streamer: 0,
   burning: 1,
@@ -79,7 +79,6 @@ CREATE TABLE IF NOT EXISTS applications (
 
   is_streamer INTEGER NOT NULL DEFAULT 0,
 
-  --  전용 (2업둥 1개/2개)
   up2 INTEGER NOT NULL DEFAULT 0,
   up22 INTEGER NOT NULL DEFAULT 0,
 
@@ -92,7 +91,6 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
--- 레이드별 진행일 + 인증키
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
@@ -100,13 +98,12 @@ CREATE TABLE IF NOT EXISTS day_codes (
   updated_at TEXT NOT NULL
 );
 
-/* 일반 레이드 편성표 */
 CREATE TABLE IF NOT EXISTS raid_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
   party_index INTEGER NOT NULL,
-  role TEXT NOT NULL,           -- 'buffer' | 'dealer'
+  role TEXT NOT NULL,
   slot_index INTEGER NOT NULL,
   nickname TEXT NOT NULL,
   application_id INTEGER,
@@ -116,7 +113,6 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
 CREATE INDEX IF NOT EXISTS idx_lineups_key
 ON raid_lineups(date_kst, raid_key, party_index);
 
-/* 비활성 공대 (일반 레이드 +  공대도 같이 사용) */
 CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -125,12 +121,11 @@ CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   UNIQUE(date_kst, raid_key, party_index)
 );
 
-/*  편성표 (버퍼/딜러 구분 없음, slot_index 연속 저장) */
 CREATE TABLE IF NOT EXISTS up_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
-  slot_index INTEGER NOT NULL, -- 1..N (12명=1공대)
+  slot_index INTEGER NOT NULL,
   nickname TEXT NOT NULL,
   application_id INTEGER,
   created_at TEXT NOT NULL,
@@ -139,9 +134,22 @@ CREATE TABLE IF NOT EXISTS up_lineups (
 
 CREATE INDEX IF NOT EXISTS idx_up_lineups_key
 ON up_lineups(date_kst, raid_key, slot_index);
+
+CREATE TABLE IF NOT EXISTS raid_party_templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date_kst TEXT NOT NULL,
+  raid_key TEXT NOT NULL,
+  party_index INTEGER NOT NULL,
+  buffer_slots INTEGER NOT NULL,
+  dealer_slots INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(date_kst, raid_key, party_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_party_templates_key
+ON raid_party_templates(date_kst, raid_key, party_index);
 `);
 
-// 컬럼 체크
 function ensureColumn(table, colName, colDDL) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   const has = cols.some((c) => String(c.name) === colName);
@@ -151,8 +159,6 @@ function ensureColumn(table, colName, colDDL) {
 ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
 ensureColumn("applications", "is_streamer", "is_streamer INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "start_party", "start_party INTEGER NOT NULL DEFAULT 1");
-
-// 업둥교환 2업둥 1개/2개
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up22", "up22 INTEGER NOT NULL DEFAULT 0");
 
@@ -164,9 +170,11 @@ function todayKST() {
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 10);
 }
+
 function nowISO() {
   return new Date().toISOString();
 }
+
 function esc(v) {
   return String(v ?? "")
     .replaceAll("&", "&amp;")
@@ -175,46 +183,143 @@ function esc(v) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
+
 function raidByKey(key) {
   return RAID_OPTIONS.find((r) => r.key === key);
 }
+
+function raidImage(key) {
+  return raidByKey(key)?.img || "/images/placeholder.png";
+}
+
 function gradeLabel(key) {
   if (key === "streamer") return "스트리머";
   return GRADE_OPTIONS.find((g) => g.key === key)?.label || key;
 }
+
 function isValidKstDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
 }
 
-// 레이드 날짜/코드
 function getActiveDay(raidKey) {
   const row = db.prepare("SELECT date_kst FROM day_codes WHERE raid_key=?").get(raidKey);
   return row?.date_kst || todayKST();
 }
+
 function getActiveCodeRow(raidKey) {
   return db.prepare("SELECT * FROM day_codes WHERE raid_key=?").get(raidKey) || null;
 }
 
-// 비활성 공대 Set
 function getDisabledPartySet(raidKey, dateKst) {
   const rows = db
     .prepare("SELECT party_index FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?")
     .all(raidKey, dateKst);
-  return new Set(rows.map((r) => r.party_index));
+  return new Set(rows.map((r) => Number(r.party_index)));
 }
 
-// 레이드별 공대 구성
-function getRaidConfig(raidKey) {
-  if (raidKey === "inhwagongjeon") {
-    return { buffersPerParty: 2, dealersPerParty: 6 };
-  }
+function getDefaultRaidConfig(raidKey) {
+  if (raidKey === "inhwagongjeon") return { buffersPerParty: 2, dealersPerParty: 6 };
   return { buffersPerParty: 3, dealersPerParty: 9 };
 }
 
+function getRaidConfig(raidKey) {
+  return getDefaultRaidConfig(raidKey);
+}
+
+function getPartyTemplateRows(raidKey, dateKst) {
+  return db.prepare(`
+    SELECT *
+    FROM raid_party_templates
+    WHERE raid_key=? AND date_kst=?
+    ORDER BY party_index ASC
+  `).all(raidKey, dateKst);
+}
+
+function getPartyTemplateMap(raidKey, dateKst) {
+  const rows = getPartyTemplateRows(raidKey, dateKst);
+  const map = new Map();
+  for (const row of rows) {
+    map.set(Number(row.party_index), {
+      buffersPerParty: Math.max(0, Number(row.buffer_slots || 0)),
+      dealersPerParty: Math.max(0, Number(row.dealer_slots || 0)),
+    });
+  }
+  return map;
+}
+
+function getPartyConfig(raidKey, dateKst, partyIndex, templateMap = null) {
+  const defaults = getDefaultRaidConfig(raidKey);
+  const map = templateMap || getPartyTemplateMap(raidKey, dateKst);
+  return map.get(Number(partyIndex)) || defaults;
+}
+
+function getMaxPartyIndexFromTemplateMap(templateMap) {
+  const keys = Array.from(templateMap.keys());
+  return keys.length ? Math.max(...keys) : 0;
+}
+
 // =====================
-// Layout / Styles
+// Layout
 // =====================
-function layout(body, title = "레이드 예약 사이트") {
+function buildSidebar(activeRaid = "", isAdmin = false) {
+  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
+
+  if (!isAdmin) {
+    return `
+      <aside class="sidebar">
+        <div class="thumbnail">
+          <img src="${esc(thumbImg)}" alt="썸네일"
+               onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>이미지 준비중</div>';">
+        </div>
+        <a href="/" class="side-btn">메인 로비</a>
+        <a href="/lineup" class="side-btn">공대 편성표</a>
+        <a href="/check" class="side-btn">예약 확인</a>
+      </aside>
+    `;
+  }
+
+  const isAdminLobby = !activeRaid || activeRaid === "admin_lobby";
+
+  if (isAdminLobby) {
+    return `
+      <aside class="sidebar">
+        <div class="thumbnail">
+          <img src="/images/streamer_profile.png" alt="관리자 썸네일"
+               onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
+        </div>
+        <button type="button" class="side-btn" onclick="openModal('modal-auth')">인증키 설정</button>
+        <button type="button" class="side-btn" onclick="openModal('modal-streamer')">스트리머 예약</button>
+        <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
+        <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
+      </aside>
+    `;
+  }
+
+  const canCustomParty = activeRaid && activeRaid !== "updoong";
+
+  return `
+    <aside class="sidebar">
+      <div class="thumbnail">
+        <img src="${esc(thumbImg)}" alt="썸네일"
+             onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
+      </div>
+      <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">관리자 로비</a>
+      <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
+      <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
+      ${canCustomParty ? `<button type="button" class="side-btn" onclick="openModal('modal-custom-party')">커스텀 공대 추가</button>` : ""}
+      <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
+    </aside>
+  `;
+}
+
+function layout(body, title = "레이드 예약 사이트", options = {}) {
+  const isAdmin = !!options.isAdmin;
+  const activeRaid = String(options.activeRaid || "");
+  const hideSidebar = !!options.hideSidebar;
+  const autoRefresh = !!options.autoRefresh;
+  const autoRefreshMs = Number(options.autoRefreshMs || 180000);
+  const sidebarContent = hideSidebar ? "" : buildSidebar(activeRaid, isAdmin);
+
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -222,152 +327,221 @@ function layout(body, title = "레이드 예약 사이트") {
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${esc(title)}</title>
   <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
     :root{
-      --bg:#050816;
-      --bg2:#0b1024;
-      --panel:#0b1226;
-      --panel2:#0f172a;
-      --line:rgba(120,160,255,.35);
-      --text:#e9eefc;
-      --muted:rgba(189,198,232,.82);
-      --btn:#111827;
-      --btn-hover:#1f2937;
-      --danger:#b91c1c;
-      --danger-hover:#dc2626;
-      --chip:rgba(23,34,80,.9);
-      --shadow:0 16px 40px rgba(0,0,0,.65);
-      --radius:18px;
-      --accent:#4be0ff;
-      --accent2:#ff7ce5;
-      --blue:#2563eb;
-      --blue2:#3b82f6;
+      --bg-dark:#12132b;
+      --bg-panel:#1b1c3b;
+      --bg-box:#26284d;
+      --input-bg:#353863;
+      --border-glow:#3f4280;
+      --border-light:rgba(148,163,255,.2);
+      --text-main:#f8fafc;
+      --text-muted:#9ca3af;
+      --accent:#6b72ff;
+      --danger:#ef4444;
+      --success:#10b981;
+      --chip-bg:rgba(107,114,255,.12);
+      --reserve-card:#535791;
+      --reserve-input:#a7a9be;
     }
-    *{ box-sizing:border-box; }
+
+    *{ box-sizing:border-box; font-family:'Pretendard', sans-serif; }
+    html, body { margin:0; padding:0; }
     body{
-      margin:0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:#050816;
-      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(107,114,255,.15), transparent 35%),
+        radial-gradient(circle at top right, rgba(139,92,246,.14), transparent 30%),
+        linear-gradient(180deg, #0f1024 0%, #13142b 100%);
+      color:var(--text-main);
+      min-height:100vh;
+      padding:20px 18px;
     }
-    a{ color:inherit; text-decoration:none; }
+    a{ text-decoration:none; color:inherit; }
+    img{ display:block; }
 
-    .wrap{
-      max-width:1400px;
+    .app-container{
+      width:100%;
+      max-width:1320px;
       margin:0 auto;
-      padding:24px 14px 68px;
-    }
-
-    .title{
-      position:relative;
-      border-radius:18px;
-      padding:18px 16px 20px;
-      margin-bottom:18px;
-      background:linear-gradient(135deg, rgba(36,50,255,.85), rgba(75,224,255,.75));
-      box-shadow:0 18px 40px rgba(0,0,0,.65);
-      overflow:hidden;
-    }
-    .title::before{
-      content:"";
-      position:absolute;
-      inset:1px;
-      border-radius:16px;
-      background:linear-gradient(135deg, #050816 0%, #0b1024 40%, #141c3b 100%);
-    }
-    .titleInner{
-      position:relative;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-    }
-    .titleMain{
       display:flex;
       flex-direction:column;
-      gap:4px;
-    }
-    .titleLogo{
-      font-size:clamp(22px, 3.4vw, 32px);
-      font-weight:900;
-      letter-spacing:.06em;
-      text-transform:uppercase;
-    }
-    .titleLogo span.accent{
-      background:linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip:text;
-      background-clip:text;
-      color:transparent;
-    }
-    .titleSub{
-      font-size:13px;
-      color:var(--muted);
-    }
-    .titleBadge{
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid rgba(142,163,255,.5);
-      background:rgba(9,16,44,.9);
-      font-size:12px;
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      color:var(--muted);
+      gap:20px;
     }
 
+    .header{
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:22px 28px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+      background:linear-gradient(180deg, rgba(27,28,59,.95), rgba(22,23,49,.95));
+    }
+    .header h1{
+      margin:0;
+      font-size:30px;
+      font-weight:700;
+      letter-spacing:.02em;
+    }
+    .header p{
+      margin:6px 0 0;
+      font-size:14px;
+      color:var(--text-main);
+    }
+    .made-by{
+      border:1px solid var(--border-glow);
+      padding:9px 14px;
+      border-radius:10px;
+      font-size:13px;
+      color:var(--text-main);
+      background:rgba(38,40,77,.75);
+      white-space:nowrap;
+    }
+
+    .content-wrapper{
+      display:flex;
+      gap:22px;
+      align-items:flex-start;
+    }
+
+    .sidebar{
+      width:240px;
+      flex-shrink:0;
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:18px;
+      background:linear-gradient(180deg, rgba(27,28,59,.96), rgba(24,25,52,.96));
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-height:560px;
+    }
+
+    .thumbnail{
+      background:var(--bg-box);
+      border-radius:12px;
+      height:180px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--text-muted);
+      font-size:14px;
+      overflow:hidden;
+      border:1px solid var(--border-glow);
+    }
+    .thumbnail img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    .thumb-fallback{
+      padding:18px;
+      text-align:center;
+      line-height:1.5;
+    }
+
+    .side-btn{
+      display:block;
+      width:100%;
+      background:var(--bg-box);
+      padding:13px 14px;
+      border-radius:10px;
+      text-align:center;
+      font-size:14px;
+      font-weight:600;
+      transition:.15s ease;
+      border:1px solid transparent;
+      color:var(--text-main);
+      cursor:pointer;
+      box-shadow:none !important;
+    }
+    .side-btn:hover{
+      background:var(--border-glow);
+      border-color:var(--accent);
+      transform:translateY(-1px);
+    }
+    .side-btn-danger{
+      background:rgba(239,68,68,.15);
+      border-color:rgba(239,68,68,.35);
+      color:#fecaca;
+    }
+    .side-btn-danger:hover{
+      background:rgba(239,68,68,.24);
+      border-color:rgba(239,68,68,.55);
+    }
+
+    .main-area{
+      flex:1;
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:24px;
+      background:linear-gradient(180deg, rgba(27,28,59,.96), rgba(24,25,52,.96));
+      min-height:620px;
+      overflow:hidden;
+    }
+    .main-area.full{ width:100%; }
+
     .box{
-      background:var(--panel2);
-      border-radius:var(--radius);
-      padding:20px 18px 18px;
-      border:1px solid var(--line);
-      box-shadow:var(--shadow);
-      position:relative;
+      background:rgba(38,40,77,.72);
+      border-radius:12px;
+      padding:18px 20px;
+      border:1px solid rgba(148,163,255,.15);
     }
 
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
 
+    .muted{ color:var(--text-muted); font-size:13px; line-height:1.65; }
+    .ok{ color:#4ade80; font-weight:700; }
+    .wait{ color:#fcd34d; font-weight:700; }
+    .bad{ color:#fca5a5; font-weight:700; }
+
+    .divider{
+      height:1px;
+      background:linear-gradient(to right, transparent, rgba(148,163,255,.35), transparent);
+      margin:18px 0;
+    }
+
     .btn{
-      border:1px solid rgba(148,163,255,.7);
-      background:var(--btn);
-      color:var(--text);
-      padding:9px 14px;
-      border-radius:999px;
+      border:1px solid rgba(148,163,255,.38);
+      background:var(--bg-box);
+      color:var(--text-main);
+      padding:10px 15px;
+      border-radius:10px;
       cursor:pointer;
-      font-weight:800;
+      font-weight:600;
       display:inline-flex;
       align-items:center;
       justify-content:center;
       gap:8px;
       font-size:13px;
-      box-shadow:0 10px 24px rgba(15,23,42,.9);
-      transition:transform .08s ease-out, box-shadow .08s ease-out, background .08s ease-out;
+      transition:.15s ease;
     }
     .btn:hover{
-      background:var(--btn-hover);
+      background:var(--border-glow);
+      border-color:var(--accent);
       transform:translateY(-1px);
-      box-shadow:0 14px 30px rgba(15,23,42,.9);
     }
-    .btnGhost{
-      background:transparent;
-      border-color:rgba(148,163,255,.35);
-      box-shadow:none;
-    }
-    .btnGhost:hover{
-      background:var(--btn-hover);
-      box-shadow:0 10px 24px rgba(15,23,42,.9);
-    }
+    .btnGhost{ background:rgba(255,255,255,.02); }
     .btnDanger{
-      background:var(--danger);
-      border-color:rgba(248,113,113,.7);
+      background:rgba(239,68,68,.18);
+      border-color:rgba(239,68,68,.32);
+      color:#fecaca;
     }
     .btnDanger:hover{
-      background:var(--danger-hover);
+      background:rgba(239,68,68,.28);
+      border-color:rgba(239,68,68,.52);
     }
     .btnPrimary{
-      background:linear-gradient(135deg,var(--blue),var(--blue2));
-      border-color:rgba(99,102,241,.8);
+      background:linear-gradient(135deg, #4f46e5, #6b72ff);
+      border-color:#6b72ff;
+      color:white;
     }
     .btnPrimary:hover{
-      background:linear-gradient(135deg,#1d4ed8,#2563eb);
+      background:linear-gradient(135deg, #4338ca, #5b63ff);
+      border-color:#7c83ff;
     }
 
     .chip{
@@ -376,159 +550,102 @@ function layout(body, title = "레이드 예약 사이트") {
       align-items:center;
       padding:5px 10px;
       border-radius:999px;
-      background:var(--chip);
-      border:1px solid rgba(148,163,255,.4);
-      color:var(--muted);
+      background:var(--chip-bg);
+      border:1px solid rgba(148,163,255,.25);
+      color:#c7d2fe;
       font-size:12px;
     }
-    .muted{
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.5;
-    }
-    .divider{ height:1px; background:linear-gradient(to right,transparent,#3844a8,transparent); margin:16px 0; }
-    .ok{ color:#4ade80; font-weight:700; }
-    .wait{ color:#fde68a; font-weight:700; }
-    .bad{ color:#fda4af; font-weight:700; }
 
-    input,textarea{
+    input, textarea, select{
       width:100%;
-      background:#020617;
-      border:1px solid rgba(115,145,235,.7);
-      color:var(--text);
-      padding:9px 11px;
-      border-radius:12px;
-      outline:none;
       min-width:0;
-      font-size:13px;
-      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
-    }
-    input::placeholder,textarea::placeholder{ color:rgba(148,163,255,.6); }
-    textarea{ resize:vertical; min-height:44px; }
-
-    input:focus,select:focus,textarea:focus{
-      border-color:var(--accent);
-      box-shadow:0 0 0 1px rgba(56,189,248,.4), 0 0 24px rgba(56,189,248,.35);
-    }
-
-    select {
-      appearance:none;
-      -webkit-appearance:none;
-      -moz-appearance:none;
-      width:100%;
-      padding:9px 11px;
-      border-radius:12px;
-      border:1px solid rgba(115,145,235,.7);
-      background:#050816;
-      color:#f9fafb;
-      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
-      font-size:13px;
+      background:var(--input-bg);
+      border:1px solid transparent;
+      color:var(--text-main);
+      padding:11px 14px;
+      font-size:14px;
+      border-radius:8px;
       outline:none;
+      transition:.15s ease;
     }
-    select option { background:#ffffff; color:#111827; font-weight:500; }
-    select option:checked, select option:hover { background:#1d4ed8; color:#ffffff; }
-    select option:disabled { color:#9ca3af; background:#e5e7eb; }
-
-    .formGrid{
-      display:grid;
-      grid-template-columns: 170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
-      gap:10px;
-      align-items:end;
+    input::placeholder, textarea::placeholder{ color:#d7dae7; }
+    input:focus, textarea:focus, select:focus{
+      border-color:var(--accent);
+      background:#3d4173;
     }
-    .field label{
-      display:block;
-      font-size:12px;
-      color:var(--muted);
-      margin:0 0 6px 2px;
-      letter-spacing:.02em;
-    }
-    .fieldFull{ grid-column:1 / -1; }
-
-    @media (max-width:980px){
-      .formGrid{ grid-template-columns:1fr 1fr; }
-      .fieldFull{ grid-column:1 / -1; }
-    }
-    @media (max-width:520px){
-      .formGrid{ grid-template-columns:1fr; }
-      .fieldFull{ grid-column:1 / -1; }
-    }
-
-    table{
-      width:100%;
-      border-collapse:collapse;
-      overflow:hidden;
-      border-radius:14px;
-      border:1px solid rgba(148,163,255,.4);
-      background:rgba(10,16,32,.98);
-    }
-    th,td{
-      border-bottom:1px solid rgba(51,65,85,.9);
-      padding:8px 8px;
-      text-align:left;
-      font-size:13px;
-      vertical-align:middle;
-    }
-    th{
-      background:#020617;
-      font-weight:800;
-      font-size:12px;
-      letter-spacing:.05em;
-      color:rgba(191,219,254,.9);
-      text-transform:uppercase;
-    }
-    tr:last-child td{ border-bottom:0; }
-    .center{ text-align:center; }
-
-    .commentBox{
-      width:260px;
-      max-width:100%;
-    }
-    @media (max-width:520px){
-      .commentBox{ width:100%; }
-    }
-
-    .raidNav{ margin-bottom:4px; }
-    .raidNav .btn{ font-size:12px; padding-inline:12px; }
-
-    .bigCheck {
-      display:flex;
-      align-items:center;
-      gap:6px;
-      cursor:pointer;
-    }
-    .bigCheck input[type="checkbox"] {
-      width:22px;
-      height:22px;
-    }
+    textarea{ resize:vertical; min-height:42px; }
+    select option{ color:#111827; background:white; }
 
     .adminConfirm{
       display:inline-flex;
       align-items:center;
       gap:6px;
-      padding:4px 10px;
+      padding:5px 10px;
       border-radius:999px;
-      background:#020617;
-      border:1px solid rgba(148,163,255,.5);
+      background:rgba(2,6,23,.52);
+      border:1px solid rgba(148,163,255,.32);
       cursor:pointer;
       font-size:12px;
       user-select:none;
     }
-    .adminConfirm:hover{ background:#1f2937; }
-    .adminConfirm input[type="checkbox"]{
-      width:20px; height:20px; margin:0; cursor:pointer;
+    .adminConfirm input[type="checkbox"]{ width:20px; height:20px; margin:0; }
+
+    .raid-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(210px,1fr));
+      gap:16px;
+    }
+    .raid-card{
+      position:relative;
+      border-radius:14px;
+      overflow:hidden;
+      min-height:210px;
+      border:1px solid rgba(148,163,255,.2);
+      transition:.18s ease;
+      display:block;
+      background:var(--bg-box);
+    }
+    .raid-card:hover{
+      border-color:var(--accent);
+      transform:translateY(-3px);
+    }
+    .raid-card img{
+      width:100%;
+      height:100%;
+      min-height:210px;
+      object-fit:cover;
+      opacity:.78;
+      transition:.18s ease;
+    }
+    .raid-card:hover img{
+      opacity:1;
+      transform:scale(1.03);
+    }
+    .raid-card .label{
+      position:absolute;
+      bottom:0;
+      width:100%;
+      text-align:center;
+      padding:18px 12px 14px;
+      background:linear-gradient(transparent, rgba(0,0,0,.86));
+      font-weight:700;
+      font-size:15px;
     }
 
-    /* 공대 카드 (일반 레이드) */
-    .partyGrid{ display:flex; flex-wrap:wrap; gap:14px; }
+    .partyGrid{
+      display:flex;
+      flex-wrap:wrap;
+      gap:14px;
+      align-items:flex-start;
+    }
     .partyCard{
-      position:relative;
       width:120px;
-      flex:0 0 120px;
-      max-width:120px;
-      background:#020617;
+      flex:0 0 auto;
+      background:rgba(2,6,23,.56);
       border-radius:14px;
-      border:1px solid rgba(148,163,255,.4);
+      border:1px solid rgba(148,163,255,.22);
       padding:12px 12px 10px;
+      min-width:120px;
     }
     .partyHeader{
       display:flex;
@@ -536,102 +653,83 @@ function layout(body, title = "레이드 예약 사이트") {
       justify-content:space-between;
       width:100%;
       margin-bottom:6px;
+      gap:6px;
     }
     .partyTitle{
       font-size:18px;
-      font-weight:900;
-      text-align:left;
+      font-weight:800;
       line-height:1.1;
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
-      pointer-events:none;
     }
     .partyHeader .partyDeleteBtn{
       flex-shrink:0;
       font-size:11px;
-      padding:3px 6px;
+      padding:4px 7px;
       border-radius:999px;
-      background:#b91c1c;
-      border:1px solid rgba(255,120,120,0.6);
-      color:white;
+      background:rgba(239,68,68,.18);
+      border:1px solid rgba(255,120,120,.4);
+      color:#fee2e2;
       cursor:pointer;
       white-space:nowrap;
     }
-    .partyHeader .partyDeleteBtn:hover{ background:#dc2626; }
+    .partyHeader .partyDeleteBtn:hover{ background:rgba(239,68,68,.28); }
     .partyBody{ display:flex; flex-direction:column; gap:10px; }
     .slotSection{
-      background:#020617;
+      background:rgba(2,6,23,.45);
       border-radius:10px;
       border:1px solid rgba(15,23,42,.9);
       padding:6px 8px 8px;
     }
     .slotSectionTitle{
       font-size:12px;
-      color:rgba(191,219,254,.8);
+      color:#bfdbfe;
       margin:0 0 6px 2px;
     }
     .slotDivider{
       height:1px;
       margin:2px 2px 0;
-      background:linear-gradient(to right,transparent,rgba(148,163,255,.7),transparent);
+      background:linear-gradient(to right,transparent,rgba(148,163,255,.5),transparent);
     }
-    .slotInput{
+    .slotInput, .slotStatic{
       width:100%;
-      padding:6px 10px;
+      padding:7px 10px;
       margin-bottom:6px;
       font-size:13px;
       border-radius:999px;
-      border:1px solid rgba(71,85,105,.95);
-      background:#020617;
-      color:var(--text);
-      box-shadow:0 3px 10px rgba(15,23,42,.85) inset;
+      background:#141833;
+      color:var(--text-main);
     }
-    .slotInput::placeholder{ color:rgba(148,163,255,.6); }
-    .slotInput:focus{
-      border-color:var(--accent);
-      box-shadow:0 0 0 1px rgba(56,189,248,.35), 0 0 18px rgba(56,189,248,.35);
-      outline:none;
-    }
+    .slotInput{ border:1px solid rgba(71,85,105,.95); }
     .slotInput[disabled]{ opacity:.45; cursor:not-allowed; }
     .slotStatic{
-      width:100%;
-      padding:6px 10px;
-      margin-bottom:6px;
-      font-size:13px;
-      border-radius:999px;
-      border:1px solid rgba(30,64,175,.9);
-      background:#020617;
+      border:1px solid rgba(59,130,246,.55);
       text-align:center;
     }
-    .slotStatic.slotEmpty{ opacity:.4; }
+    .slotStatic.slotEmpty{ opacity:.45; }
+    .partyMeta{
+      margin-top:4px;
+      font-size:11px;
+      color:#cbd5e1;
+    }
 
-    /* =====================
-       업둥교환: 12명=1세트, 세로형 카드 + 4명 단위 구분
-    ====================== */
     .upPartyGrid{
       display:flex;
       flex-wrap:wrap;
       gap:14px;
       align-items:flex-start;
     }
-
     .upPartyCard{
-      position:relative;
-      width:120px;         
+      width:120px;
       flex:0 0 120px;
       max-width:120px;
-      background:rgba(10,16,32,.98);
+      background:rgba(2,6,23,.56);
       border-radius:18px;
-      border:1px solid rgba(148,163,255,.35);
+      border:1px solid rgba(148,163,255,.22);
       padding:12px;
-      box-shadow:0 10px 26px rgba(0,0,0,.35);
     }
-    .upPartyCard.disabled{
-      opacity:.5;
-      filter:saturate(.65);
-    }
-
+    .upPartyCard.disabled{ opacity:.5; }
     .upPartyHeader{
       display:flex;
       align-items:flex-start;
@@ -642,132 +740,334 @@ function layout(body, title = "레이드 예약 사이트") {
     .upPartyTitle{
       font-size:20px;
       font-weight:900;
-      letter-spacing:.02em;
       line-height:1.05;
-      word-break:keep-all;
     }
-
     .upPartyDeleteBtn{
       flex-shrink:0;
       font-size:11px;
       padding:6px 9px;
       border-radius:10px;
-      background:#ff2d2d;
-      border:0;
-      color:white;
+      background:rgba(239,68,68,.2);
+      border:1px solid rgba(255,120,120,.35);
+      color:#fff;
       cursor:pointer;
       white-space:nowrap;
     }
-    .upPartyDeleteBtn:hover{ filter:brightness(1.05); }
-
+    .upPartyDeleteBtn:hover{ background:rgba(239,68,68,.3); }
     .upPartySlots{
       display:flex;
       flex-direction:column;
       gap:12px;
-      padding:0;
-      border-radius:12px;
-      background:transparent;
-      border:0;
     }
-
     .upGroupBox{
       display:flex;
       flex-direction:column;
       gap:8px;
       padding:12px;
       border-radius:16px;
-      border:1px solid rgba(148,163,255,.18);
-      box-shadow:none;
+      border:1px solid rgba(148,163,255,.14);
     }
-
-    .upPartyCard .slotInput{
-      width:100%;
-      padding:6px 6px;                 
-      margin:0;
-      font-size:13px;
-      border-radius:999px;
-      border:1px solid rgba(71,85,105,.95);
-      background:#020617;
-      color:var(--text);
-      box-shadow:none;
-    }
-    .upPartyCard .slotInput::placeholder{ color:rgba(148,163,255,.6); }
-    .upPartyCard .slotInput:focus{
-      border-color:var(--accent);
-      outline:none;
-      box-shadow:none;
-    }
-
+    .upPartyCard .slotInput,
     .upPartyCard .slotStatic{
       width:100%;
-      padding:6px 6px;                 
+      padding:7px 6px;
       margin:0;
       font-size:13px;
       border-radius:999px;
-      border:1px solid rgba(30,64,175,.9);
-      background:#020617;
-      color:var(--text);
+      background:#141833;
+      color:var(--text-main);
+    }
+    .upPartyCard .slotInput{ border:1px solid rgba(71,85,105,.95); }
+    .upPartyCard .slotStatic{
+      border:1px solid rgba(59,130,246,.55);
       text-align:center;
-      box-shadow:none;
     }
-    .upPartyCard .slotStatic.slotEmpty{ opacity:.4; }
-    .upPartySlots .upGroupBox:nth-of-type(1) {
-      background: rgba(255, 99, 99, 0.12);
-      border-color: rgba(255, 99, 99, 0.35);
+    .upPartyCard .slotStatic.slotEmpty{ opacity:.45; }
+    .upPartySlots .upGroupBox:nth-of-type(1){
+      background:rgba(255,99,99,.12);
+      border-color:rgba(255,99,99,.35);
     }
-    .upPartySlots .upGroupBox:nth-of-type(2) {
-      background: rgba(255, 215, 100, 0.14);
-      border-color: rgba(255, 215, 100, 0.4);
+    .upPartySlots .upGroupBox:nth-of-type(2){
+      background:rgba(255,215,100,.14);
+      border-color:rgba(255,215,100,.4);
     }
-    .upPartySlots .upGroupBox:nth-of-type(3) {
-      background: rgba(100, 220, 140, 0.14);
-      border-color: rgba(100, 220, 140, 0.4);
-    @media (max-width:520px){
-      .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
+    .upPartySlots .upGroupBox:nth-of-type(3){
+      background:rgba(100,220,140,.14);
+      border-color:rgba(100,220,140,.4);
     }
-/* 카드류 */
-.box,
-.title,
-.partyCard,
-.upPartyCard,
-table{
-  box-shadow: none !important;
-  filter: none !important;         /* drop-shadow까지 제거 */
-}
 
-/* 버튼류 */
-.btn,
-.partyHeader .partyDeleteBtn,
-.upPartyDeleteBtn{
-  box-shadow: none !important;
-  filter: none !important;
-}
+    .modal-overlay{
+      display:none;
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.58);
+      z-index:2000;
+      align-items:center;
+      justify-content:center;
+      backdrop-filter:blur(4px);
+    }
+    .modal-overlay.active{ display:flex; }
+    .modal-content{
+      width:min(760px, calc(100vw - 32px));
+      max-height:calc(100vh - 48px);
+      overflow:auto;
+      background:linear-gradient(180deg, rgba(27,28,59,.98), rgba(24,25,52,.98));
+      border:1px solid var(--accent);
+      border-radius:14px;
+      padding:22px 20px 18px;
+      position:relative;
+    }
+    .modal-header{ margin-bottom:16px; }
+    .modal-header h3{
+      margin:0 0 6px;
+      font-size:18px;
+      font-weight:700;
+    }
+    .modal-header p{
+      margin:0;
+      font-size:12px;
+      color:var(--text-muted);
+      line-height:1.5;
+    }
+    .modal-close{
+      position:absolute;
+      top:12px;
+      right:12px;
+      width:32px;
+      height:32px;
+      border-radius:8px;
+      border:1px solid rgba(148,163,255,.28);
+      background:rgba(255,255,255,.03);
+      color:var(--text-main);
+      cursor:pointer;
+      font-size:16px;
+      font-weight:700;
+    }
+    .modal-close:hover{
+      background:var(--border-glow);
+      border-color:var(--accent);
+    }
+    .modal-form{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .modal-row{
+      display:flex;
+      gap:12px;
+      align-items:flex-end;
+      flex-wrap:wrap;
+    }
+    .modal-row > div{
+      flex:1;
+      min-width:140px;
+    }
 
-/* hover에서 다시 생기는 shadow도 제거 */
-.btn:hover,
-.btn:active,
-.partyHeader .partyDeleteBtn:hover,
-.upPartyDeleteBtn:hover{
-  box-shadow: none !important;
-  filter: none !important;
-}
+    .reserve-shell{
+      width:100%;
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:20px 22px 22px;
+      background:rgba(18,20,90,.38);
+    }
+    .reserve-form{
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+      width:100%;
+    }
+    .reserve-card{
+      background:var(--reserve-card);
+      border-radius:14px;
+      padding:18px 22px;
+      width:100%;
+    }
+    .reserve-auth-row{
+      display:flex;
+      align-items:center;
+      gap:18px;
+    }
+    .reserve-auth-label{
+      width:160px;
+      flex-shrink:0;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      font-weight:700;
+      color:#fff;
+      white-space:nowrap;
+      font-size:15px;
+    }
+    .reserve-line{
+      display:flex;
+      align-items:center;
+      gap:18px;
+    }
+    .reserve-line + .reserve-line{
+      margin-top:16px;
+    }
+    .reserve-label{
+      width:160px;
+      flex-shrink:0;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:8px;
+      font-weight:700;
+      color:#fff;
+      white-space:nowrap;
+      font-size:15px;
+    }
+    .reserve-field{
+      flex:1;
+      min-width:0;
+    }
+    .reserve-input,
+    .reserve-select{
+      background:var(--reserve-input) !important;
+      color:#fff !important;
+      border-radius:8px !important;
+      border:none !important;
+      height:42px;
+      width:100%;
+    }
+    .reserve-mini{
+      background:var(--reserve-input) !important;
+      color:#fff !important;
+      border-radius:4px !important;
+      border:none !important;
+      width:42px;
+      min-width:42px;
+      height:28px;
+      text-align:center;
+      padding:0 6px !important;
+    }
+    .reserve-start{
+      width:92px;
+      min-width:92px;
+    }
+    .reserve-input::placeholder,
+    .reserve-mini::placeholder{
+      color:#ececf3 !important;
+    }
+    .reserve-meta-row{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:18px;
+      flex-wrap:wrap;
+      margin-top:18px;
+      width:100%;
+    }
+    .reserve-meta-item{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:#fff;
+      font-size:15px;
+      white-space:nowrap;
+    }
+    .reserve-submit-wrap{
+      display:flex;
+      justify-content:center;
+      margin-top:2px;
+    }
+    .reserve-submit{
+      min-width:180px;
+      min-height:44px;
+      background:#4f5591;
+      border:1px solid rgba(148,163,255,.18);
+      border-radius:10px;
+      color:#fff;
+      font-size:16px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .reserve-submit:hover{
+      background:#6067ab;
+      border-color:var(--accent);
+    }
+    .reserve-foot{
+      color:#c6c9db;
+      font-size:14px;
+      line-height:1.7;
+      margin-top:6px;
+    }
 
-/* 입력칸/내부 슬롯도 혹시 남아있으면 제거 */
-input,
-select,
-textarea,
-.slotInput,
-.slotStatic{
-  box-shadow: none !important;
-  filter: none !important;
-}
+    @media (max-width:1120px){
+      .content-wrapper{ flex-direction:column; }
+      .sidebar{ width:100%; min-height:auto; }
+      .thumbnail{ height:160px; }
+    }
 
-/* 텍스트/글로우가 섞여 있으면 이것도 제거(선택) */
-.titleLogo,
-.titleBadge,
-.chip{
-  text-shadow: none !important;
-}
+    @media (max-width:900px){
+      .reserve-auth-row,
+      .reserve-line{
+        flex-direction:column;
+        align-items:flex-start;
+        gap:10px;
+      }
+
+      .reserve-auth-label,
+      .reserve-label{
+        width:auto;
+        justify-content:flex-start;
+      }
+
+      .reserve-field{
+        width:100%;
+      }
+
+      .reserve-meta-row{
+        justify-content:flex-start;
+      }
+
+      .reserve-shell{
+        padding:16px;
+      }
+
+      .reserve-card{
+        padding:16px;
+      }
+    }
+
+    @media (max-width:640px){
+      body{ padding:14px 10px; }
+      .header{
+        padding:18px;
+        flex-direction:column;
+        align-items:flex-start;
+      }
+      .header h1{ font-size:24px; }
+      .main-area{ padding:16px; min-height:auto; }
+      .raid-grid{ grid-template-columns:1fr; }
+      .modal-content{ width:calc(100vw - 20px); padding:18px 14px; }
+    }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0 12px;
+    }
+    th, td{
+      padding:0 14px;
+      text-align:left;
+      vertical-align:middle;
+      white-space:nowrap;
+    }
+    th{
+      font-size:14px;
+      font-weight:800;
+      color:#ffffff;
+    }
+    td{
+      font-size:14px;
+      color:var(--text-main);
+    }
+    td.center, th.center{
+      text-align:center;
+    }
   </style>
   <script>
     function submitOnChange(formId){
@@ -796,24 +1096,76 @@ textarea,
       partyInput.value = String(partyIndex);
       f.submit();
     }
+    function openModal(id){
+      const el = document.getElementById(id);
+      if(el) el.classList.add("active");
+    }
+    function closeModal(id){
+      const el = document.getElementById(id);
+      if(el) el.classList.remove("active");
+    }
+    window.addEventListener("click", function(e){
+      const overlays = document.querySelectorAll(".modal-overlay.active");
+      overlays.forEach((ov) => {
+        if(e.target === ov) ov.classList.remove("active");
+      });
+    });
+
+    (function(){
+      const AUTO_REFRESH = ${autoRefresh ? "true" : "false"};
+      const AUTO_REFRESH_MS = ${Number.isFinite(autoRefreshMs) ? autoRefreshMs : 180000};
+
+      if (!AUTO_REFRESH) return;
+
+      let hasUserInputFocus = false;
+      let isDirty = false;
+
+      document.addEventListener("focusin", function(e){
+        const tag = (e.target && e.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") {
+          hasUserInputFocus = true;
+        }
+      });
+
+      document.addEventListener("focusout", function(){
+        setTimeout(() => {
+          const el = document.activeElement;
+          const tag = (el && el.tagName || "").toLowerCase();
+          hasUserInputFocus = (tag === "input" || tag === "textarea" || tag === "select");
+        }, 0);
+      });
+
+      document.addEventListener("input", function(e){
+        const tag = (e.target && e.target.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") {
+          isDirty = true;
+        }
+      });
+
+      setInterval(function(){
+        const modalOpen = !!document.querySelector(".modal-overlay.active");
+        if (hasUserInputFocus || isDirty || modalOpen) return;
+        window.location.reload();
+      }, AUTO_REFRESH_MS);
+    })();
   </script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="title">
-      <div class="titleInner">
-        <div class="titleMain">
-          <div class="titleLogo">
-            <span class="accent">DnF</span> RAID
-          </div>
-          <div class="titleSub">레이드 예약 시스템</div>
-        </div>
-        <div class="titleBadge">
-          <span>Made by 🧭</span>
-        </div>
+  <div class="app-container">
+    <header class="header">
+      <div>
+        <h1>DevonVail RAID</h1>
+        <p>레이드 예약 사이트 ${isAdmin ? '<span style="color:#fca5a5;font-weight:700;">[관리자 모드]</span>' : ''}</p>
       </div>
+      <div class="made-by">Made by 🧭</div>
+    </header>
+
+    <div class="content-wrapper">
+      ${hideSidebar ? "" : sidebarContent}
+      <main class="main-area ${hideSidebar ? "full" : ""}">
+        ${body}
+      </main>
     </div>
-    ${body}
   </div>
 </body>
 </html>`;
@@ -822,20 +1174,6 @@ textarea,
 // =====================
 // Auth middleware
 // =====================
-function requireViewerOk(req, res, next) {
-  const raid = String(req.query.raid || req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect("/");
-
-  const activeDay = getActiveDay(raid);
-  const cookieKey = `viewer_ok_${raid}_${activeDay}`;
-
-  if (req.cookies[cookieKey] !== "1") {
-    return res.redirect(`/verify?raid=${encodeURIComponent(raid)}`);
-  }
-  return next();
-}
-
 function requireAdmin(req, res, next) {
   if (!ADMIN_KEY) {
     return res.status(500).send(
@@ -846,7 +1184,8 @@ function requireAdmin(req, res, next) {
           <div class="muted">Render Environment Variables에 ADMIN_KEY를 추가하세요.</div>
         </div>
       `,
-        "오류"
+        "오류",
+        { isAdmin: true }
       )
     );
   }
@@ -855,7 +1194,6 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-// /admin 숨김 처리
 app.get("/admin", (req, res) => res.status(404).send("Not Found"));
 app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 
@@ -863,13 +1201,24 @@ app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 // Viewer: main
 // =====================
 app.get("/", (req, res) => {
+  const cardsHtml = RAID_OPTIONS.map(
+    (r) => `
+      <a class="raid-card" href="/reserve?raid=${encodeURIComponent(r.key)}">
+        <img src="${esc(r.img)}" alt="${esc(r.label)}"
+             onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+        <div class="label">${esc(r.label)}</div>
+      </a>
+    `
+  ).join("");
+
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">메인 로비</div>
-            <div class="muted">레이드를 선택 → 인증키 입력 → 예약 신청</div>
+            <div style="font-weight:700;font-size:20px;margin-bottom:6px;">진행할 레이드를 선택하세요</div>
+            <div class="muted">레이드를 선택하면 바로 예약 화면으로 이동합니다.</div>
           </div>
           <div class="row">
             <a class="btn btnPrimary" href="/lineup">공대편성표 보기</a>
@@ -878,116 +1227,24 @@ app.get("/", (req, res) => {
         </div>
 
         <div class="divider"></div>
+        <div class="raid-grid">${cardsHtml}</div>
 
-        <div class="row" style="gap:12px;">
-          ${RAID_OPTIONS.map(
-            (r) =>
-              `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">${esc(
-                r.label
-              )}</a>`
-          ).join("")}
+        <div class="muted" style="margin-top:14px;">
+          - 일반 레이드는 기본 3버퍼 / 9딜러 구성입니다.<br/>
+          - 이내황혼전은 2버퍼 / 6딜러입니다.<br/>
+          - 업둥교환은 12명 = 1세트로 표시됩니다.
         </div>
-
-        <div class="muted" style="margin-top:12px;">
-          - 일반 레이드 한 회차 정원: 3버퍼 / 9딜러 (총 12명)<br/>
-          - 이내황혼전은 2버퍼 / 6딜러 (총 8명)<br/>
-          - 업둥교환는 세트당 12명이며, 4명 단위로 구분 표시됩니다.<br/>
-          - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
-        </div>
-      </div>
-    `)
-  );
-});
-
-// =====================
-// Viewer: verify
-// =====================
-app.get("/verify", (req, res) => {
-  const raid = String(req.query.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect("/");
-
-  const activeRow = getActiveCodeRow(raid);
-  const activeDay = activeRow?.date_kst || todayKST();
-
-  res.send(
-    layout(
-      `
-      <div class="box">
-        <div class="row sp">
-          <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">인증키 입력</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay
-      )}</b></div>
-          </div>
-          <a class="btn btnGhost" href="/">메인</a>
-        </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="/verify" class="row" style="align-items:flex-end;">
-          <input type="hidden" name="raid" value="${esc(raid)}"/>
-          <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">인증키</div>
-            <input name="code" placeholder="스트리머가 공지한 인증키" required />
-          </div>
-          <button class="btn" type="submit">확인</button>
-        </form>
-
-        ${
-          !activeRow
-            ? `<div class="muted" style="margin-top:12px;">
-                 - 아직 이 레이드의 인증키가 설정되지 않았을 수 있습니다.<br/>
-                 - 스트리머가 관리자 화면에서 인증키를 먼저 설정해야 합니다.
-               </div>`
-            : ""
-        }
       </div>
     `,
-      "인증키"
+      "메인"
     )
   );
-});
-
-app.post("/verify", (req, res) => {
-  const raid = String(req.body.raid || "");
-  const code = String(req.body.code || "").trim();
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect("/");
-
-  const row = getActiveCodeRow(raid);
-  if (!row || String(row.code) !== code) {
-    return res.send(
-      layout(
-        `
-        <div class="box">
-          <div class="bad"><b>인증키가 올바르지 않습니다.</b></div>
-          <div class="divider"></div>
-          <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">다시 입력</a>
-          <a class="btn btnGhost" href="/">메인</a>
-        </div>
-      `,
-        "인증 실패"
-      )
-    );
-  }
-
-  const activeDay = row.date_kst;
-  res.cookie(`viewer_ok_${raid}_${activeDay}`, "1", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-
-  return res.redirect(`/reserve?raid=${encodeURIComponent(raid)}`);
 });
 
 // =====================
 // Viewer: reserve form
 // =====================
-app.get("/reserve", requireViewerOk, (req, res) => {
+app.get("/reserve", (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
@@ -999,102 +1256,143 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   res.send(
     layout(
       `
-      <div class="box">
-        <div class="row sp">
-          <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약 신청</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay
-      )}</b></div>
-            ${err ? `<div class="bad" style="margin-top:8px;"><b>${esc(err)}</b></div>` : ""}
-          </div>
-          <div class="row">
-            <a class="btn btnGhost" href="/">메인</a>
-            <a class="btn btnGhost" href="/check?raid=${encodeURIComponent(raid)}">예약확인</a>
-          </div>
+      <div class="reserve-shell">
+        <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약 정보 입력</div>
+        <div class="muted" style="margin-bottom:16px;">
+          레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
         </div>
 
-        <div class="divider"></div>
-
-        <form method="POST" action="/reserve">
+        <form class="reserve-form" method="POST" action="/reserve">
           <input type="hidden" name="raid" value="${esc(raid)}"/>
 
-          <div class="formGrid">
+          <div class="reserve-card">
+            <div class="reserve-auth-row">
+              <div class="reserve-auth-label">🔐 인증키 입력</div>
+              <div class="reserve-field">
+                <input
+                  name="code"
+                  class="reserve-input"
+                  placeholder="스트리머가 공지한 인증키 입력"
+                  required />
+              </div>
+            </div>
+          </div>
 
-            <div class="field">
-              <label>치즈 색깔</label>
-              <select name="viewer_grade" required>
-                ${GRADE_OPTIONS.map(
-                  (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
-                ).join("")}
-              </select>
+          <div class="reserve-card">
+            <div class="reserve-line">
+              <div class="reserve-label">🧀 치즈 색깔</div>
+              <div class="reserve-field">
+                <select name="viewer_grade" class="reserve-select" required>
+                  ${GRADE_OPTIONS.map(
+                    (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
+                  ).join("")}
+                </select>
+              </div>
             </div>
 
-            <div class="field">
-              <label>치지직 닉네임</label>
-              <input name="chzzk_nickname" placeholder="치지직 닉네임" required maxlength="40"/>
+            <div class="reserve-line">
+              <div class="reserve-label">🟩 치지직 닉네임</div>
+              <div class="reserve-field">
+                <input
+                  name="chzzk_nickname"
+                  class="reserve-input"
+                  placeholder=""
+                  required
+                  maxlength="40"/>
+              </div>
             </div>
+          </div>
 
-            <div class="field">
-              <label>모험단 이름</label>
-              <input name="adventure_name" placeholder="인게임 모험단명" required maxlength="60"/>
+          <div class="reserve-card">
+            <div class="reserve-line">
+              <div class="reserve-label">🎮 모험단 이름</div>
+              <div class="reserve-field">
+                <input
+                  name="adventure_name"
+                  class="reserve-input"
+                  placeholder=""
+                  required
+                  maxlength="60"/>
+              </div>
             </div>
 
             ${
               isUp
                 ? `
-                  <div class="field">
-                    <label>1세트</label>
-                    <label class="bigCheck">
-                      <input type="checkbox" name="up2"/>
-                    </label>
-                  </div>
-                  <div class="field">
-                    <label>2세트</label>
-                    <label class="bigCheck">
-                      <input type="checkbox" name="up22"/>
-                    </label>
-                  </div>
-                `
+                <div class="reserve-meta-row">
+                  <label class="reserve-meta-item">
+                    <span>1세트</span>
+                    <input type="checkbox" name="up2" style="width:22px; min-width:22px; height:22px;" />
+                  </label>
+
+                  <label class="reserve-meta-item">
+                    <span>2세트</span>
+                    <input type="checkbox" name="up22" style="width:22px; min-width:22px; height:22px;" />
+                  </label>
+
+                  <label class="reserve-meta-item">
+                    <span>원하는 시작 기수</span>
+                    <input
+                      name="start_party"
+                      class="reserve-mini reserve-start"
+                      inputmode="numeric"
+                      placeholder="선택 사항" />
+                  </label>
+                </div>
+              `
                 : `
-                  <div class="field">
-                    <label>딜러 갯수</label>
-                    <input name="dealer_count" inputmode="numeric" placeholder="딜러 갯수" required />
-                  </div>
+                <div class="reserve-meta-row">
+                  <label class="reserve-meta-item">
+                    <span>딜러</span>
+                    <input
+                      name="dealer_count"
+                      class="reserve-mini"
+                      inputmode="numeric"
+                      placeholder=""
+                      required />
+                  </label>
 
-                  <div class="field">
-                    <label>버퍼 갯수</label>
-                    <input name="buffer_count" inputmode="numeric" placeholder="버퍼 갯수" required />
-                  </div>
-                `
+                  <label class="reserve-meta-item">
+                    <span>버퍼</span>
+                    <input
+                      name="buffer_count"
+                      class="reserve-mini"
+                      inputmode="numeric"
+                      placeholder=""
+                      required />
+                  </label>
+
+                  <label class="reserve-meta-item">
+                    <span>원하는 시작 기수</span>
+                    <input
+                      name="start_party"
+                      class="reserve-mini reserve-start"
+                      inputmode="numeric"
+                      placeholder="선택 사항" />
+                  </label>
+                </div>
+              `
             }
-
-            <div class="field fieldFull">
-              <label>원하는 시작 기수 (선택)</label>
-              <input
-                name="start_party"
-                inputmode="numeric"
-                placeholder="예) 3 (시작 원하는 기수 숫자만 작성!!)"/>
-            </div>
           </div>
 
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" type="submit">등록</button>
+          <div class="reserve-submit-wrap">
+            <button class="reserve-submit" type="submit">등록 완료</button>
+          </div>
+
+          ${err ? `<div class="bad"><b>${esc(err)}</b></div>` : ``}
+
+          <div class="reserve-foot">
+            ${
+              isUp
+                ? "업둥교환는 1세트 또는 2세트 중 하나를 반드시 체크해야 합니다."
+                : "원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다."
+            }
           </div>
         </form>
-
-        <div class="muted" style="margin-top:12px;">
-          - 치즈 색깔을 “치즈 선택” 그대로 두면 등록이 안 됩니다.<br/>
-          - 원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다.<br/>
-          - ${
-            isUp
-              ? "업둥교환는 2업둥(1개/2개)로 신청합니다. (둘 중 하나는 반드시 체크)"
-              : "등록 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다."
-          }
-        </div>
       </div>
     `,
-      "예약 신청"
+      "예약 신청",
+      { activeRaid: raid, hideSidebar: false }
     )
   );
 });
@@ -1102,7 +1400,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
 // =====================
 // Viewer: reserve save
 // =====================
-app.post("/reserve", requireViewerOk, (req, res) => {
+app.post("/reserve", (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
@@ -1110,6 +1408,8 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const isUp = raid === "updoong";
 
   const activeRow = getActiveCodeRow(raid);
+  const code = String(req.body.code || "").trim();
+
   if (!activeRow || !activeRow.code) {
     return res.redirect(
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
@@ -1117,6 +1417,15 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       )}`
     );
   }
+
+  if (code !== String(activeRow.code)) {
+    return res.redirect(
+      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
+        "인증키가 올바르지 않습니다."
+      )}`
+    );
+  }
+
   const activeDay = activeRow.date_kst;
 
   const viewer_grade = String(req.body.viewer_grade || "");
@@ -1129,7 +1438,6 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const up2 = req.body.up2 ? 1 : 0;
   const up22 = req.body.up22 ? 1 : 0;
 
-  // 원하는 시작 기수
   let start_party = parseInt(String(req.body.start_party || "").trim(), 10);
   if (!Number.isInteger(start_party) || start_party < 1) start_party = 1;
   if (start_party > 99) start_party = 99;
@@ -1155,11 +1463,11 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     if (!up2 && !up22) {
       return res.redirect(
         `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
-          "업둥교환는 2업둥(1개/2개) 중 하나를 반드시 체크해야 합니다."
+          "업둥교환는 1세트 또는 2세트 중 하나를 반드시 체크해야 합니다."
         )}`
       );
     }
-    // 2개 체크하면 1개도 자동 포함처럼 보이게(데이터는 둘 다 1)
+
     const finalUp2 = up22 ? 1 : up2;
     const finalUp22 = up22 ? 1 : 0;
 
@@ -1228,9 +1536,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       `
       <div class="box">
         <div style="font-weight:900;font-size:20px;margin-bottom:6px;">등록 완료</div>
-        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay
-      )}</b></div>
+        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
         <div class="divider"></div>
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
@@ -1240,13 +1546,14 @@ app.post("/reserve", requireViewerOk, (req, res) => {
         </div>
       </div>
     `,
-      "완료"
+      "완료",
+      { activeRaid: raid }
     )
   );
 });
 
 // =====================
-// Viewer: check (기본=치즈등급순)
+// Viewer: check
 // =====================
 app.get("/check", (req, res) => {
   const raid = String(req.query.raid || "");
@@ -1265,12 +1572,15 @@ app.get("/check", (req, res) => {
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="row" style="gap:12px;">
+          <div class="raid-grid">
             ${RAID_OPTIONS.map(
-              (r) =>
-                `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(
-                  r.label
-                )}</a>`
+              (r) => `
+                <a class="raid-card" href="/check?raid=${encodeURIComponent(r.key)}">
+                  <img src="${esc(r.img)}" alt="${esc(r.label)}"
+                       onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+                  <div class="label">${esc(r.label)}</div>
+                </a>
+              `
             ).join("")}
           </div>
         </div>
@@ -1311,14 +1621,12 @@ app.get("/check", (req, res) => {
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약확인</div>
             <div class="muted">
               레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
-              <span class="chip">등록완료 ${
-                apps.filter((a) => a.confirmed === 1).length
-              }/${apps.length}</span>
+              <span class="chip">${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
             </div>
           </div>
           <div class="row">
             <a class="btn btnGhost" href="/">메인</a>
-            <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">예약하기</a>
+            <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">예약하기</a>
           </div>
         </div>
 
@@ -1331,74 +1639,88 @@ app.get("/check", (req, res) => {
             <th>모험단 이름</th>
             ${
               isUp
-                ? `<th class="center">2업둥(1개)</th><th class="center">2업둥(2개)</th>`
+                ? `<th class="center">1세트</th><th class="center">2세트</th>`
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
             <th class="center">상태</th>
-            <th>스트리머 코멘트</th>
           </tr>
           ${
             apps.length
-              ? apps
-                  .map((a) => {
-                    const status =
-                      a.confirmed === 1
-                        ? `<span class="ok">✔ 등록완료</span>`
-                        : `<span class="wait">⏳ 대기중</span>`;
-                    return `
-                      <tr>
-                        <td>${esc(gradeLabel(a.viewer_grade))}</td>
-                        <td>${esc(a.chzzk_nickname)}</td>
-                        <td>${esc(a.adventure_name)}</td>
-                        ${
-                          isUp
-                            ? `<td class="center">${a.up2 ? "✔" : "-"}</td>
-                               <td class="center">${a.up22 ? "✔" : "-"}</td>`
-                            : `<td class="center">${esc(a.dealer_count)}</td>
-                               <td class="center">${esc(a.buffer_count)}</td>`
-                        }
-                        <td class="center">${status}</td>
-                        <td>${a.comment ? esc(a.comment) : `<span class="muted">-</span>`}</td>
-                      </tr>
-                    `;
-                  })
-                  .join("")
-              : `<tr><td colspan="7" class="center muted">예약 신청이 없습니다.</td></tr>`
+              ? apps.map((a) => {
+                  const status =
+                    a.confirmed === 1
+                      ? `<span class="ok">✔ 등록완료</span>`
+                      : `<span class="wait">⏳ 대기중</span>`;
+                  return `
+                    <tr>
+                      <td>${esc(gradeLabel(a.viewer_grade))}</td>
+                      <td>${esc(a.chzzk_nickname)}</td>
+                      <td>${esc(a.adventure_name)}</td>
+                      ${
+                        isUp
+                          ? `<td class="center">${a.up2 ? "✔" : "-"}</td>
+                             <td class="center">${a.up22 ? "✔" : "-"}</td>`
+                          : `<td class="center">${esc(a.dealer_count)}</td>
+                             <td class="center">${esc(a.buffer_count)}</td>`
+                      }
+                      <td class="center">${status}</td>
+                    </tr>
+                  `;
+                }).join("")
+              : `<tr><td colspan="6" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
 
         <div class="muted" style="margin-top:12px;">
-          - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
-          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
+          - “등록완료”는 스트리머가 확인 체크한 상태입니다.
         </div>
       </div>
     `,
-      "예약확인"
+      "예약확인",
+      { activeRaid: raid, autoRefresh: true }
     )
   );
 });
 
 // =====================
-// Lineup utils (일반 레이드)
+// Lineup utils
 // =====================
-function buildPartyMap(lineups, cfg) {
+function buildPartyMap(lineups) {
   const map = new Map();
   for (const row of lineups) {
-    const p = row.party_index;
+    const p = Number(row.party_index);
     if (!map.has(p)) map.set(p, { buffers: {}, dealers: {} });
     const entry = map.get(p);
-    if (row.role === "buffer") entry.buffers[row.slot_index] = row.nickname;
-    else entry.dealers[row.slot_index] = row.nickname;
+    if (row.role === "buffer") entry.buffers[Number(row.slot_index)] = row.nickname;
+    else entry.dealers[Number(row.slot_index)] = row.nickname;
   }
   return map;
 }
 
-function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disabledSet = new Set() }) {
-  const buffersPerParty = cfg.buffersPerParty;
-  const dealersPerParty = cfg.dealersPerParty;
+function renderPartyCards({
+  raidKey,
+  dateKst,
+  partyMap,
+  editable,
+  adminMode,
+  disabledSet = new Set(),
+  templateMap = new Map(),
+  minPartyCount = 0,
+}) {
+  const indexSet = new Set([
+    ...Array.from(partyMap.keys()),
+    ...Array.from(disabledSet),
+    ...Array.from(templateMap.keys()),
+  ]);
 
-  const indexSet = new Set([...Array.from(partyMap.keys()), ...Array.from(disabledSet)]);
-  if (indexSet.size === 0) return `<div class="muted">편성된 공대가 없습니다.</div>`;
+  const highestExisting = indexSet.size ? Math.max(...Array.from(indexSet)) : 0;
+  const finalMax = Math.max(highestExisting, minPartyCount);
+
+  if (finalMax <= 0) {
+    return `<div class="muted">편성된 공대가 없습니다.</div>`;
+  }
+
+  for (let i = 1; i <= finalMax; i++) indexSet.add(i);
 
   const allIndices = Array.from(indexSet).sort((a, b) => a - b);
   const activeIndices = allIndices.filter((i) => !disabledSet.has(i));
@@ -1411,6 +1733,10 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     const data = partyMap.get(p) || { buffers: {}, dealers: {} };
     const isDisabled = disabledSet.has(p);
     const disableInputs = editable && adminMode && isDisabled;
+    const cfg = getPartyConfig(raidKey, dateKst, p, templateMap);
+    const buffersPerParty = cfg.buffersPerParty;
+    const dealersPerParty = cfg.dealersPerParty;
+    const isCustom = templateMap.has(p);
 
     html += `<div class="partyCard">
       <div class="partyHeader">
@@ -1426,30 +1752,37 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
         }
       </div>
 
+      <div class="partyMeta">${isCustom ? `커스텀 ${buffersPerParty}버퍼 / ${dealersPerParty}딜러` : `${buffersPerParty}버퍼 / ${dealersPerParty}딜러`}</div>
       <div class="partyBody">`;
 
-    // 버퍼
     html += `<div class="slotSection"><div class="slotSectionTitle">버퍼</div>`;
-    for (let b = 1; b <= buffersPerParty; b++) {
-      const bName = data.buffers[b] || "";
-      if (editable && adminMode) {
-        if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
-      } else {
-        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">버퍼</div>`;
+    if (buffersPerParty <= 0) {
+      html += `<div class="slotStatic slotEmpty">없음</div>`;
+    } else {
+      for (let b = 1; b <= buffersPerParty; b++) {
+        const bName = data.buffers[b] || "";
+        if (editable && adminMode) {
+          if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
+          else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
+        } else {
+          html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">버퍼</div>`;
+        }
       }
     }
     html += `</div><div class="slotDivider"></div>`;
 
-    // 딜러
     html += `<div class="slotSection"><div class="slotSectionTitle">딜러</div>`;
-    for (let d = 1; d <= dealersPerParty; d++) {
-      const dName = data.dealers[d] || "";
-      if (editable && adminMode) {
-        if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
-      } else {
-        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">딜러</div>`;
+    if (dealersPerParty <= 0) {
+      html += `<div class="slotStatic slotEmpty">없음</div>`;
+    } else {
+      for (let d = 1; d <= dealersPerParty; d++) {
+        const dName = data.dealers[d] || "";
+        if (editable && adminMode) {
+          if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
+          else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
+        } else {
+          html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">딜러</div>`;
+        }
       }
     }
     html += `</div></div></div>`;
@@ -1460,7 +1793,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 }
 
 // =====================
-// Updoong helpers (12명=1세트)
+// Updoong helpers
 // =====================
 function upPartyFromSlot(slotIndex) {
   const s = Number(slotIndex) || 1;
@@ -1502,8 +1835,16 @@ function getUpLineupMap(dateKst) {
 }
 
 function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new Map(), disabledSet = new Set(), minPartyCount = 1 }) {
-  const maxSlot = Math.max(12 * minPartyCount, getMaxUpSlot(dateKst), ...Array.from(valuesMap.keys(), (k) => Number(k) || 0));
-  const partyCount = Math.max(minPartyCount, Math.ceil(maxSlot / 12), ...Array.from(disabledSet, (p) => Number(p) || 0));
+  const maxSlot = Math.max(
+    12 * minPartyCount,
+    getMaxUpSlot(dateKst),
+    ...Array.from(valuesMap.keys(), (k) => Number(k) || 0)
+  );
+  const partyCount = Math.max(
+    minPartyCount,
+    Math.ceil(maxSlot / 12),
+    ...Array.from(disabledSet, (p) => Number(p) || 0)
+  );
 
   const makeSlot = (slotIndex, isDisabledParty) => {
     const name = valuesMap.get(slotIndex) || "";
@@ -1513,13 +1854,18 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
       }
       return `<input class="slotInput" style="margin:0;" name="u_${slotIndex}" value="${esc(name)}" placeholder="닉네임"/>`;
     }
-    // viewer read-only
     return name
       ? `<div class="slotStatic">${esc(name)}</div>`
       : `<div class="slotStatic slotEmpty">닉네임</div>`;
   };
 
-  const allIndices = Array.from(new Set([...Array.from({ length: partyCount }, (_, i) => i + 1), ...Array.from(disabledSet)])).sort((a, b) => a - b);
+  const allIndices = Array.from(
+    new Set([
+      ...Array.from({ length: partyCount }, (_, i) => i + 1),
+      ...Array.from(disabledSet),
+    ])
+  ).sort((a, b) => a - b);
+
   const activeIndices = allIndices.filter((i) => !disabledSet.has(i));
   const disabledIndicesArr = allIndices.filter((i) => disabledSet.has(i));
   const viewOrder = [...activeIndices, ...disabledIndicesArr];
@@ -1527,7 +1873,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
   let html = `
     <div class="muted" style="margin-bottom:10px;">
       - 업둥교환는 <b>12명=1세트</b>이며, <b>4명 단위</b>로 구분 표시됩니다.<br/>
-      - 공대 내 같은 닉네임은 1번만 들어갑니다. (2업둥(2개)은 다음 세트로 넘어가서 배치)
+      - 공대 내 같은 닉네임은 1번만 들어갑니다. (2세트 체크는 다음 세트로 넘어가서 배치)
     </div>
     <div class="upPartyGrid">
   `;
@@ -1580,18 +1926,15 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 }
 
 // =====================
-// 업둥교환 자동배치 (confirmed=1 기반)
+// Updoong auto lineup
 // =====================
 function rebuildUpdoongLineup(dateKst) {
-  const MAX_PARTY = 2;          //  업둥교환은 최대 2세트
+  const MAX_PARTY = 2;
   const SLOTS_PER_PARTY = 12;
-
   const disabledSet = getDisabledPartySet("updoong", dateKst);
 
-  // 전부 삭제 후 재구성
   db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
 
-  // 등록완료만 대상으로 created_at 순서대로
   const confirmedApps = db
     .prepare(
       `
@@ -1610,27 +1953,21 @@ function rebuildUpdoongLineup(dateKst) {
   `
   );
 
-  // party별 사용칸 / 닉네임 중복 방지용 Set
-  const usedCount = new Map(); // party -> number
-  const nameSet = new Map();   // party -> Set
+  const usedCount = new Map();
+  const nameSet = new Map();
 
-  function getUsed(p) {
-    return usedCount.get(p) || 0;
-  }
+  function getUsed(p) { return usedCount.get(p) || 0; }
   function getNames(p) {
     if (!nameSet.has(p)) nameSet.set(p, new Set());
     return nameSet.get(p);
   }
-  function isFull(p) {
-    return getUsed(p) >= SLOTS_PER_PARTY;
-  }
+  function isFull(p) { return getUsed(p) >= SLOTS_PER_PARTY; }
   function add(p, name, appId) {
     const slot = (p - 1) * SLOTS_PER_PARTY + (getUsed(p) + 1);
     usedCount.set(p, getUsed(p) + 1);
     getNames(p).add(name);
     insert.run(dateKst, slot, name, appId, nowISO());
   }
-
   function findFirstAvailableParty(name) {
     for (let p = 1; p <= MAX_PARTY; p++) {
       if (disabledSet.has(p)) continue;
@@ -1638,9 +1975,8 @@ function rebuildUpdoongLineup(dateKst) {
       if (getNames(p).has(name)) continue;
       return p;
     }
-    return 0; // 자리 없음
+    return 0;
   }
-
   function findAvailablePartyPreferNext(name, baseParty) {
     for (let p = baseParty + 1; p <= MAX_PARTY; p++) {
       if (disabledSet.has(p)) continue;
@@ -1656,7 +1992,6 @@ function rebuildUpdoongLineup(dateKst) {
     if (!name) continue;
 
     const cnt = a.up22 === 1 ? 2 : 1;
-
     const p1 = findFirstAvailableParty(name);
     if (!p1) continue;
     add(p1, name, a.id);
@@ -1679,21 +2014,16 @@ function applyLineupForApplication(appId, confirmed) {
   const raidKey = appRow.raid_key;
   const dateKst = appRow.date_kst;
 
-  // 업둥교환: 테이블(up_lineups) 자동 재구성
   if (raidKey === "updoong") {
     db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=? AND application_id=?`).run(dateKst, appId);
     rebuildUpdoongLineup(dateKst);
     return;
   }
 
-  // 일반 레이드
-  const cfg = getRaidConfig(raidKey);
+  const templateMap = getPartyTemplateMap(raidKey, dateKst);
   const disabledSet = getDisabledPartySet(raidKey, dateKst);
-
-  // 원하는 시작 기수
   const startParty = Math.max(1, Number(appRow.start_party || 1));
 
-  // 이미 배정된 자리 모두 제거
   db.prepare("DELETE FROM raid_lineups WHERE application_id=?").run(appId);
   if (!confirmed) return;
 
@@ -1709,22 +2039,21 @@ function applyLineupForApplication(appId, confirmed) {
     .all(raidKey, dateKst);
 
   const partyInfo = new Map();
-  let maxPartyIndex = 0;
+  let maxPartyIndex = Math.max(0, getMaxPartyIndexFromTemplateMap(templateMap));
 
   for (const row of rows) {
-    if (!partyInfo.has(row.party_index)) {
-      partyInfo.set(row.party_index, { bufSlots: new Set(), dealSlots: new Set(), names: new Set() });
+    const partyIndex = Number(row.party_index);
+    if (!partyInfo.has(partyIndex)) {
+      partyInfo.set(partyIndex, { bufSlots: new Set(), dealSlots: new Set(), names: new Set() });
     }
-    const info = partyInfo.get(row.party_index);
-    if (row.role === "buffer") info.bufSlots.add(row.slot_index);
-    else info.dealSlots.add(row.slot_index);
+    const info = partyInfo.get(partyIndex);
+    if (row.role === "buffer") info.bufSlots.add(Number(row.slot_index));
+    else info.dealSlots.add(Number(row.slot_index));
     info.names.add(row.nickname);
-    if (row.party_index > maxPartyIndex) maxPartyIndex = row.party_index;
+    if (partyIndex > maxPartyIndex) maxPartyIndex = partyIndex;
   }
 
   function findOrCreatePartyWithSpace(role, nickname) {
-    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
-
     for (let idx = startParty; idx <= maxPartyIndex; idx++) {
       if (disabledSet.has(idx)) continue;
 
@@ -1736,8 +2065,12 @@ function applyLineupForApplication(appId, confirmed) {
 
       if (info.names.has(nickname)) continue;
 
+      const cfg = getPartyConfig(raidKey, dateKst, idx, templateMap);
+      const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
+      if (perParty <= 0) continue;
+
       const used = role === "buffer" ? info.bufSlots.size : info.dealSlots.size;
-      if (used < perParty) return { idx, info };
+      if (used < perParty) return { idx, info, cfg };
     }
 
     let newIdx = Math.max(maxPartyIndex + 1, startParty);
@@ -1746,7 +2079,8 @@ function applyLineupForApplication(appId, confirmed) {
 
     const info = { bufSlots: new Set(), dealSlots: new Set(), names: new Set() };
     partyInfo.set(newIdx, info);
-    return { idx: newIdx, info };
+    const cfg = getPartyConfig(raidKey, dateKst, newIdx, templateMap);
+    return { idx: newIdx, info, cfg };
   }
 
   const insert = db.prepare(
@@ -1758,16 +2092,16 @@ function applyLineupForApplication(appId, confirmed) {
   );
 
   function assignSeats(role, count) {
-    const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
-    if (perParty <= 0) return;
-
     const nickname = appRow.chzzk_nickname;
 
     for (let i = 0; i < count; i++) {
       const result = findOrCreatePartyWithSpace(role, nickname);
       if (!result) return;
 
-      const { idx, info } = result;
+      const { idx, info, cfg } = result;
+      const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
+      if (perParty <= 0) continue;
+
       const slots = role === "buffer" ? info.bufSlots : info.dealSlots;
 
       let slotIndex = 1;
@@ -1780,13 +2114,12 @@ function applyLineupForApplication(appId, confirmed) {
     }
   }
 
-  // 버퍼 우선 예약 후, 딜러 배치
-  assignSeats("buffer", appRow.buffer_count || 0);
-  assignSeats("dealer", appRow.dealer_count || 0);
+  assignSeats("buffer", Number(appRow.buffer_count || 0));
+  assignSeats("dealer", Number(appRow.dealer_count || 0));
 }
 
 // =====================
-// Admin routing
+// Admin routes
 // =====================
 app.get(ADMIN_BASE, (req, res) => {
   const key = String(req.cookies.admin_key || "");
@@ -1818,7 +2151,8 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
         </form>
       </div>
     `,
-      "스트리머 로그인"
+      "스트리머 로그인",
+      { isAdmin: true }
     )
   );
 });
@@ -1835,7 +2169,8 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
           <a class="btn" href="${esc(ADMIN_BASE)}/login">다시 시도</a>
         </div>
       `,
-        "실패"
+        "실패",
+        { isAdmin: true }
       )
     );
   }
@@ -1854,98 +2189,121 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
   res.redirect(`${ADMIN_BASE}/login`);
 });
 
-// Admin: 메인
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
+  const cardsHtml = RAID_OPTIONS.map(
+    (r) => `
+      <a class="raid-card" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(r.key)}&sort=grade">
+        <img src="${esc(r.img)}" alt="${esc(r.label)}"
+             onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+        <div class="label">${esc(r.label)}</div>
+      </a>
+    `
+  ).join("");
+
+  const modalHtml = `
+    <div class="modal-overlay" id="modal-auth">
+      <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal('modal-auth')">✕</button>
+        <div class="modal-header">
+          <h3>인증키 입력</h3>
+          <p>레이드를 선택하고 진행일과 인증키를 설정하세요.</p>
+        </div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/code" class="modal-form">
+          <div>
+            <div class="muted" style="margin-bottom:6px;">레이드</div>
+            <select name="raid" required>
+              <option value="">레이드 선택</option>
+              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+            </select>
+          </div>
+
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">진행일</div>
+              <input name="date_kst" value="${esc(todayKST())}" placeholder="YYYY-MM-DD" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">인증키</div>
+              <input name="code" placeholder="예) 1234ABCD" required />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:flex-end; margin-top:4px;">
+            <button type="button" class="btn btnGhost" onclick="closeModal('modal-auth')">닫기</button>
+            <button type="submit" class="btn btnPrimary">등록</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-streamer">
+      <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal('modal-streamer')">✕</button>
+        <div class="modal-header">
+          <h3>스트리머 예약</h3>
+          <p>스트리머 캐릭터를 등록하면 자동배치 시 최우선으로 반영됩니다.</p>
+        </div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/streamer-reserve" class="modal-form">
+          <div>
+            <div class="muted" style="margin-bottom:6px;">레이드</div>
+            <select name="raid" required>
+              <option value="">레이드 선택</option>
+              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+            </select>
+          </div>
+
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">딜러 수</div>
+              <input name="dealer_count" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">버퍼 수</div>
+              <input name="buffer_count" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:flex-end; margin-top:4px;">
+            <button type="button" class="btn btnGhost" onclick="closeModal('modal-streamer')">닫기</button>
+            <button type="submit" class="btn btnPrimary">등록</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
   res.send(
     layout(
       `
       <div class="box">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자</div>
-            <div class="muted">레이드별 신청목록 확인 / 진행일 + 인증키 설정 / 공대편성 / 스트리머 예약</div>
+            <div style="font-weight:700;font-size:20px;margin-bottom:6px;">관리자 메인</div>
+            <div class="muted">좌측 메뉴에서 인증키 설정과 스트리머 예약을 팝업으로 열 수 있습니다.</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">신청목록 보기</div>
-        <div class="row raidNav">
-          ${RAID_OPTIONS.map(
-            (r) =>
-              `<a class="btn" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
-                r.key
-              )}&sort=grade">${esc(r.label)}</a>`
-          ).join("")}
-        </div>
+        <div style="font-weight:700;margin-bottom:10px;">레이드 선택</div>
+        <div class="raid-grid">${cardsHtml}</div>
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">진행일 + 인증키 설정</div>
         <div class="muted">
-          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 "기준 날짜"가 됩니다.<br/>
-          - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
+          - 레이드를 선택하면 좌측 썸네일이 해당 레이드 이미지로 바뀝니다.<br/>
+          - 좌측의 <b>인증키 설정</b> 버튼: 진행일/인증키 등록 팝업<br/>
+          - 좌측의 <b>스트리머 예약</b> 버튼: 스트리머 캐릭터 등록 팝업
         </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="${esc(ADMIN_BASE)}/code" class="row" style="align-items:flex-end;">
-          <div style="min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">레이드</div>
-            <select name="raid" required style="max-width:260px;">
-              <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
-            </select>
-          </div>
-
-          <div style="min-width:200px;">
-            <div class="muted" style="margin-bottom:6px;">진행일(YYYY-MM-DD)</div>
-            <input name="date_kst" value="${esc(todayKST())}" placeholder="예) 2026-01-29" required />
-          </div>
-
-          <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">인증키</div>
-            <input name="code" placeholder="예) 1234ABCD" required />
-          </div>
-
-          <button class="btn" type="submit">저장</button>
-        </form>
-
-        <div class="divider"></div>
-
-        <div style="font-weight:900;margin-bottom:8px;">스트리머 전용 예약</div>
-        <div class="muted">
-          - 스트리머 본인의 캐릭터 수를 입력하면, 자동배치 시 <b>최우선</b>으로 배치됩니다.<br/>
-          - 자동배치 우선순위: 스트리머 → 불타는 치즈 → 그 외 (딜러 먼저 배치)
-        </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="${esc(ADMIN_BASE)}/streamer-reserve" class="row" style="align-items:flex-end;">
-          <div style="min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">레이드</div>
-            <select name="raid" required style="max-width:260px;">
-              <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
-            </select>
-          </div>
-
-          <div style="min-width:140px;">
-            <div class="muted" style="margin-bottom:6px;">딜러 수</div>
-            <input name="dealer_count" inputmode="numeric" placeholder="예) 1" required />
-          </div>
-
-          <div style="min-width:140px;">
-            <div class="muted" style="margin-bottom:6px;">버퍼 수</div>
-            <input name="buffer_count" inputmode="numeric" placeholder="예) 1" required />
-          </div>
-
-          <button class="btn" type="submit">스트리머 예약 추가</button>
-        </form>
       </div>
+
+      ${modalHtml}
     `,
-      "관리자"
+      "관리자",
+      { isAdmin: true, activeRaid: "admin_lobby" }
     )
   );
 });
@@ -1987,9 +2345,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   dealer_count = Math.max(0, Math.min(999, Math.floor(dealer_count)));
   buffer_count = Math.max(0, Math.min(999, Math.floor(buffer_count)));
 
-  if (dealer_count === 0 && buffer_count === 0) {
-    return res.redirect(`${ADMIN_BASE}/raid`);
-  }
+  if (dealer_count === 0 && buffer_count === 0) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
 
@@ -2008,17 +2364,66 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
-// =====================
-// Admin: 치즈 등급별 일괄 등록(등록완료 체크 + 편성표 반영)
-// =====================
+app.post(`${ADMIN_BASE}/party-template/add`, requireAdmin, (req, res) => {
+  const raid = String(req.body.raid || "");
+  if (!raidByKey(raid) || raid === "updoong") {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  const dateKst = getActiveDay(raid);
+  const partyIndex = Math.floor(Number(req.body.party_index || 0));
+  const bufferSlots = Math.floor(Number(req.body.buffer_slots || 0));
+  const dealerSlots = Math.floor(Number(req.body.dealer_slots || 0));
+
+  if (
+    !Number.isInteger(partyIndex) || partyIndex < 1 || partyIndex > 99 ||
+    !Number.isInteger(bufferSlots) || bufferSlots < 0 || bufferSlots > 12 ||
+    !Number.isInteger(dealerSlots) || dealerSlots < 0 || dealerSlots > 12
+  ) {
+    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  }
+
+  db.prepare(`
+    INSERT INTO raid_party_templates
+      (date_kst, raid_key, party_index, buffer_slots, dealer_slots, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(date_kst, raid_key, party_index)
+    DO UPDATE SET
+      buffer_slots=excluded.buffer_slots,
+      dealer_slots=excluded.dealer_slots
+  `).run(dateKst, raid, partyIndex, bufferSlots, dealerSlots, nowISO());
+
+  return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+});
+
+app.post(`${ADMIN_BASE}/party-template/delete`, requireAdmin, (req, res) => {
+  const raid = String(req.body.raid || "");
+  if (!raidByKey(raid) || raid === "updoong") {
+    return res.redirect(`${ADMIN_BASE}/raid`);
+  }
+
+  const dateKst = getActiveDay(raid);
+  const partyIndex = Math.floor(Number(req.body.party_index || 0));
+
+  if (!Number.isInteger(partyIndex) || partyIndex < 1) {
+    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  }
+
+  db.prepare(`
+    DELETE FROM raid_party_templates
+    WHERE date_kst=? AND raid_key=? AND party_index=?
+  `).run(dateKst, raid, partyIndex);
+
+  return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+});
+
 app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "grade");
   const up = String(req.body.up || "");
   const group = String(req.body.group || "");
 
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
 
@@ -2029,7 +2434,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   else if (group === "normal") gradeKeys = ["normal"];
   else return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 
-  // 대상 id를 created_at 순으로 뽑기
   const placeholders = gradeKeys.map(() => "?").join(",");
   const targetRows = db
     .prepare(
@@ -2043,7 +2447,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
     )
     .all(dateKst, raid, ...gradeKeys);
 
-  // confirmed=1 일괄 처리
   db.prepare(
     `
     UPDATE applications
@@ -2053,21 +2456,16 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   `
   ).run(dateKst, raid, ...gradeKeys);
 
-  // 편성표 반영
   if (raid === "updoong") {
     rebuildUpdoongLineup(dateKst);
   } else {
-    for (const r of targetRows) {
-      applyLineupForApplication(Number(r.id), true);
-    }
+    for (const r of targetRows) applyLineupForApplication(Number(r.id), true);
   }
 
-  // 원래 보던 화면 유지(업둥 필터 포함)
   const upQS = up === "1" || up === "2" ? `&up=${encodeURIComponent(up)}` : "";
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}${upQS}`);
 });
 
-// Admin: 신청목록
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
   const sort = String(req.query.sort || "grade");
@@ -2083,16 +2481,11 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time${isUp && upFilter ? `&up=${encodeURIComponent(upFilter)}` : ""}`
       : `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=grade${isUp && upFilter ? `&up=${encodeURIComponent(upFilter)}` : ""}`;
 
-  let apps = db
-    .prepare(`SELECT * FROM applications WHERE date_kst=? AND raid_key=?`)
-    .all(activeDay, raid);
+  let apps = db.prepare(`SELECT * FROM applications WHERE date_kst=? AND raid_key=?`).all(activeDay, raid);
 
   if (isUp) {
-    if (upFilter === "1") {
-      apps = apps.filter((a) => a.up2 === 1 || a.up22 === 1);
-    } else if (upFilter === "2") {
-      apps = apps.filter((a) => a.up22 === 1);
-    }
+    if (upFilter === "1") apps = apps.filter((a) => a.up2 === 1 || a.up22 === 1);
+    else if (upFilter === "2") apps = apps.filter((a) => a.up22 === 1);
   }
 
   if (sort === "grade" || (isUp && upFilter)) {
@@ -2110,8 +2503,10 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const upFilter1Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=1`;
   const upFilter2Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=2`;
 
-  // ✅ 일괄등록 버튼은 레이드 버튼처럼(btnGhost) 보이게
-  const bulkUpHidden = isUp && (upFilter === "1" || upFilter === "2") ? `<input type="hidden" name="up" value="${esc(upFilter)}"/>` : "";
+  const bulkUpHidden =
+    isUp && (upFilter === "1" || upFilter === "2")
+      ? `<input type="hidden" name="up" value="${esc(upFilter)}"/>`
+      : "";
 
   const bulkButtonsHtml = `
     <div class="divider"></div>
@@ -2121,7 +2516,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
     </div>
     <div class="row" style="gap:8px;">
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('불타는 치즈 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('불타는 치즈 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2130,7 +2525,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('분홍색 치즈 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('분홍색 치즈 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2139,7 +2534,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('노란색 치즈 & 통나무 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('노란색 치즈 & 통나무 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2148,7 +2543,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('일반 치즈 인원을 일괄 등록(등록완료 체크 + 일괄 배치)할까요?');">
+            onsubmit="return confirm('일반 치즈 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
@@ -2167,9 +2562,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">신청목록</div>
             <div class="muted">
               레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b>
-              <span class="chip">등록완료 ${
-                apps.filter((a) => a.confirmed === 1).length
-              }/${apps.length}</span>
+              <span class="chip">등록완료 ${apps.filter((a) => a.confirmed === 1).length}/${apps.length}</span>
             </div>
           </div>
           <div class="row">
@@ -2218,84 +2611,65 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
             <th>원하는 시작 기수</th>
-            <th>코멘트</th>
             <th class="center">삭제</th>
           </tr>
 
           ${
             apps.length
-              ? apps
-                  .map((a) => {
-                    const formId = `confirmForm_${a.id}`;
-                    const checked = a.confirmed === 1 ? "checked" : "";
-                    const commentVal = String(a.comment || "");
-                    const startPartyNum = Number(a.start_party || 0);
-                    const startPartyHtml =
-                      startPartyNum > 1 ? `${esc(startPartyNum)}기수부터` : `<span class="muted">-</span>`;
+              ? apps.map((a) => {
+                  const formId = `confirmForm_${a.id}`;
+                  const checked = a.confirmed === 1 ? "checked" : "";
+                  const startPartyNum = Number(a.start_party || 0);
+                  const startPartyHtml =
+                    startPartyNum > 1 ? `${esc(startPartyNum)}기수부터` : `<span class="muted">-</span>`;
 
-                    return `
-                      <tr>
-                        <td class="center">
-                          <form id="${formId}" method="POST" action="${esc(ADMIN_BASE)}/confirm" style="margin:0;">
-                            <input type="hidden" name="id" value="${esc(a.id)}"/>
-                            <input type="hidden" name="raid" value="${esc(raid)}"/>
-                            <input type="hidden" name="sort" value="${esc(sort)}"/>
-                            <input type="hidden" name="confirmed" value="${a.confirmed === 1 ? "0" : "1"}"/>
-                            <label class="adminConfirm">
-                              <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
-                              <span>완료</span>
-                            </label>
-                          </form>
-                        </td>
+                  return `
+                    <tr>
+                      <td class="center">
+                        <form id="${formId}" method="POST" action="${esc(ADMIN_BASE)}/confirm" style="margin:0;">
+                          <input type="hidden" name="id" value="${esc(a.id)}"/>
+                          <input type="hidden" name="raid" value="${esc(raid)}"/>
+                          <input type="hidden" name="sort" value="${esc(sort)}"/>
+                          <input type="hidden" name="confirmed" value="${a.confirmed === 1 ? "0" : "1"}"/>
+                          <label class="adminConfirm">
+                            <input type="checkbox" ${checked} onchange="submitOnChange('${formId}')"/>
+                            <span>완료</span>
+                          </label>
+                        </form>
+                      </td>
 
-                        <td>${esc(gradeLabel(a.viewer_grade))}</td>
-                        <td>${esc(a.chzzk_nickname)}</td>
-                        <td>${esc(a.adventure_name)}</td>
+                      <td>${esc(gradeLabel(a.viewer_grade))}</td>
+                      <td>${esc(a.chzzk_nickname)}</td>
+                      <td>${esc(a.adventure_name)}</td>
 
-                        ${
-                          isUp
-                            ? `<td class="center">${a.up2 ? "✔" : "-"}</td>
-                               <td class="center">${a.up22 ? "✔" : "-"}</td>`
-                            : `<td class="center">${esc(a.dealer_count)}</td>
-                               <td class="center">${esc(a.buffer_count)}</td>`
-                        }
+                      ${
+                        isUp
+                          ? `<td class="center">${a.up2 ? "✔" : "-"}</td>
+                             <td class="center">${a.up22 ? "✔" : "-"}</td>`
+                          : `<td class="center">${esc(a.dealer_count)}</td>
+                             <td class="center">${esc(a.buffer_count)}</td>`
+                      }
 
-                        <td>${startPartyHtml}</td>
+                      <td>${startPartyHtml}</td>
 
-                        <td>
-                          <form method="POST" action="${esc(ADMIN_BASE)}/comment" style="margin:0;" class="row">
-                            <input type="hidden" name="id" value="${esc(a.id)}"/>
-                            <input type="hidden" name="raid" value="${esc(raid)}"/>
-                            <input type="hidden" name="sort" value="${esc(sort)}"/>
-                            <input class="commentBox" name="comment" placeholder="예) 1깃수 시작" value="${esc(commentVal)}"/>
-                            <button class="btn" type="submit">저장</button>
-                          </form>
-                        </td>
-
-                        <td class="center">
-                          <form method="POST" action="${esc(ADMIN_BASE)}/delete" onsubmit="return confirm('정말 삭제하시겠습니까?');" style="margin:0;">
-                            <input type="hidden" name="id" value="${esc(a.id)}"/>
-                            <input type="hidden" name="raid" value="${esc(raid)}"/>
-                            <input type="hidden" name="sort" value="${esc(sort)}"/>
-                            <button class="btn btnDanger" type="submit">삭제</button>
-                          </form>
-                        </td>
-                      </tr>
-                    `;
-                  })
-                  .join("")
-              : `<tr><td colspan="9" class="center muted">예약 신청이 없습니다.</td></tr>`
+                      <td class="center">
+                        <form method="POST" action="${esc(ADMIN_BASE)}/delete" onsubmit="return confirm('정말 삭제하시겠습니까?');" style="margin:0;">
+                          <input type="hidden" name="id" value="${esc(a.id)}"/>
+                          <input type="hidden" name="raid" value="${esc(raid)}"/>
+                          <input type="hidden" name="sort" value="${esc(sort)}"/>
+                          <button class="btn btnDanger" type="submit">삭제</button>
+                        </form>
+                      </td>
+                    </tr>
+                  `;
+                }).join("")
+              : `<tr><td colspan="8" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
-
-        <div class="muted" style="margin-top:12px;">
-          - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
-          - “원하는 시작 기수”는 선택 항목이며, 자동 배치 시 해당 기수부터 배치를 시작하기 위한 참고용입니다.<br/>
-          - 업둥교환 필터에서 “2업둥(1개)”는 1개 + 2개가 함께 표시됩니다.
-        </div>
       </div>
     `,
-      "신청목록"
+      "신청목록",
+      { isAdmin: true, activeRaid: raid, autoRefresh: true }
     )
   );
 });
@@ -2311,18 +2685,6 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
     applyLineupForApplication(id, confirmed === 1);
   }
 
-  return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
-});
-
-app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
-  const id = Number(req.body.id);
-  const raid = String(req.body.raid || "");
-  const sort = String(req.body.sort || "grade");
-  const comment = String(req.body.comment || "").slice(0, 12);
-
-  if (Number.isInteger(id)) {
-    db.prepare("UPDATE applications SET comment=? WHERE id=?").run(comment, id);
-  }
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
@@ -2349,25 +2711,14 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   const activeDay = getActiveDay(raid);
 
   db.prepare("DELETE FROM applications WHERE date_kst=? AND raid_key=?").run(activeDay, raid);
-
-  db.prepare(
-    `
-    DELETE FROM raid_lineups
-    WHERE date_kst=? AND raid_key=?
-    AND application_id IS NOT NULL
-  `
-  ).run(activeDay, raid);
-
+  db.prepare(`DELETE FROM raid_lineups WHERE date_kst=? AND raid_key=? AND application_id IS NOT NULL`).run(activeDay, raid);
   db.prepare(`DELETE FROM up_lineups WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
-
   db.prepare(`DELETE FROM raid_disabled_parties WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
+  db.prepare(`DELETE FROM raid_party_templates WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
 
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
-// =====================
-// Admin: lineup manage
-// =====================
 app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
@@ -2375,7 +2726,6 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  // 업둥교환 라인업
   if (raid === "updoong") {
     const map = getUpLineupMap(dateKst);
     const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2389,7 +2739,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
       minPartyCount: 1,
     });
 
-    res.send(
+    return res.send(
       layout(
         `
         <div class="box">
@@ -2403,7 +2753,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
               <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
                 <input type="hidden" name="raid" value="${esc(raid)}"/>
                 <button class="btn btnDanger" type="submit"
-                  onclick="return confirm('업둥교환 편성표/세트 비활성 상태를 초기화합니다.\\n(편성표가 비워지고, 삭제된 세트도 복구됩니다)');">
+                  onclick="return confirm('업둥교환 편성표/세트 비활성 상태를 초기화합니다.');">
                   편성표 초기화
                 </button>
               </form>
@@ -2425,22 +2775,14 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
             <input type="hidden" name="raid" value="updoong"/>
             <input type="hidden" id="deleteUpPartyIndexInput" name="party_index" value=""/>
           </form>
-
-          <div class="muted" style="margin-top:12px;">
-            - 빈 칸으로 저장하면 해당 슬롯은 비워집니다.<br/>
-            - 자동배치는 “신청목록에서 등록완료 체크”를 기준으로 예약순으로 다시 채워집니다.<br/>
-            - 삭제된 세트(비활성)는 자동배치/수동저장 모두 건너뜁니다.
-          </div>
         </div>
       `,
-        "업둥교환 편성표"
+        "업둥교환 편성표",
+        { isAdmin: true, activeRaid: raid, autoRefresh: true }
       )
     );
-    return;
   }
 
-  // 일반 레이드 라인업
-  const cfg = getRaidConfig(raid);
   const lineups = db
     .prepare(
       `
@@ -2452,15 +2794,96 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
     .all(raid, dateKst);
 
   const disabledSet = getDisabledPartySet(raid, dateKst);
-  const partyMap = buildPartyMap(lineups, cfg);
+  const templateMap = getPartyTemplateMap(raid, dateKst);
+  const partyMap = buildPartyMap(lineups);
+  const highestPartyIndex = Math.max(
+    0,
+    ...Array.from(partyMap.keys()),
+    ...Array.from(disabledSet),
+    ...Array.from(templateMap.keys())
+  );
+
   const partyCardsHtml = renderPartyCards({
     raidKey: raid,
+    dateKst,
     partyMap,
-    cfg,
     editable: true,
     adminMode: true,
     disabledSet,
+    templateMap,
+    minPartyCount: highestPartyIndex,
   });
+
+  const templateRows = getPartyTemplateRows(raid, dateKst);
+
+  const customPartyModalHtml = `
+    <div class="modal-overlay" id="modal-custom-party">
+      <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal('modal-custom-party')">✕</button>
+        <div class="modal-header">
+          <h3>커스텀 공대 추가</h3>
+          <p>기수별로 버퍼/딜러 수를 직접 설정할 수 있습니다.</p>
+        </div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/party-template/add" class="modal-form">
+          <input type="hidden" name="raid" value="${esc(raid)}"/>
+
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">기수</div>
+              <input name="party_index" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">버퍼 수</div>
+              <input name="buffer_slots" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">딜러 수</div>
+              <input name="dealer_slots" inputmode="numeric" placeholder="예) 7" required />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:flex-end; margin-top:4px;">
+            <button type="button" class="btn btnGhost" onclick="closeModal('modal-custom-party')">닫기</button>
+            <button type="submit" class="btn btnPrimary">저장</button>
+          </div>
+        </form>
+
+        <div class="divider"></div>
+
+        <div style="font-weight:700; margin-bottom:8px;">현재 커스텀 공대 목록</div>
+        ${
+          templateRows.length
+            ? `
+              <table>
+                <tr>
+                  <th class="center">기수</th>
+                  <th class="center">버퍼</th>
+                  <th class="center">딜러</th>
+                  <th class="center">삭제</th>
+                </tr>
+                ${templateRows.map((row) => `
+                  <tr>
+                    <td class="center">${esc(row.party_index)}</td>
+                    <td class="center">${esc(row.buffer_slots)}</td>
+                    <td class="center">${esc(row.dealer_slots)}</td>
+                    <td class="center">
+                      <form method="POST" action="${esc(ADMIN_BASE)}/party-template/delete" style="margin:0;"
+                            onsubmit="return confirm('${esc(row.party_index)}기수 커스텀 공대를 삭제할까요?');">
+                        <input type="hidden" name="raid" value="${esc(raid)}"/>
+                        <input type="hidden" name="party_index" value="${esc(row.party_index)}"/>
+                        <button class="btn btnDanger" type="submit">삭제</button>
+                      </form>
+                    </td>
+                  </tr>
+                `).join("")}
+              </table>
+            `
+            : `<div class="muted">등록된 커스텀 공대가 없습니다.</div>`
+        }
+      </div>
+    </div>
+  `;
 
   res.send(
     layout(
@@ -2476,7 +2899,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
             <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <button class="btn btnDanger" type="submit"
-                onclick="return confirm('현재 레이드의 공대 진행도를 모두 초기화합니다.\\n모든 공대 편성이 삭제되고 비활성 상태도 해제되어 1공대부터 다시 편성할 수 있습니다.');">
+                onclick="return confirm('현재 레이드의 공대 진행도와 커스텀 공대 구성을 모두 초기화합니다.');">
                 공대 진행도 초기화
               </button>
             </form>
@@ -2487,7 +2910,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
         <form method="POST" action="${esc(ADMIN_BASE)}/lineup/save">
           <input type="hidden" name="raid" value="${esc(raid)}"/>
-          <input type="hidden" name="party_count" value="${Math.max(0, ...partyMap.keys()) || 0}"/>
+          <input type="hidden" name="party_count" value="${esc(highestPartyIndex)}"/>
           ${partyCardsHtml}
           <div class="row" style="margin-top:16px;">
             <button class="btn" type="submit">수동 수정 내용 저장</button>
@@ -2498,24 +2921,19 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           <input type="hidden" id="deleteRaidInput" name="raid" value="${esc(raid)}"/>
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
         </form>
-
-        <div class="muted" style="margin-top:12px;">
-          - 빈 칸으로 두고 저장하면 해당 슬롯의 인원이 삭제됩니다.<br/>
-          - 공대 삭제 버튼을 누르면 해당 공대의 인원은 삭제되며, 공대 진행도 초기화를 하기 전까지 비활성 상태가 됩니다.<br/>
-          - “공대 진행도 초기화”를 누르면 이 레이드의 공대 편성이 모두 삭제되고 비활성 공대 설정도 해제됩니다.
-        </div>
       </div>
+
+      ${customPartyModalHtml}
     `,
-      "공대 편성표"
+      "공대 편성표",
+      { isAdmin: true, activeRaid: raid, autoRefresh: true }
     )
   );
 });
 
-// Admin: reset lineup
 app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
 
@@ -2527,19 +2945,18 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
 
   db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
   db.prepare("DELETE FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
+  db.prepare("DELETE FROM raid_party_templates WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: save lineup (일반 레이드)
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay(raid);
-  const cfg = getRaidConfig(raid);
   const partyCount = Number(req.body.party_count || 0) || 0;
   const disabledSet = getDisabledPartySet(raid, dateKst);
+  const templateMap = getPartyTemplateMap(raid, dateKst);
 
   db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
 
@@ -2553,16 +2970,15 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
 
   for (let p = 1; p <= partyCount; p++) {
     if (disabledSet.has(p)) continue;
+    const cfg = getPartyConfig(raid, dateKst, p, templateMap);
 
     for (let b = 1; b <= cfg.buffersPerParty; b++) {
-      const key = `b_${p}_${b}`;
-      const name = String(req.body[key] || "").trim();
+      const name = String(req.body[`b_${p}_${b}`] || "").trim();
       if (!name) continue;
       insert.run(dateKst, raid, p, "buffer", b, name, nowISO());
     }
     for (let d = 1; d <= cfg.dealersPerParty; d++) {
-      const key = `d_${p}_${d}`;
-      const name = String(req.body[key] || "").trim();
+      const name = String(req.body[`d_${p}_${d}`] || "").trim();
       if (!name) continue;
       insert.run(dateKst, raid, p, "dealer", d, name, nowISO());
     }
@@ -2571,10 +2987,8 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: save updoong lineup
 app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  if (raid !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
+  if (String(req.body.raid || "") !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
 
   const dateKst = getActiveDay("updoong");
   const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2594,9 +3008,7 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   for (let i = 1; i <= maxSlot; i++) {
     const party = upPartyFromSlot(i);
     if (disabledSet.has(party)) continue;
-
-    const key = `u_${i}`;
-    const name = String(req.body[key] || "").trim();
+    const name = String(req.body[`u_${i}`] || "").trim();
     if (!name) continue;
     insert.run(dateKst, i, name, nowISO());
   }
@@ -2604,11 +3016,9 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=updoong`);
 });
 
-// Admin: delete party (일반 레이드)
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
 
   const partyIndex = Number(req.body.party_index || 0);
   if (!partyIndex) return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
@@ -2642,7 +3052,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
 
     const newDealer = Math.max(0, Number(appRow.dealer_count || 0) - (u.usedDealers || 0));
     const newBuffer = Math.max(0, Number(appRow.buffer_count || 0) - (u.usedBuffers || 0));
-
     db.prepare(`UPDATE applications SET dealer_count=?, buffer_count=? WHERE id=?`).run(newDealer, newBuffer, appId);
   }
 
@@ -2659,10 +3068,8 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: delete updoong party
 app.post(`${ADMIN_BASE}/lineup/delete-up-party`, requireAdmin, (req, res) => {
-  const raid = String(req.body.raid || "");
-  if (raid !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
+  if (String(req.body.raid || "") !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
 
   const partyIndex = Number(req.body.party_index || 0);
   if (!partyIndex) return res.redirect(`${ADMIN_BASE}/lineup?raid=updoong`);
@@ -2691,7 +3098,7 @@ app.post(`${ADMIN_BASE}/lineup/delete-up-party`, requireAdmin, (req, res) => {
 });
 
 // =====================
-// Viewer: lineup (read-only)
+// Viewer: lineup
 // =====================
 app.get("/lineup", (req, res) => {
   const raid = String(req.query.raid || "");
@@ -2710,9 +3117,15 @@ app.get("/lineup", (req, res) => {
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="row" style="gap:12px;">
+          <div class="raid-grid">
             ${RAID_OPTIONS.map(
-              (r) => `<a class="btn" href="/lineup?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`
+              (r) => `
+                <a class="raid-card" href="/lineup?raid=${encodeURIComponent(r.key)}">
+                  <img src="${esc(r.img)}" alt="${esc(r.label)}"
+                       onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+                  <div class="label">${esc(r.label)}</div>
+                </a>
+              `
             ).join("")}
           </div>
         </div>
@@ -2751,21 +3164,14 @@ app.get("/lineup", (req, res) => {
           </div>
 
           <div class="divider"></div>
-
           ${upHtml}
-
-          <div class="muted" style="margin-top:12px;">
-            - 삭제된 세트는 비활성 상태입니다.<br/>
-            - 편성은 스트리머가 수동/자동으로 조정할 수 있습니다.
-          </div>
         </div>
       `,
-        "업둥교환 편성표"
+        "업둥교환 편성표",
+        { activeRaid: raid, autoRefresh: true }
       )
     );
   }
-
-  const cfg = getRaidConfig(raid);
 
   const lineups = db
     .prepare(
@@ -2778,14 +3184,24 @@ app.get("/lineup", (req, res) => {
     .all(raid, dateKst);
 
   const disabledSet = getDisabledPartySet(raid, dateKst);
-  const partyMap = buildPartyMap(lineups, cfg);
+  const templateMap = getPartyTemplateMap(raid, dateKst);
+  const partyMap = buildPartyMap(lineups);
+  const highestPartyIndex = Math.max(
+    0,
+    ...Array.from(partyMap.keys()),
+    ...Array.from(disabledSet),
+    ...Array.from(templateMap.keys())
+  );
+
   const partyCardsHtml = renderPartyCards({
     raidKey: raid,
+    dateKst,
     partyMap,
-    cfg,
     editable: false,
     adminMode: false,
     disabledSet,
+    templateMap,
+    minPartyCount: highestPartyIndex,
   });
 
   res.send(
@@ -2801,16 +3217,11 @@ app.get("/lineup", (req, res) => {
         </div>
 
         <div class="divider"></div>
-
         ${partyCardsHtml}
-
-        <div class="muted" style="margin-top:12px;">
-          - 실제 진행 상황에 따라 스트리머가 수동으로 수정할 수 있습니다.<br/>
-          - 빈 공대가 보인다면 아직 편성이 이루어지지 않은 상태이거나, 삭제된 공대일 수 있습니다.
-        </div>
       </div>
     `,
-      "공대 편성표"
+      "공대 편성표",
+      { activeRaid: raid, autoRefresh: true }
     )
   );
 });
