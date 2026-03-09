@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 dotenv.config();
 
 const app = express();
+app.use(express.static("public"));
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
@@ -30,11 +31,11 @@ const ADMIN_BASE = "/" + ADMIN_PATH;
 // Options
 // =====================
 const RAID_OPTIONS = [
-  { key: "dirige", label: "디레지에" },
-  { key: "dirige-hard", label: "디레지에-악연" },
-  { key: "inhwagongjeon", label: "이내황혼전" },
-  { key: "nabel-hard", label: "나벨 - 하드모드" },
-  { key: "updoong", label: "업둥교환" },
+  { key: "dirige", label: "디레지에", img: "/images/dirige.png" },
+  { key: "dirige-hard", label: "디레지에-악연", img: "/images/dirige_hard.png" },
+  { key: "inhwagongjeon", label: "이내황혼전", img: "/images/inhwagongjeon.png" },
+  { key: "nabel-hard", label: "나벨 - 하드모드", img: "/images/nabel_hard.png" },
+  { key: "updoong", label: "업둥교환", img: "/images/updoong.png" },
 ];
 
 const GRADE_OPTIONS = [
@@ -79,7 +80,7 @@ CREATE TABLE IF NOT EXISTS applications (
 
   is_streamer INTEGER NOT NULL DEFAULT 0,
 
-  --  전용 (2업둥 1개/2개)
+  -- 업둥교환 전용
   up2 INTEGER NOT NULL DEFAULT 0,
   up22 INTEGER NOT NULL DEFAULT 0,
 
@@ -92,7 +93,6 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE INDEX IF NOT EXISTS idx_applications_date_raid
 ON applications(date_kst, raid_key);
 
--- 레이드별 진행일 + 인증키
 CREATE TABLE IF NOT EXISTS day_codes (
   raid_key TEXT PRIMARY KEY,
   date_kst TEXT NOT NULL,
@@ -100,13 +100,12 @@ CREATE TABLE IF NOT EXISTS day_codes (
   updated_at TEXT NOT NULL
 );
 
-/* 일반 레이드 편성표 */
 CREATE TABLE IF NOT EXISTS raid_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
   party_index INTEGER NOT NULL,
-  role TEXT NOT NULL,           -- 'buffer' | 'dealer'
+  role TEXT NOT NULL,
   slot_index INTEGER NOT NULL,
   nickname TEXT NOT NULL,
   application_id INTEGER,
@@ -116,7 +115,6 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
 CREATE INDEX IF NOT EXISTS idx_lineups_key
 ON raid_lineups(date_kst, raid_key, party_index);
 
-/* 비활성 공대 (일반 레이드 +  공대도 같이 사용) */
 CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
@@ -125,12 +123,11 @@ CREATE TABLE IF NOT EXISTS raid_disabled_parties (
   UNIQUE(date_kst, raid_key, party_index)
 );
 
-/*  편성표 (버퍼/딜러 구분 없음, slot_index 연속 저장) */
 CREATE TABLE IF NOT EXISTS up_lineups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   date_kst TEXT NOT NULL,
   raid_key TEXT NOT NULL,
-  slot_index INTEGER NOT NULL, -- 1..N (12명=1공대)
+  slot_index INTEGER NOT NULL,
   nickname TEXT NOT NULL,
   application_id INTEGER,
   created_at TEXT NOT NULL,
@@ -141,7 +138,6 @@ CREATE INDEX IF NOT EXISTS idx_up_lineups_key
 ON up_lineups(date_kst, raid_key, slot_index);
 `);
 
-// 컬럼 체크
 function ensureColumn(table, colName, colDDL) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   const has = cols.some((c) => String(c.name) === colName);
@@ -151,8 +147,6 @@ function ensureColumn(table, colName, colDDL) {
 ensureColumn("applications", "request_note", "request_note TEXT NOT NULL DEFAULT ''");
 ensureColumn("applications", "is_streamer", "is_streamer INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "start_party", "start_party INTEGER NOT NULL DEFAULT 1");
-
-// 업둥교환 2업둥 1개/2개
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up22", "up22 INTEGER NOT NULL DEFAULT 0");
 
@@ -164,9 +158,11 @@ function todayKST() {
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 10);
 }
+
 function nowISO() {
   return new Date().toISOString();
 }
+
 function esc(v) {
   return String(v ?? "")
     .replaceAll("&", "&amp;")
@@ -175,27 +171,33 @@ function esc(v) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
+
 function raidByKey(key) {
   return RAID_OPTIONS.find((r) => r.key === key);
 }
+
+function raidImage(key) {
+  return raidByKey(key)?.img || "/images/placeholder.png";
+}
+
 function gradeLabel(key) {
   if (key === "streamer") return "스트리머";
   return GRADE_OPTIONS.find((g) => g.key === key)?.label || key;
 }
+
 function isValidKstDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
 }
 
-// 레이드 날짜/코드
 function getActiveDay(raidKey) {
   const row = db.prepare("SELECT date_kst FROM day_codes WHERE raid_key=?").get(raidKey);
   return row?.date_kst || todayKST();
 }
+
 function getActiveCodeRow(raidKey) {
   return db.prepare("SELECT * FROM day_codes WHERE raid_key=?").get(raidKey) || null;
 }
 
-// 비활성 공대 Set
 function getDisabledPartySet(raidKey, dateKst) {
   const rows = db
     .prepare("SELECT party_index FROM raid_disabled_parties WHERE raid_key=? AND date_kst=?")
@@ -203,7 +205,6 @@ function getDisabledPartySet(raidKey, dateKst) {
   return new Set(rows.map((r) => r.party_index));
 }
 
-// 레이드별 공대 구성
 function getRaidConfig(raidKey) {
   if (raidKey === "inhwagongjeon") {
     return { buffersPerParty: 2, dealersPerParty: 6 };
@@ -214,7 +215,44 @@ function getRaidConfig(raidKey) {
 // =====================
 // Layout / Styles
 // =====================
-function layout(body, title = "레이드 예약 사이트") {
+function buildSidebar(activeRaid = "", isAdmin = false) {
+  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
+
+  if (!isAdmin) {
+    return `
+      <aside class="sidebar">
+        <div class="thumbnail">
+          <span class="on-air">● On Air</span>
+          <img src="${esc(thumbImg)}" alt="썸네일"
+               onerror="this.style.display='none'; this.parentNode.innerHTML+='<div class=&quot;thumb-fallback&quot;>이미지 준비중</div>';">
+        </div>
+        <a href="/" class="side-btn">메인 로비</a>
+        <a href="/lineup" class="side-btn">공대 편성표</a>
+        <a href="/check" class="side-btn">예약 확인</a>
+      </aside>
+    `;
+  }
+
+  return `
+    <aside class="sidebar">
+      <div class="thumbnail">
+        <span class="on-air admin-badge">● Admin</span>
+        <img src="${esc(thumbImg)}" alt="썸네일"
+             onerror="this.style.display='none'; this.parentNode.innerHTML+='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
+      </div>
+      <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">관리자 로비</a>
+      ${activeRaid ? `<a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>` : ""}
+      ${activeRaid ? `<a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>` : ""}
+      <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
+    </aside>
+  `;
+}
+
+function layout(body, title = "레이드 예약 사이트", options = {}) {
+  const isAdmin = !!options.isAdmin;
+  const activeRaid = String(options.activeRaid || "");
+  const sidebarContent = buildSidebar(activeRaid, isAdmin);
+
   return `<!doctype html>
 <html lang="ko">
 <head>
@@ -222,152 +260,238 @@ function layout(body, title = "레이드 예약 사이트") {
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${esc(title)}</title>
   <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
     :root{
-      --bg:#050816;
-      --bg2:#0b1024;
-      --panel:#0b1226;
-      --panel2:#0f172a;
-      --line:rgba(120,160,255,.35);
-      --text:#e9eefc;
-      --muted:rgba(189,198,232,.82);
-      --btn:#111827;
-      --btn-hover:#1f2937;
-      --danger:#b91c1c;
-      --danger-hover:#dc2626;
-      --chip:rgba(23,34,80,.9);
-      --shadow:0 16px 40px rgba(0,0,0,.65);
-      --radius:18px;
-      --accent:#4be0ff;
-      --accent2:#ff7ce5;
-      --blue:#2563eb;
-      --blue2:#3b82f6;
+      --bg-dark:#12132b;
+      --bg-panel:#1b1c3b;
+      --bg-box:#26284d;
+      --input-bg:#353863;
+      --border-glow:#3f4280;
+      --border-light:rgba(148,163,255,.2);
+      --text-main:#f8fafc;
+      --text-muted:#9ca3af;
+      --accent:#6b72ff;
+      --accent-2:#8b5cf6;
+      --danger:#ef4444;
+      --success:#10b981;
+      --warning:#f59e0b;
+      --chip-bg:rgba(107,114,255,.12);
     }
-    *{ box-sizing:border-box; }
+
+    *{ box-sizing:border-box; font-family:'Pretendard', sans-serif; }
+    html, body { margin:0; padding:0; }
     body{
-      margin:0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans KR", sans-serif;
-      background:#050816;
-      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(107,114,255,.15), transparent 35%),
+        radial-gradient(circle at top right, rgba(139,92,246,.14), transparent 30%),
+        linear-gradient(180deg, #0f1024 0%, #13142b 100%);
+      color:var(--text-main);
+      min-height:100vh;
+      padding:32px 18px;
     }
-    a{ color:inherit; text-decoration:none; }
+    a{ text-decoration:none; color:inherit; }
+    img{ display:block; }
 
-    .wrap{
-      max-width:1400px;
+    .app-container{
+      width:100%;
+      max-width:1320px;
       margin:0 auto;
-      padding:24px 14px 68px;
-    }
-
-    .title{
-      position:relative;
-      border-radius:18px;
-      padding:18px 16px 20px;
-      margin-bottom:18px;
-      background:linear-gradient(135deg, rgba(36,50,255,.85), rgba(75,224,255,.75));
-      box-shadow:0 18px 40px rgba(0,0,0,.65);
-      overflow:hidden;
-    }
-    .title::before{
-      content:"";
-      position:absolute;
-      inset:1px;
-      border-radius:16px;
-      background:linear-gradient(135deg, #050816 0%, #0b1024 40%, #141c3b 100%);
-    }
-    .titleInner{
-      position:relative;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-    }
-    .titleMain{
       display:flex;
       flex-direction:column;
-      gap:4px;
+      gap:22px;
     }
-    .titleLogo{
-      font-size:clamp(22px, 3.4vw, 32px);
-      font-weight:900;
-      letter-spacing:.06em;
-      text-transform:uppercase;
-    }
-    .titleLogo span.accent{
-      background:linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip:text;
-      background-clip:text;
-      color:transparent;
-    }
-    .titleSub{
-      font-size:13px;
-      color:var(--muted);
-    }
-    .titleBadge{
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid rgba(142,163,255,.5);
-      background:rgba(9,16,44,.9);
-      font-size:12px;
-      display:inline-flex;
+
+    .header{
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:22px 28px;
+      display:flex;
+      justify-content:space-between;
       align-items:center;
-      gap:6px;
-      color:var(--muted);
+      gap:16px;
+      background:linear-gradient(180deg, rgba(27,28,59,.95), rgba(22,23,49,.95));
+    }
+    .header h1{
+      margin:0;
+      font-size:30px;
+      font-weight:700;
+      letter-spacing:.02em;
+    }
+    .header p{
+      margin:6px 0 0;
+      font-size:14px;
+      color:var(--text-muted);
+    }
+    .made-by{
+      border:1px solid var(--border-glow);
+      padding:9px 14px;
+      border-radius:10px;
+      font-size:13px;
+      color:var(--text-muted);
+      background:rgba(38,40,77,.75);
+      white-space:nowrap;
+    }
+
+    .content-wrapper{
+      display:flex;
+      gap:22px;
+      align-items:flex-start;
+    }
+
+    .sidebar{
+      width:260px;
+      flex-shrink:0;
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:18px;
+      background:linear-gradient(180deg, rgba(27,28,59,.96), rgba(24,25,52,.96));
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .thumbnail{
+      background:var(--bg-box);
+      border-radius:12px;
+      height:180px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      color:var(--text-muted);
+      font-size:14px;
+      position:relative;
+      overflow:hidden;
+      border:1px solid var(--border-glow);
+    }
+    .thumbnail img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    .thumb-fallback{
+      padding:18px;
+      text-align:center;
+      line-height:1.5;
+    }
+    .on-air{
+      position:absolute;
+      top:12px;
+      left:12px;
+      background:rgba(0,0,0,.55);
+      color:#ff6b6b;
+      padding:4px 9px;
+      border-radius:999px;
+      font-size:11px;
+      font-weight:700;
+      z-index:3;
+    }
+    .admin-badge{ color:#fca5a5; }
+
+    .side-btn{
+      display:block;
+      background:var(--bg-box);
+      padding:13px 14px;
+      border-radius:10px;
+      text-align:center;
+      font-size:14px;
+      font-weight:600;
+      transition:.15s ease;
+      border:1px solid transparent;
+      color:var(--text-main);
+      box-shadow:none !important;
+    }
+    .side-btn:hover{
+      background:var(--border-glow);
+      border-color:var(--accent);
+      transform:translateY(-1px);
+    }
+    .side-btn-danger{
+      background:rgba(239,68,68,.15);
+      border-color:rgba(239,68,68,.35);
+      color:#fecaca;
+    }
+    .side-btn-danger:hover{
+      background:rgba(239,68,68,.24);
+      border-color:rgba(239,68,68,.55);
+    }
+
+    .main-area{
+      flex:1;
+      border:1px solid var(--border-glow);
+      border-radius:16px;
+      padding:24px;
+      background:linear-gradient(180deg, rgba(27,28,59,.96), rgba(24,25,52,.96));
+      min-height:620px;
+      overflow:hidden;
     }
 
     .box{
-      background:var(--panel2);
-      border-radius:var(--radius);
-      padding:20px 18px 18px;
-      border:1px solid var(--line);
-      box-shadow:var(--shadow);
-      position:relative;
+      background:rgba(38,40,77,.72);
+      border-radius:12px;
+      padding:18px 20px;
+      border:1px solid rgba(148,163,255,.15);
+      box-shadow:none !important;
+      filter:none !important;
     }
 
     .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .sp{ justify-content:space-between; }
 
+    .muted{ color:var(--text-muted); font-size:13px; line-height:1.65; }
+    .ok{ color:#4ade80; font-weight:700; }
+    .wait{ color:#fcd34d; font-weight:700; }
+    .bad{ color:#fca5a5; font-weight:700; }
+
+    .divider{
+      height:1px;
+      background:linear-gradient(to right, transparent, rgba(148,163,255,.35), transparent);
+      margin:18px 0;
+    }
+
     .btn{
-      border:1px solid rgba(148,163,255,.7);
-      background:var(--btn);
-      color:var(--text);
-      padding:9px 14px;
-      border-radius:999px;
+      border:1px solid rgba(148,163,255,.38);
+      background:var(--bg-box);
+      color:var(--text-main);
+      padding:10px 15px;
+      border-radius:10px;
       cursor:pointer;
-      font-weight:800;
+      font-weight:600;
       display:inline-flex;
       align-items:center;
       justify-content:center;
       gap:8px;
       font-size:13px;
-      box-shadow:0 10px 24px rgba(15,23,42,.9);
-      transition:transform .08s ease-out, box-shadow .08s ease-out, background .08s ease-out;
+      transition:.15s ease;
+      box-shadow:none !important;
+      filter:none !important;
     }
     .btn:hover{
-      background:var(--btn-hover);
+      background:var(--border-glow);
+      border-color:var(--accent);
       transform:translateY(-1px);
-      box-shadow:0 14px 30px rgba(15,23,42,.9);
     }
     .btnGhost{
-      background:transparent;
-      border-color:rgba(148,163,255,.35);
-      box-shadow:none;
-    }
-    .btnGhost:hover{
-      background:var(--btn-hover);
-      box-shadow:0 10px 24px rgba(15,23,42,.9);
+      background:rgba(255,255,255,.02);
     }
     .btnDanger{
-      background:var(--danger);
-      border-color:rgba(248,113,113,.7);
+      background:rgba(239,68,68,.18);
+      border-color:rgba(239,68,68,.32);
+      color:#fecaca;
     }
     .btnDanger:hover{
-      background:var(--danger-hover);
+      background:rgba(239,68,68,.28);
+      border-color:rgba(239,68,68,.52);
     }
     .btnPrimary{
-      background:linear-gradient(135deg,var(--blue),var(--blue2));
-      border-color:rgba(99,102,241,.8);
+      background:linear-gradient(135deg, #4f46e5, #6b72ff);
+      border-color:#6b72ff;
+      color:white;
     }
     .btnPrimary:hover{
-      background:linear-gradient(135deg,#1d4ed8,#2563eb);
+      background:linear-gradient(135deg, #4338ca, #5b63ff);
+      border-color:#7c83ff;
     }
 
     .chip{
@@ -376,159 +500,165 @@ function layout(body, title = "레이드 예약 사이트") {
       align-items:center;
       padding:5px 10px;
       border-radius:999px;
-      background:var(--chip);
-      border:1px solid rgba(148,163,255,.4);
-      color:var(--muted);
+      background:var(--chip-bg);
+      border:1px solid rgba(148,163,255,.25);
+      color:#c7d2fe;
       font-size:12px;
+      text-shadow:none !important;
     }
-    .muted{
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.5;
-    }
-    .divider{ height:1px; background:linear-gradient(to right,transparent,#3844a8,transparent); margin:16px 0; }
-    .ok{ color:#4ade80; font-weight:700; }
-    .wait{ color:#fde68a; font-weight:700; }
-    .bad{ color:#fda4af; font-weight:700; }
 
-    input,textarea{
+    input, textarea, select{
       width:100%;
-      background:#020617;
-      border:1px solid rgba(115,145,235,.7);
-      color:var(--text);
-      padding:9px 11px;
-      border-radius:12px;
-      outline:none;
       min-width:0;
-      font-size:13px;
-      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
-    }
-    input::placeholder,textarea::placeholder{ color:rgba(148,163,255,.6); }
-    textarea{ resize:vertical; min-height:44px; }
-
-    input:focus,select:focus,textarea:focus{
-      border-color:var(--accent);
-      box-shadow:0 0 0 1px rgba(56,189,248,.4), 0 0 24px rgba(56,189,248,.35);
-    }
-
-    select {
-      appearance:none;
-      -webkit-appearance:none;
-      -moz-appearance:none;
-      width:100%;
-      padding:9px 11px;
-      border-radius:12px;
-      border:1px solid rgba(115,145,235,.7);
-      background:#050816;
-      color:#f9fafb;
-      box-shadow:0 6px 16px rgba(0,0,0,.55) inset;
-      font-size:13px;
+      background:var(--input-bg);
+      border:1px solid transparent;
+      color:var(--text-main);
+      padding:11px 14px;
+      font-size:14px;
+      border-radius:8px;
       outline:none;
+      transition:.15s ease;
+      box-shadow:none !important;
+      filter:none !important;
     }
-    select option { background:#ffffff; color:#111827; font-weight:500; }
-    select option:checked, select option:hover { background:#1d4ed8; color:#ffffff; }
-    select option:disabled { color:#9ca3af; background:#e5e7eb; }
+    input::placeholder, textarea::placeholder{ color:#b4bbd2; }
+    input:focus, textarea:focus, select:focus{
+      border-color:var(--accent);
+      background:#3d4173;
+    }
+    textarea{
+      resize:vertical;
+      min-height:42px;
+    }
+    select option{
+      color:#111827;
+      background:white;
+    }
 
     .formGrid{
       display:grid;
-      grid-template-columns: 170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
-      gap:10px;
+      grid-template-columns:170px minmax(160px,1fr) minmax(200px,1.2fr) 150px 150px;
+      gap:12px;
       align-items:end;
     }
     .field label{
       display:block;
       font-size:12px;
-      color:var(--muted);
+      color:#cbd5e1;
       margin:0 0 6px 2px;
-      letter-spacing:.02em;
     }
     .fieldFull{ grid-column:1 / -1; }
-
-    @media (max-width:980px){
-      .formGrid{ grid-template-columns:1fr 1fr; }
-      .fieldFull{ grid-column:1 / -1; }
-    }
-    @media (max-width:520px){
-      .formGrid{ grid-template-columns:1fr; }
-      .fieldFull{ grid-column:1 / -1; }
-    }
 
     table{
       width:100%;
       border-collapse:collapse;
       overflow:hidden;
-      border-radius:14px;
-      border:1px solid rgba(148,163,255,.4);
-      background:rgba(10,16,32,.98);
+      border-radius:12px;
+      border:1px solid rgba(148,163,255,.2);
+      background:rgba(17,24,39,.45);
+      box-shadow:none !important;
+      filter:none !important;
     }
     th,td{
-      border-bottom:1px solid rgba(51,65,85,.9);
-      padding:8px 8px;
+      border-bottom:1px solid var(--border-light);
+      padding:10px 10px;
       text-align:left;
       font-size:13px;
       vertical-align:middle;
     }
     th{
-      background:#020617;
-      font-weight:800;
+      background:rgba(2,6,23,.58);
+      font-weight:700;
       font-size:12px;
-      letter-spacing:.05em;
-      color:rgba(191,219,254,.9);
+      letter-spacing:.03em;
+      color:#c7d2fe;
       text-transform:uppercase;
     }
     tr:last-child td{ border-bottom:0; }
     .center{ text-align:center; }
 
-    .commentBox{
-      width:260px;
-      max-width:100%;
-    }
-    @media (max-width:520px){
-      .commentBox{ width:100%; }
-    }
-
+    .commentBox{ width:260px; max-width:100%; }
     .raidNav{ margin-bottom:4px; }
     .raidNav .btn{ font-size:12px; padding-inline:12px; }
 
-    .bigCheck {
-      display:flex;
-      align-items:center;
-      gap:6px;
-      cursor:pointer;
-    }
-    .bigCheck input[type="checkbox"] {
-      width:22px;
-      height:22px;
-    }
+    .bigCheck{ display:flex; align-items:center; gap:6px; cursor:pointer; }
+    .bigCheck input[type="checkbox"]{ width:22px; height:22px; }
 
     .adminConfirm{
       display:inline-flex;
       align-items:center;
       gap:6px;
-      padding:4px 10px;
+      padding:5px 10px;
       border-radius:999px;
-      background:#020617;
-      border:1px solid rgba(148,163,255,.5);
+      background:rgba(2,6,23,.52);
+      border:1px solid rgba(148,163,255,.32);
       cursor:pointer;
       font-size:12px;
       user-select:none;
     }
-    .adminConfirm:hover{ background:#1f2937; }
+    .adminConfirm:hover{ background:#2b305d; }
     .adminConfirm input[type="checkbox"]{
       width:20px; height:20px; margin:0; cursor:pointer;
     }
 
-    /* 공대 카드 (일반 레이드) */
-    .partyGrid{ display:flex; flex-wrap:wrap; gap:14px; }
+    .raid-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fill, minmax(210px,1fr));
+      gap:16px;
+    }
+    .raid-card{
+      position:relative;
+      border-radius:14px;
+      overflow:hidden;
+      min-height:210px;
+      border:1px solid rgba(148,163,255,.2);
+      transition:.18s ease;
+      display:block;
+      background:var(--bg-box);
+    }
+    .raid-card:hover{
+      border-color:var(--accent);
+      transform:translateY(-3px);
+    }
+    .raid-card img{
+      width:100%;
+      height:100%;
+      min-height:210px;
+      object-fit:cover;
+      opacity:.78;
+      transition:.18s ease;
+    }
+    .raid-card:hover img{
+      opacity:1;
+      transform:scale(1.03);
+    }
+    .raid-card .label{
+      position:absolute;
+      bottom:0;
+      width:100%;
+      text-align:center;
+      padding:18px 12px 14px;
+      background:linear-gradient(transparent, rgba(0,0,0,.86));
+      font-weight:700;
+      font-size:15px;
+    }
+
+    .partyGrid{
+      display:flex;
+      flex-wrap:wrap;
+      gap:14px;
+    }
     .partyCard{
       position:relative;
       width:120px;
       flex:0 0 120px;
       max-width:120px;
-      background:#020617;
+      background:rgba(2,6,23,.56);
       border-radius:14px;
-      border:1px solid rgba(148,163,255,.4);
+      border:1px solid rgba(148,163,255,.22);
       padding:12px 12px 10px;
+      box-shadow:none !important;
+      filter:none !important;
     }
     .partyHeader{
       display:flex;
@@ -536,11 +666,11 @@ function layout(body, title = "레이드 예약 사이트") {
       justify-content:space-between;
       width:100%;
       margin-bottom:6px;
+      gap:6px;
     }
     .partyTitle{
       font-size:18px;
-      font-weight:900;
-      text-align:left;
+      font-weight:800;
       line-height:1.1;
       white-space:nowrap;
       overflow:hidden;
@@ -550,88 +680,81 @@ function layout(body, title = "레이드 예약 사이트") {
     .partyHeader .partyDeleteBtn{
       flex-shrink:0;
       font-size:11px;
-      padding:3px 6px;
+      padding:4px 7px;
       border-radius:999px;
-      background:#b91c1c;
-      border:1px solid rgba(255,120,120,0.6);
-      color:white;
+      background:rgba(239,68,68,.18);
+      border:1px solid rgba(255,120,120,.4);
+      color:#fee2e2;
       cursor:pointer;
       white-space:nowrap;
+      box-shadow:none !important;
     }
-    .partyHeader .partyDeleteBtn:hover{ background:#dc2626; }
+    .partyHeader .partyDeleteBtn:hover{ background:rgba(239,68,68,.28); }
     .partyBody{ display:flex; flex-direction:column; gap:10px; }
     .slotSection{
-      background:#020617;
+      background:rgba(2,6,23,.45);
       border-radius:10px;
       border:1px solid rgba(15,23,42,.9);
       padding:6px 8px 8px;
     }
     .slotSectionTitle{
       font-size:12px;
-      color:rgba(191,219,254,.8);
+      color:#bfdbfe;
       margin:0 0 6px 2px;
     }
     .slotDivider{
       height:1px;
       margin:2px 2px 0;
-      background:linear-gradient(to right,transparent,rgba(148,163,255,.7),transparent);
+      background:linear-gradient(to right,transparent,rgba(148,163,255,.5),transparent);
     }
-    .slotInput{
+    .slotInput, .slotStatic{
       width:100%;
-      padding:6px 10px;
+      padding:7px 10px;
       margin-bottom:6px;
       font-size:13px;
       border-radius:999px;
-      border:1px solid rgba(71,85,105,.95);
-      background:#020617;
-      color:var(--text);
-      box-shadow:0 3px 10px rgba(15,23,42,.85) inset;
+      background:#141833;
+      color:var(--text-main);
+      box-shadow:none !important;
+      filter:none !important;
     }
-    .slotInput::placeholder{ color:rgba(148,163,255,.6); }
+    .slotInput{
+      border:1px solid rgba(71,85,105,.95);
+    }
     .slotInput:focus{
       border-color:var(--accent);
-      box-shadow:0 0 0 1px rgba(56,189,248,.35), 0 0 18px rgba(56,189,248,.35);
       outline:none;
+      box-shadow:none !important;
     }
     .slotInput[disabled]{ opacity:.45; cursor:not-allowed; }
     .slotStatic{
-      width:100%;
-      padding:6px 10px;
-      margin-bottom:6px;
-      font-size:13px;
-      border-radius:999px;
-      border:1px solid rgba(30,64,175,.9);
-      background:#020617;
+      border:1px solid rgba(59,130,246,.55);
       text-align:center;
     }
-    .slotStatic.slotEmpty{ opacity:.4; }
+    .slotStatic.slotEmpty{ opacity:.45; }
 
-    /* =====================
-       업둥교환: 12명=1세트, 세로형 카드 + 4명 단위 구분
-    ====================== */
     .upPartyGrid{
       display:flex;
       flex-wrap:wrap;
       gap:14px;
       align-items:flex-start;
     }
-
     .upPartyCard{
       position:relative;
-      width:120px;         
+      width:120px;
       flex:0 0 120px;
       max-width:120px;
-      background:rgba(10,16,32,.98);
+      background:rgba(2,6,23,.56);
       border-radius:18px;
-      border:1px solid rgba(148,163,255,.35);
+      border:1px solid rgba(148,163,255,.22);
       padding:12px;
-      box-shadow:0 10px 26px rgba(0,0,0,.35);
+      box-shadow:none !important;
+      filter:none !important;
     }
     .upPartyCard.disabled{
       opacity:.5;
       filter:saturate(.65);
     }
-
     .upPartyHeader{
       display:flex;
       align-items:flex-start;
@@ -646,20 +769,19 @@ function layout(body, title = "레이드 예약 사이트") {
       line-height:1.05;
       word-break:keep-all;
     }
-
     .upPartyDeleteBtn{
       flex-shrink:0;
       font-size:11px;
       padding:6px 9px;
       border-radius:10px;
-      background:#ff2d2d;
-      border:0;
-      color:white;
+      background:rgba(239,68,68,.2);
+      border:1px solid rgba(255,120,120,.35);
+      color:#fff;
       cursor:pointer;
       white-space:nowrap;
+      box-shadow:none !important;
     }
-    .upPartyDeleteBtn:hover{ filter:brightness(1.05); }
-
+    .upPartyDeleteBtn:hover{ background:rgba(239,68,68,.3); }
     .upPartySlots{
       display:flex;
       flex-direction:column;
@@ -669,105 +791,73 @@ function layout(body, title = "레이드 예약 사이트") {
       background:transparent;
       border:0;
     }
-
     .upGroupBox{
       display:flex;
       flex-direction:column;
       gap:8px;
       padding:12px;
       border-radius:16px;
-      border:1px solid rgba(148,163,255,.18);
-      box-shadow:none;
+      border:1px solid rgba(148,163,255,.14);
     }
-
-    .upPartyCard .slotInput{
+    .upPartyCard .slotInput,
+    .upPartyCard .slotStatic{
       width:100%;
-      padding:6px 6px;                 
+      padding:7px 6px;
       margin:0;
       font-size:13px;
       border-radius:999px;
-      border:1px solid rgba(71,85,105,.95);
-      background:#020617;
-      color:var(--text);
-      box-shadow:none;
+      background:#141833;
+      color:var(--text-main);
+      box-shadow:none !important;
     }
-    .upPartyCard .slotInput::placeholder{ color:rgba(148,163,255,.6); }
+    .upPartyCard .slotInput{ border:1px solid rgba(71,85,105,.95); }
     .upPartyCard .slotInput:focus{
       border-color:var(--accent);
       outline:none;
-      box-shadow:none;
+    }
+    .upPartyCard .slotStatic{
+      border:1px solid rgba(59,130,246,.55);
+      text-align:center;
+    }
+    .upPartyCard .slotStatic.slotEmpty{ opacity:.45; }
+    .upPartySlots .upGroupBox:nth-of-type(1){
+      background:rgba(255,99,99,.12);
+      border-color:rgba(255,99,99,.35);
+    }
+    .upPartySlots .upGroupBox:nth-of-type(2){
+      background:rgba(255,215,100,.14);
+      border-color:rgba(255,215,100,.4);
+    }
+    .upPartySlots .upGroupBox:nth-of-type(3){
+      background:rgba(100,220,140,.14);
+      border-color:rgba(100,220,140,.4);
     }
 
-    .upPartyCard .slotStatic{
-      width:100%;
-      padding:6px 6px;                 
-      margin:0;
-      font-size:13px;
-      border-radius:999px;
-      border:1px solid rgba(30,64,175,.9);
-      background:#020617;
-      color:var(--text);
-      text-align:center;
-      box-shadow:none;
+    @media (max-width:1120px){
+      .content-wrapper{ flex-direction:column; }
+      .sidebar{ width:100%; }
+      .thumbnail{ height:160px; }
     }
-    .upPartyCard .slotStatic.slotEmpty{ opacity:.4; }
-    .upPartySlots .upGroupBox:nth-of-type(1) {
-      background: rgba(255, 99, 99, 0.12);
-      border-color: rgba(255, 99, 99, 0.35);
+    @media (max-width:980px){
+      .formGrid{ grid-template-columns:1fr 1fr; }
+      .fieldFull{ grid-column:1 / -1; }
     }
-    .upPartySlots .upGroupBox:nth-of-type(2) {
-      background: rgba(255, 215, 100, 0.14);
-      border-color: rgba(255, 215, 100, 0.4);
+    @media (max-width:640px){
+      body{ padding:18px 12px; }
+      .header{
+        padding:18px 18px;
+        flex-direction:column;
+        align-items:flex-start;
+      }
+      .header h1{ font-size:24px; }
+      .main-area{ padding:18px; min-height:auto; }
+      .raid-grid{ grid-template-columns:1fr; }
+      .commentBox{ width:100%; }
     }
-    .upPartySlots .upGroupBox:nth-of-type(3) {
-      background: rgba(100, 220, 140, 0.14);
-      border-color: rgba(100, 220, 140, 0.4);
     @media (max-width:520px){
+      .formGrid{ grid-template-columns:1fr; }
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
     }
-/* 카드류 */
-.box,
-.title,
-.partyCard,
-.upPartyCard,
-table{
-  box-shadow: none !important;
-  filter: none !important;         /* drop-shadow까지 제거 */
-}
-
-/* 버튼류 */
-.btn,
-.partyHeader .partyDeleteBtn,
-.upPartyDeleteBtn{
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-/* hover에서 다시 생기는 shadow도 제거 */
-.btn:hover,
-.btn:active,
-.partyHeader .partyDeleteBtn:hover,
-.upPartyDeleteBtn:hover{
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-/* 입력칸/내부 슬롯도 혹시 남아있으면 제거 */
-input,
-select,
-textarea,
-.slotInput,
-.slotStatic{
-  box-shadow: none !important;
-  filter: none !important;
-}
-
-/* 텍스트/글로우가 섞여 있으면 이것도 제거(선택) */
-.titleLogo,
-.titleBadge,
-.chip{
-  text-shadow: none !important;
-}
   </style>
   <script>
     function submitOnChange(formId){
@@ -799,21 +889,21 @@ textarea,
   </script>
 </head>
 <body>
-  <div class="wrap">
-    <div class="title">
-      <div class="titleInner">
-        <div class="titleMain">
-          <div class="titleLogo">
-            <span class="accent">DnF</span> RAID
-          </div>
-          <div class="titleSub">레이드 예약 시스템</div>
-        </div>
-        <div class="titleBadge">
-          <span>Made by 🧭</span>
-        </div>
+  <div class="app-container">
+    <header class="header">
+      <div>
+        <h1>DevonVail RAID</h1>
+        <p>레이드 예약 사이트 ${isAdmin ? '<span style="color:#fca5a5;font-weight:700;">[관리자 모드]</span>' : ''}</p>
       </div>
+      <div class="made-by">Made by 토엔</div>
+    </header>
+
+    <div class="content-wrapper">
+      ${sidebarContent}
+      <main class="main-area">
+        ${body}
+      </main>
     </div>
-    ${body}
   </div>
 </body>
 </html>`;
@@ -846,7 +936,8 @@ function requireAdmin(req, res, next) {
           <div class="muted">Render Environment Variables에 ADMIN_KEY를 추가하세요.</div>
         </div>
       `,
-        "오류"
+        "오류",
+        { isAdmin: true }
       )
     );
   }
@@ -863,12 +954,23 @@ app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 // Viewer: main
 // =====================
 app.get("/", (req, res) => {
+  const cardsHtml = RAID_OPTIONS.map(
+    (r) => `
+      <a class="raid-card" href="/verify?raid=${encodeURIComponent(r.key)}">
+        <img src="${esc(r.img)}" alt="${esc(r.label)}"
+             onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+        <div class="label">${esc(r.label)}</div>
+      </a>
+    `
+  ).join("");
+
   res.send(
-    layout(`
+    layout(
+      `
       <div class="box">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">메인 로비</div>
+            <div style="font-weight:700;font-size:20px;margin-bottom:6px;">진행할 레이드를 선택하세요</div>
             <div class="muted">레이드를 선택 → 인증키 입력 → 예약 신청</div>
           </div>
           <div class="row">
@@ -878,24 +980,17 @@ app.get("/", (req, res) => {
         </div>
 
         <div class="divider"></div>
+        <div class="raid-grid">${cardsHtml}</div>
 
-        <div class="row" style="gap:12px;">
-          ${RAID_OPTIONS.map(
-            (r) =>
-              `<a class="btn" href="/verify?raid=${encodeURIComponent(r.key)}">${esc(
-                r.label
-              )}</a>`
-          ).join("")}
-        </div>
-
-        <div class="muted" style="margin-top:12px;">
-          - 일반 레이드 한 회차 정원: 3버퍼 / 9딜러 (총 12명)<br/>
-          - 이내황혼전은 2버퍼 / 6딜러 (총 8명)<br/>
-          - 업둥교환는 세트당 12명이며, 4명 단위로 구분 표시됩니다.<br/>
-          - 신청 후 “예약확인”에서 등록완료/대기중 및 스트리머 코멘트를 확인할 수 있습니다.
+        <div class="muted" style="margin-top:14px;">
+          - 일반 레이드는 기본 3버퍼 / 9딜러 구성입니다.<br/>
+          - 이내황혼전은 2버퍼 / 6딜러입니다.<br/>
+          - 업둥교환은 12명 = 1세트로 표시됩니다.
         </div>
       </div>
-    `)
+    `,
+      "메인"
+    )
   );
 });
 
@@ -917,9 +1012,7 @@ app.get("/verify", (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">인증키 입력</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay
-      )}</b></div>
+            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
           </div>
           <a class="btn btnGhost" href="/">메인</a>
         </div>
@@ -945,7 +1038,8 @@ app.get("/verify", (req, res) => {
         }
       </div>
     `,
-      "인증키"
+      "인증키",
+      { activeRaid: raid }
     )
   );
 });
@@ -968,7 +1062,8 @@ app.post("/verify", (req, res) => {
           <a class="btn btnGhost" href="/">메인</a>
         </div>
       `,
-        "인증 실패"
+        "인증 실패",
+        { activeRaid: raid }
       )
     );
   }
@@ -1003,9 +1098,7 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:900;font-size:20px;margin-bottom:6px;">예약 신청</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay
-      )}</b></div>
+            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
             ${err ? `<div class="bad" style="margin-top:8px;"><b>${esc(err)}</b></div>` : ""}
           </div>
           <div class="row">
@@ -1094,7 +1187,8 @@ app.get("/reserve", requireViewerOk, (req, res) => {
         </div>
       </div>
     `,
-      "예약 신청"
+      "예약 신청",
+      { activeRaid: raid }
     )
   );
 });
@@ -1129,7 +1223,6 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const up2 = req.body.up2 ? 1 : 0;
   const up22 = req.body.up22 ? 1 : 0;
 
-  // 원하는 시작 기수
   let start_party = parseInt(String(req.body.start_party || "").trim(), 10);
   if (!Number.isInteger(start_party) || start_party < 1) start_party = 1;
   if (start_party > 99) start_party = 99;
@@ -1159,7 +1252,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
         )}`
       );
     }
-    // 2개 체크하면 1개도 자동 포함처럼 보이게(데이터는 둘 다 1)
+
     const finalUp2 = up22 ? 1 : up2;
     const finalUp22 = up22 ? 1 : 0;
 
@@ -1228,9 +1321,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       `
       <div class="box">
         <div style="font-weight:900;font-size:20px;margin-bottom:6px;">등록 완료</div>
-        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(
-        activeDay
-      )}</b></div>
+        <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
         <div class="divider"></div>
         <div class="row">
           <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">추가 등록</a>
@@ -1240,13 +1331,14 @@ app.post("/reserve", requireViewerOk, (req, res) => {
         </div>
       </div>
     `,
-      "완료"
+      "완료",
+      { activeRaid: raid }
     )
   );
 });
 
 // =====================
-// Viewer: check (기본=치즈등급순)
+// Viewer: check
 // =====================
 app.get("/check", (req, res) => {
   const raid = String(req.query.raid || "");
@@ -1265,12 +1357,15 @@ app.get("/check", (req, res) => {
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="row" style="gap:12px;">
+          <div class="raid-grid">
             ${RAID_OPTIONS.map(
-              (r) =>
-                `<a class="btn" href="/check?raid=${encodeURIComponent(r.key)}">${esc(
-                  r.label
-                )}</a>`
+              (r) => `
+                <a class="raid-card" href="/check?raid=${encodeURIComponent(r.key)}">
+                  <img src="${esc(r.img)}" alt="${esc(r.label)}"
+                       onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+                  <div class="label">${esc(r.label)}</div>
+                </a>
+              `
             ).join("")}
           </div>
         </div>
@@ -1373,13 +1468,14 @@ app.get("/check", (req, res) => {
         </div>
       </div>
     `,
-      "예약확인"
+      "예약확인",
+      { activeRaid: raid }
     )
   );
 });
 
 // =====================
-// Lineup utils (일반 레이드)
+// Lineup utils
 // =====================
 function buildPartyMap(lineups, cfg) {
   const map = new Map();
@@ -1428,7 +1524,6 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 
       <div class="partyBody">`;
 
-    // 버퍼
     html += `<div class="slotSection"><div class="slotSectionTitle">버퍼</div>`;
     for (let b = 1; b <= buffersPerParty; b++) {
       const bName = data.buffers[b] || "";
@@ -1441,7 +1536,6 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     }
     html += `</div><div class="slotDivider"></div>`;
 
-    // 딜러
     html += `<div class="slotSection"><div class="slotSectionTitle">딜러</div>`;
     for (let d = 1; d <= dealersPerParty; d++) {
       const dName = data.dealers[d] || "";
@@ -1460,7 +1554,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 }
 
 // =====================
-// Updoong helpers (12명=1세트)
+// Updoong helpers
 // =====================
 function upPartyFromSlot(slotIndex) {
   const s = Number(slotIndex) || 1;
@@ -1513,7 +1607,6 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
       }
       return `<input class="slotInput" style="margin:0;" name="u_${slotIndex}" value="${esc(name)}" placeholder="닉네임"/>`;
     }
-    // viewer read-only
     return name
       ? `<div class="slotStatic">${esc(name)}</div>`
       : `<div class="slotStatic slotEmpty">닉네임</div>`;
@@ -1580,18 +1673,16 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
 }
 
 // =====================
-// 업둥교환 자동배치 (confirmed=1 기반)
+// 업둥교환 자동배치
 // =====================
 function rebuildUpdoongLineup(dateKst) {
-  const MAX_PARTY = 2;          //  업둥교환은 최대 2세트
+  const MAX_PARTY = 2;
   const SLOTS_PER_PARTY = 12;
 
   const disabledSet = getDisabledPartySet("updoong", dateKst);
 
-  // 전부 삭제 후 재구성
   db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=?`).run(dateKst);
 
-  // 등록완료만 대상으로 created_at 순서대로
   const confirmedApps = db
     .prepare(
       `
@@ -1610,9 +1701,8 @@ function rebuildUpdoongLineup(dateKst) {
   `
   );
 
-  // party별 사용칸 / 닉네임 중복 방지용 Set
-  const usedCount = new Map(); // party -> number
-  const nameSet = new Map();   // party -> Set
+  const usedCount = new Map();
+  const nameSet = new Map();
 
   function getUsed(p) {
     return usedCount.get(p) || 0;
@@ -1638,7 +1728,7 @@ function rebuildUpdoongLineup(dateKst) {
       if (getNames(p).has(name)) continue;
       return p;
     }
-    return 0; // 자리 없음
+    return 0;
   }
 
   function findAvailablePartyPreferNext(name, baseParty) {
@@ -1679,21 +1769,16 @@ function applyLineupForApplication(appId, confirmed) {
   const raidKey = appRow.raid_key;
   const dateKst = appRow.date_kst;
 
-  // 업둥교환: 테이블(up_lineups) 자동 재구성
   if (raidKey === "updoong") {
     db.prepare(`DELETE FROM up_lineups WHERE raid_key='updoong' AND date_kst=? AND application_id=?`).run(dateKst, appId);
     rebuildUpdoongLineup(dateKst);
     return;
   }
 
-  // 일반 레이드
   const cfg = getRaidConfig(raidKey);
   const disabledSet = getDisabledPartySet(raidKey, dateKst);
-
-  // 원하는 시작 기수
   const startParty = Math.max(1, Number(appRow.start_party || 1));
 
-  // 이미 배정된 자리 모두 제거
   db.prepare("DELETE FROM raid_lineups WHERE application_id=?").run(appId);
   if (!confirmed) return;
 
@@ -1780,7 +1865,6 @@ function applyLineupForApplication(appId, confirmed) {
     }
   }
 
-  // 버퍼 우선 예약 후, 딜러 배치
   assignSeats("buffer", appRow.buffer_count || 0);
   assignSeats("dealer", appRow.dealer_count || 0);
 }
@@ -1818,7 +1902,8 @@ app.get(`${ADMIN_BASE}/login`, (req, res) => {
         </form>
       </div>
     `,
-      "스트리머 로그인"
+      "스트리머 로그인",
+      { isAdmin: true }
     )
   );
 });
@@ -1835,7 +1920,8 @@ app.post(`${ADMIN_BASE}/login`, (req, res) => {
           <a class="btn" href="${esc(ADMIN_BASE)}/login">다시 시도</a>
         </div>
       `,
-        "실패"
+        "실패",
+        { isAdmin: true }
       )
     );
   }
@@ -1856,13 +1942,23 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
 
 // Admin: 메인
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
+  const cardsHtml = RAID_OPTIONS.map(
+    (r) => `
+      <a class="raid-card" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(r.key)}&sort=grade">
+        <img src="${esc(r.img)}" alt="${esc(r.label)}"
+             onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+        <div class="label">${esc(r.label)}</div>
+      </a>
+    `
+  ).join("");
+
   res.send(
     layout(
       `
       <div class="box">
         <div class="row sp">
           <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">관리자</div>
+            <div style="font-weight:700;font-size:20px;margin-bottom:6px;">관리자</div>
             <div class="muted">레이드별 신청목록 확인 / 진행일 + 인증키 설정 / 공대편성 / 스트리머 예약</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
@@ -1870,21 +1966,14 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">신청목록 보기</div>
-        <div class="row raidNav">
-          ${RAID_OPTIONS.map(
-            (r) =>
-              `<a class="btn" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(
-                r.key
-              )}&sort=grade">${esc(r.label)}</a>`
-          ).join("")}
-        </div>
+        <div style="font-weight:700;margin-bottom:10px;">신청목록 보기</div>
+        <div class="raid-grid">${cardsHtml}</div>
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">진행일 + 인증키 설정</div>
+        <div style="font-weight:700;margin-bottom:8px;">진행일 + 인증키 설정</div>
         <div class="muted">
-          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 "기준 날짜"가 됩니다.<br/>
+          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 기준 날짜가 됩니다.<br/>
           - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
         </div>
 
@@ -1909,15 +1998,15 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
             <input name="code" placeholder="예) 1234ABCD" required />
           </div>
 
-          <button class="btn" type="submit">저장</button>
+          <button class="btn btnPrimary" type="submit">저장</button>
         </form>
 
         <div class="divider"></div>
 
-        <div style="font-weight:900;margin-bottom:8px;">스트리머 전용 예약</div>
+        <div style="font-weight:700;margin-bottom:8px;">스트리머 전용 예약</div>
         <div class="muted">
           - 스트리머 본인의 캐릭터 수를 입력하면, 자동배치 시 <b>최우선</b>으로 배치됩니다.<br/>
-          - 자동배치 우선순위: 스트리머 → 불타는 치즈 → 그 외 (딜러 먼저 배치)
+          - 자동배치 우선순위: 스트리머 → 불타는 치즈 → 그 외
         </div>
 
         <div class="divider"></div>
@@ -1945,7 +2034,8 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
         </form>
       </div>
     `,
-      "관리자"
+      "관리자",
+      { isAdmin: true }
     )
   );
 });
@@ -2009,7 +2099,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
 });
 
 // =====================
-// Admin: 치즈 등급별 일괄 등록(등록완료 체크 + 편성표 반영)
+// Admin: 치즈 등급별 일괄 등록
 // =====================
 app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
@@ -2029,7 +2119,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   else if (group === "normal") gradeKeys = ["normal"];
   else return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 
-  // 대상 id를 created_at 순으로 뽑기
   const placeholders = gradeKeys.map(() => "?").join(",");
   const targetRows = db
     .prepare(
@@ -2043,7 +2132,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
     )
     .all(dateKst, raid, ...gradeKeys);
 
-  // confirmed=1 일괄 처리
   db.prepare(
     `
     UPDATE applications
@@ -2053,7 +2141,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   `
   ).run(dateKst, raid, ...gradeKeys);
 
-  // 편성표 반영
   if (raid === "updoong") {
     rebuildUpdoongLineup(dateKst);
   } else {
@@ -2062,7 +2149,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
     }
   }
 
-  // 원래 보던 화면 유지(업둥 필터 포함)
   const upQS = up === "1" || up === "2" ? `&up=${encodeURIComponent(up)}` : "";
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}${upQS}`);
 });
@@ -2110,7 +2196,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const upFilter1Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=1`;
   const upFilter2Link = `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}&up=2`;
 
-  // ✅ 일괄등록 버튼은 레이드 버튼처럼(btnGhost) 보이게
   const bulkUpHidden = isUp && (upFilter === "1" || upFilter === "2") ? `<input type="hidden" name="up" value="${esc(upFilter)}"/>` : "";
 
   const bulkButtonsHtml = `
@@ -2295,7 +2380,8 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         </div>
       </div>
     `,
-      "신청목록"
+      "신청목록",
+      { isAdmin: true, activeRaid: raid }
     )
   );
 });
@@ -2359,7 +2445,6 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   ).run(activeDay, raid);
 
   db.prepare(`DELETE FROM up_lineups WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
-
   db.prepare(`DELETE FROM raid_disabled_parties WHERE date_kst=? AND raid_key=?`).run(activeDay, raid);
 
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
@@ -2375,7 +2460,6 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
 
   const dateKst = getActiveDay(raid);
 
-  // 업둥교환 라인업
   if (raid === "updoong") {
     const map = getUpLineupMap(dateKst);
     const disabledSet = getDisabledPartySet("updoong", dateKst);
@@ -2433,13 +2517,13 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           </div>
         </div>
       `,
-        "업둥교환 편성표"
+        "업둥교환 편성표",
+        { isAdmin: true, activeRaid: raid }
       )
     );
     return;
   }
 
-  // 일반 레이드 라인업
   const cfg = getRaidConfig(raid);
   const lineups = db
     .prepare(
@@ -2506,7 +2590,8 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
         </div>
       </div>
     `,
-      "공대 편성표"
+      "공대 편성표",
+      { isAdmin: true, activeRaid: raid }
     )
   );
 });
@@ -2530,7 +2615,7 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: save lineup (일반 레이드)
+// Admin: save lineup
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2604,7 +2689,7 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=updoong`);
 });
 
-// Admin: delete party (일반 레이드)
+// Admin: delete party
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2691,7 +2776,7 @@ app.post(`${ADMIN_BASE}/lineup/delete-up-party`, requireAdmin, (req, res) => {
 });
 
 // =====================
-// Viewer: lineup (read-only)
+// Viewer: lineup
 // =====================
 app.get("/lineup", (req, res) => {
   const raid = String(req.query.raid || "");
@@ -2710,9 +2795,15 @@ app.get("/lineup", (req, res) => {
             <a class="btn btnGhost" href="/">메인</a>
           </div>
           <div class="divider"></div>
-          <div class="row" style="gap:12px;">
+          <div class="raid-grid">
             ${RAID_OPTIONS.map(
-              (r) => `<a class="btn" href="/lineup?raid=${encodeURIComponent(r.key)}">${esc(r.label)}</a>`
+              (r) => `
+                <a class="raid-card" href="/lineup?raid=${encodeURIComponent(r.key)}">
+                  <img src="${esc(r.img)}" alt="${esc(r.label)}"
+                       onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+                  <div class="label">${esc(r.label)}</div>
+                </a>
+              `
             ).join("")}
           </div>
         </div>
@@ -2760,7 +2851,8 @@ app.get("/lineup", (req, res) => {
           </div>
         </div>
       `,
-        "업둥교환 편성표"
+        "업둥교환 편성표",
+        { activeRaid: raid }
       )
     );
   }
@@ -2810,7 +2902,8 @@ app.get("/lineup", (req, res) => {
         </div>
       </div>
     `,
-      "공대 편성표"
+      "공대 편성표",
+      { activeRaid: raid }
     )
   );
 });
