@@ -1440,7 +1440,7 @@ app.get("/reserve", (req, res) => {
       </div>
     `,
       "예약 신청",
-      { activeRaid: "", hideSidebar: false }
+      { activeRaid: raid, hideSidebar: false }
     )
   );
 });
