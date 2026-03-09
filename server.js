@@ -47,7 +47,6 @@ const GRADE_OPTIONS = [
   { key: "normal", label: "일반 치즈" },
 ];
 
-// 정렬 우선순위: 스트리머 > 불타는 > 분홍 > 노란/통나무 > 일반
 const GRADE_SORT = {
   streamer: 0,
   burning: 1,
@@ -80,7 +79,6 @@ CREATE TABLE IF NOT EXISTS applications (
 
   is_streamer INTEGER NOT NULL DEFAULT 0,
 
-  -- 업둥교환 전용
   up2 INTEGER NOT NULL DEFAULT 0,
   up22 INTEGER NOT NULL DEFAULT 0,
 
@@ -224,11 +222,30 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <div class="thumbnail">
           <span class="on-air">● On Air</span>
           <img src="${esc(thumbImg)}" alt="썸네일"
-               onerror="this.style.display='none'; this.parentNode.innerHTML+='<div class=&quot;thumb-fallback&quot;>이미지 준비중</div>';">
+               onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>이미지 준비중</div>';">
         </div>
         <a href="/" class="side-btn">메인 로비</a>
         <a href="/lineup" class="side-btn">공대 편성표</a>
         <a href="/check" class="side-btn">예약 확인</a>
+      </aside>
+    `;
+  }
+
+  const isAdminLobby = !activeRaid || activeRaid === "admin_lobby";
+
+  if (isAdminLobby) {
+    return `
+      <aside class="sidebar">
+        <div class="thumbnail">
+          <span class="on-air admin-badge">● Admin</span>
+          <img src="/images/streamer_profile.png" alt="관리자 썸네일"
+               onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
+        </div>
+
+        <button type="button" class="side-btn" onclick="openModal('modal-auth')">인증키 설정</button>
+        <button type="button" class="side-btn" onclick="openModal('modal-streamer')">스트리머 예약</button>
+        <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
+        <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
       </aside>
     `;
   }
@@ -238,11 +255,11 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
       <div class="thumbnail">
         <span class="on-air admin-badge">● Admin</span>
         <img src="${esc(thumbImg)}" alt="썸네일"
-             onerror="this.style.display='none'; this.parentNode.innerHTML+='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
+             onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
       </div>
       <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">관리자 로비</a>
-      ${activeRaid ? `<a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>` : ""}
-      ${activeRaid ? `<a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>` : ""}
+      <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
+      <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
       <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
     </aside>
   `;
@@ -391,6 +408,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
 
     .side-btn{
       display:block;
+      width:100%;
       background:var(--bg-box);
       padding:13px 14px;
       border-radius:10px;
@@ -401,6 +419,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border:1px solid transparent;
       color:var(--text-main);
       box-shadow:none !important;
+      cursor:pointer;
     }
     .side-btn:hover{
       background:var(--border-glow);
@@ -833,6 +852,75 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       border-color:rgba(100,220,140,.4);
     }
 
+    .modal-overlay{
+      display:none;
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.58);
+      z-index:2000;
+      align-items:center;
+      justify-content:center;
+      backdrop-filter:blur(4px);
+    }
+    .modal-overlay.active{
+      display:flex;
+    }
+    .modal-content{
+      width:min(560px, calc(100vw - 32px));
+      background:linear-gradient(180deg, rgba(27,28,59,.98), rgba(24,25,52,.98));
+      border:1px solid var(--accent);
+      border-radius:14px;
+      padding:22px 20px 18px;
+      position:relative;
+    }
+    .modal-header{
+      margin-bottom:16px;
+    }
+    .modal-header h3{
+      margin:0 0 6px;
+      font-size:18px;
+      font-weight:700;
+    }
+    .modal-header p{
+      margin:0;
+      font-size:12px;
+      color:var(--text-muted);
+      line-height:1.5;
+    }
+    .modal-close{
+      position:absolute;
+      top:12px;
+      right:12px;
+      width:32px;
+      height:32px;
+      border-radius:8px;
+      border:1px solid rgba(148,163,255,.28);
+      background:rgba(255,255,255,.03);
+      color:var(--text-main);
+      cursor:pointer;
+      font-size:16px;
+      font-weight:700;
+    }
+    .modal-close:hover{
+      background:var(--border-glow);
+      border-color:var(--accent);
+    }
+    .modal-form{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .modal-row{
+      display:flex;
+      gap:12px;
+      align-items:flex-end;
+      flex-wrap:wrap;
+    }
+    .modal-row > div{
+      flex:1;
+      min-width:140px;
+    }
+
     @media (max-width:1120px){
       .content-wrapper{ flex-direction:column; }
       .sidebar{ width:100%; }
@@ -857,6 +945,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     @media (max-width:520px){
       .formGrid{ grid-template-columns:1fr; }
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
+      .modal-content{ width:calc(100vw - 20px); }
     }
   </style>
   <script>
@@ -886,6 +975,20 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       partyInput.value = String(partyIndex);
       f.submit();
     }
+    function openModal(id){
+      const el = document.getElementById(id);
+      if(el) el.classList.add("active");
+    }
+    function closeModal(id){
+      const el = document.getElementById(id);
+      if(el) el.classList.remove("active");
+    }
+    window.addEventListener("click", function(e){
+      const overlays = document.querySelectorAll(".modal-overlay.active");
+      overlays.forEach((ov) => {
+        if(e.target === ov) ov.classList.remove("active");
+      });
+    });
   </script>
 </head>
 <body>
@@ -946,7 +1049,6 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-// /admin 숨김 처리
 app.get("/admin", (req, res) => res.status(404).send("Not Found"));
 app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 
@@ -958,7 +1060,7 @@ app.get("/", (req, res) => {
     (r) => `
       <a class="raid-card" href="/verify?raid=${encodeURIComponent(r.key)}">
         <img src="${esc(r.img)}" alt="${esc(r.label)}"
-             onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+             onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
         <div class="label">${esc(r.label)}</div>
       </a>
     `
@@ -1362,7 +1464,7 @@ app.get("/check", (req, res) => {
               (r) => `
                 <a class="raid-card" href="/check?raid=${encodeURIComponent(r.key)}">
                   <img src="${esc(r.img)}" alt="${esc(r.label)}"
-                       onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+                       onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
                   <div class="label">${esc(r.label)}</div>
                 </a>
               `
@@ -1430,7 +1532,6 @@ app.get("/check", (req, res) => {
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
             <th class="center">상태</th>
-            <th>스트리머 코멘트</th>
           </tr>
           ${
             apps.length
@@ -1453,18 +1554,17 @@ app.get("/check", (req, res) => {
                                <td class="center">${esc(a.buffer_count)}</td>`
                         }
                         <td class="center">${status}</td>
-                        <td>${a.comment ? esc(a.comment) : `<span class="muted">-</span>`}</td>
                       </tr>
                     `;
                   })
                   .join("")
-              : `<tr><td colspan="7" class="center muted">예약 신청이 없습니다.</td></tr>`
+              : `<tr><td colspan="6" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
 
         <div class="muted" style="margin-top:12px;">
           - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
-          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.<br/>
+          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.
         </div>
       </div>
     `,
@@ -1946,11 +2046,85 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
     (r) => `
       <a class="raid-card" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(r.key)}&sort=grade">
         <img src="${esc(r.img)}" alt="${esc(r.label)}"
-             onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+             onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
         <div class="label">${esc(r.label)}</div>
       </a>
     `
   ).join("");
+
+  const modalHtml = `
+    <div class="modal-overlay" id="modal-auth">
+      <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal('modal-auth')">✕</button>
+        <div class="modal-header">
+          <h3>인증키 입력</h3>
+          <p>레이드를 선택하고 진행일과 인증키를 설정하세요.</p>
+        </div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/code" class="modal-form">
+          <div>
+            <div class="muted" style="margin-bottom:6px;">레이드</div>
+            <select name="raid" required>
+              <option value="">레이드 선택</option>
+              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+            </select>
+          </div>
+
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">진행일</div>
+              <input name="date_kst" value="${esc(todayKST())}" placeholder="YYYY-MM-DD" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">인증키</div>
+              <input name="code" placeholder="예) 1234ABCD" required />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:flex-end; margin-top:4px;">
+            <button type="button" class="btn btnGhost" onclick="closeModal('modal-auth')">닫기</button>
+            <button type="submit" class="btn btnPrimary">등록</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="modal-streamer">
+      <div class="modal-content">
+        <button type="button" class="modal-close" onclick="closeModal('modal-streamer')">✕</button>
+        <div class="modal-header">
+          <h3>스트리머 예약</h3>
+          <p>스트리머 캐릭터를 등록하면 자동배치 시 최우선으로 반영됩니다.</p>
+        </div>
+
+        <form method="POST" action="${esc(ADMIN_BASE)}/streamer-reserve" class="modal-form">
+          <div>
+            <div class="muted" style="margin-bottom:6px;">레이드</div>
+            <select name="raid" required>
+              <option value="">레이드 선택</option>
+              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
+            </select>
+          </div>
+
+          <div class="modal-row">
+            <div>
+              <div class="muted" style="margin-bottom:6px;">딜러 수</div>
+              <input name="dealer_count" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:6px;">버퍼 수</div>
+              <input name="buffer_count" inputmode="numeric" placeholder="예) 1" required />
+            </div>
+          </div>
+
+          <div class="row" style="justify-content:flex-end; margin-top:4px;">
+            <button type="button" class="btn btnGhost" onclick="closeModal('modal-streamer')">닫기</button>
+            <button type="submit" class="btn btnPrimary">등록</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
 
   res.send(
     layout(
@@ -1958,84 +2132,30 @@ app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
       <div class="box">
         <div class="row sp">
           <div>
-            <div style="font-weight:700;font-size:20px;margin-bottom:6px;">관리자</div>
-            <div class="muted">레이드별 신청목록 확인 / 진행일 + 인증키 설정 / 공대편성 / 스트리머 예약</div>
+            <div style="font-weight:700;font-size:20px;margin-bottom:6px;">관리자 메인</div>
+            <div class="muted">좌측 메뉴에서 인증키 설정과 스트리머 예약을 팝업으로 열 수 있습니다.</div>
           </div>
           <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/logout">로그아웃</a>
         </div>
 
         <div class="divider"></div>
 
-        <div style="font-weight:700;margin-bottom:10px;">신청목록 보기</div>
+        <div style="font-weight:700;margin-bottom:10px;">레이드 선택</div>
         <div class="raid-grid">${cardsHtml}</div>
 
         <div class="divider"></div>
 
-        <div style="font-weight:700;margin-bottom:8px;">진행일 + 인증키 설정</div>
         <div class="muted">
-          - 여기서 설정한 <b>진행일(date)</b>이 해당 레이드의 기준 날짜가 됩니다.<br/>
-          - 자정이 지나도 스트리머가 이 날짜를 바꾸지 않으면 인증/예약/조회가 유지됩니다.
+          - 좌측의 <b>인증키 설정</b> 버튼: 진행일/인증키 등록 팝업<br/>
+          - 좌측의 <b>스트리머 예약</b> 버튼: 스트리머 캐릭터 등록 팝업<br/>
+          - 레이드 카드를 누르면 해당 레이드 신청 목록으로 이동합니다.
         </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="${esc(ADMIN_BASE)}/code" class="row" style="align-items:flex-end;">
-          <div style="min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">레이드</div>
-            <select name="raid" required style="max-width:260px;">
-              <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
-            </select>
-          </div>
-
-          <div style="min-width:200px;">
-            <div class="muted" style="margin-bottom:6px;">진행일(YYYY-MM-DD)</div>
-            <input name="date_kst" value="${esc(todayKST())}" placeholder="예) 2026-01-29" required />
-          </div>
-
-          <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">인증키</div>
-            <input name="code" placeholder="예) 1234ABCD" required />
-          </div>
-
-          <button class="btn btnPrimary" type="submit">저장</button>
-        </form>
-
-        <div class="divider"></div>
-
-        <div style="font-weight:700;margin-bottom:8px;">스트리머 전용 예약</div>
-        <div class="muted">
-          - 스트리머 본인의 캐릭터 수를 입력하면, 자동배치 시 <b>최우선</b>으로 배치됩니다.<br/>
-          - 자동배치 우선순위: 스트리머 → 불타는 치즈 → 그 외
-        </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="${esc(ADMIN_BASE)}/streamer-reserve" class="row" style="align-items:flex-end;">
-          <div style="min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">레이드</div>
-            <select name="raid" required style="max-width:260px;">
-              <option value="">레이드 선택</option>
-              ${RAID_OPTIONS.map((r) => `<option value="${esc(r.key)}">${esc(r.label)}</option>`).join("")}
-            </select>
-          </div>
-
-          <div style="min-width:140px;">
-            <div class="muted" style="margin-bottom:6px;">딜러 수</div>
-            <input name="dealer_count" inputmode="numeric" placeholder="예) 1" required />
-          </div>
-
-          <div style="min-width:140px;">
-            <div class="muted" style="margin-bottom:6px;">버퍼 수</div>
-            <input name="buffer_count" inputmode="numeric" placeholder="예) 1" required />
-          </div>
-
-          <button class="btn" type="submit">스트리머 예약 추가</button>
-        </form>
       </div>
+
+      ${modalHtml}
     `,
       "관리자",
-      { isAdmin: true }
+      { isAdmin: true, activeRaid: "admin_lobby" }
     )
   );
 });
@@ -2303,7 +2423,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
             <th>원하는 시작 기수</th>
-            <th>코멘트</th>
             <th class="center">삭제</th>
           </tr>
 
@@ -2347,16 +2466,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
                         <td>${startPartyHtml}</td>
 
-                        <td>
-                          <form method="POST" action="${esc(ADMIN_BASE)}/comment" style="margin:0;" class="row">
-                            <input type="hidden" name="id" value="${esc(a.id)}"/>
-                            <input type="hidden" name="raid" value="${esc(raid)}"/>
-                            <input type="hidden" name="sort" value="${esc(sort)}"/>
-                            <input class="commentBox" name="comment" placeholder="예) 1깃수 시작" value="${esc(commentVal)}"/>
-                            <button class="btn" type="submit">저장</button>
-                          </form>
-                        </td>
-
                         <td class="center">
                           <form method="POST" action="${esc(ADMIN_BASE)}/delete" onsubmit="return confirm('정말 삭제하시겠습니까?');" style="margin:0;">
                             <input type="hidden" name="id" value="${esc(a.id)}"/>
@@ -2369,7 +2478,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                     `;
                   })
                   .join("")
-              : `<tr><td colspan="9" class="center muted">예약 신청이 없습니다.</td></tr>`
+              : `<tr><td colspan="8" class="center muted">예약 신청이 없습니다.</td></tr>`
           }
         </table>
 
@@ -2596,7 +2705,6 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   );
 });
 
-// Admin: reset lineup
 app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2615,7 +2723,6 @@ app.post(`${ADMIN_BASE}/lineup/reset`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: save lineup
 app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2656,7 +2763,6 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: save updoong lineup
 app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   if (raid !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
@@ -2689,7 +2795,6 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=updoong`);
 });
 
-// Admin: delete party
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
@@ -2744,7 +2849,6 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
-// Admin: delete updoong party
 app.post(`${ADMIN_BASE}/lineup/delete-up-party`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   if (raid !== "updoong") return res.redirect(`${ADMIN_BASE}/raid`);
@@ -2800,7 +2904,7 @@ app.get("/lineup", (req, res) => {
               (r) => `
                 <a class="raid-card" href="/lineup?raid=${encodeURIComponent(r.key)}">
                   <img src="${esc(r.img)}" alt="${esc(r.label)}"
-                       onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
+                       onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
                   <div class="label">${esc(r.label)}</div>
                 </a>
               `
