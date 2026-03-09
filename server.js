@@ -32,9 +32,9 @@ const ADMIN_BASE = "/" + ADMIN_PATH;
 // =====================
 const RAID_OPTIONS = [
   { key: "dirige", label: "디레지에", img: "/images/dirige.png" },
-  { key: "dirige-hard", label: "디레지에-악연", img: "/images/dirige_hard.png" },
+  { key: "dirige-hard", label: "디레지에 : 악연", img: "/images/dirige_hard.png" },
   { key: "inhwagongjeon", label: "이내황혼전", img: "/images/inhwagongjeon.png" },
-  { key: "nabel-hard", label: "나벨 - 하드", img: "/images/nabel_hard.png" },
+  { key: "nabel-hard", label: "인공신 나벨 : 하드", img: "/images/nabel_hard.png" },
   { key: "updoong", label: "업둥교환", img: "/images/updoong.png" },
 ];
 
@@ -220,7 +220,6 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
     return `
       <aside class="sidebar">
         <div class="thumbnail">
-          <span class="on-air">● On Air</span>
           <img src="${esc(thumbImg)}" alt="썸네일"
                onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>이미지 준비중</div>';">
         </div>
@@ -266,7 +265,8 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
 function layout(body, title = "레이드 예약 사이트", options = {}) {
   const isAdmin = !!options.isAdmin;
   const activeRaid = String(options.activeRaid || "");
-  const sidebarContent = buildSidebar(activeRaid, isAdmin);
+  const hideSidebar = !!options.hideSidebar;
+  const sidebarContent = hideSidebar ? "" : buildSidebar(activeRaid, isAdmin);
 
   return `<!doctype html>
 <html lang="ko">
@@ -287,10 +287,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       --text-main:#f8fafc;
       --text-muted:#9ca3af;
       --accent:#6b72ff;
-      --accent-2:#8b5cf6;
       --danger:#ef4444;
       --success:#10b981;
-      --warning:#f59e0b;
       --chip-bg:rgba(107,114,255,.12);
     }
 
@@ -343,7 +341,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       padding:9px 14px;
       border-radius:10px;
       font-size:13px;
-      color:var(--text-muted);
+      color:var(--text-main);
       background:rgba(38,40,77,.75);
       white-space:nowrap;
     }
@@ -390,19 +388,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       text-align:center;
       line-height:1.5;
     }
-    .on-air{
-      position:absolute;
-      top:12px;
-      left:12px;
-      background:rgba(0,0,0,.55);
-      color:#ff6b6b;
-      padding:4px 9px;
-      border-radius:999px;
-      font-size:11px;
-      font-weight:700;
-      z-index:3;
-    }
-    .admin-badge{ color:#fca5a5; }
 
     .side-btn{
       display:block;
@@ -442,6 +427,10 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       background:linear-gradient(180deg, rgba(27,28,59,.96), rgba(24,25,52,.96));
       min-height:620px;
       overflow:hidden;
+    }
+
+    .main-area.full{
+      width:100%;
     }
 
     .box{
@@ -593,30 +582,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     }
     tr:last-child td{ border-bottom:0; }
     .center{ text-align:center; }
-
-    .commentBox{ width:260px; max-width:100%; }
-    .raidNav{ margin-bottom:4px; }
-    .raidNav .btn{ font-size:12px; padding-inline:12px; }
-
-    .bigCheck{ display:flex; align-items:center; gap:6px; cursor:pointer; }
-    .bigCheck input[type="checkbox"]{ width:22px; height:22px; }
-
-    .adminConfirm{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      padding:5px 10px;
-      border-radius:999px;
-      background:rgba(2,6,23,.52);
-      border:1px solid rgba(148,163,255,.32);
-      cursor:pointer;
-      font-size:12px;
-      user-select:none;
-    }
-    .adminConfirm:hover{ background:#2b305d; }
-    .adminConfirm input[type="checkbox"]{
-      width:20px; height:20px; margin:0; cursor:pointer;
-    }
 
     .raid-grid{
       display:grid;
@@ -918,268 +883,208 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       flex:1;
       min-width:140px;
     }
+
     /* =========================
-   Viewer Reserve Screen
-========================= */
-.reserve-screen{
-  display:flex;
-  gap:22px;
-  align-items:stretch;
-}
+       Viewer Reserve Screen
+    ========================= */
+    .viewer-reserve-shell{
+      width:100%;
+      max-width:840px;
+      margin:0 auto;
+      border:1px solid var(--border-glow);
+      border-radius:14px;
+      padding:18px;
+      background:rgba(18,20,90,.45);
+    }
+    .viewer-reserve-inner{
+      display:flex;
+      gap:20px;
+      align-items:stretch;
+    }
+    .viewer-reserve-left{
+      width:205px;
+      flex-shrink:0;
+      border:1px solid var(--border-glow);
+      border-radius:12px;
+      padding:14px;
+      background:rgba(38,40,77,.45);
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+    }
+    .viewer-raid-thumb{
+      width:100%;
+      aspect-ratio:1 / 1;
+      border-radius:12px;
+      overflow:hidden;
+      background:#3c3f74;
+      border:1px solid rgba(148,163,255,.15);
+      position:relative;
+    }
+    .viewer-raid-thumb img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    .viewer-raid-thumb-title{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      padding:12px 10px 10px;
+      background:linear-gradient(transparent, rgba(0,0,0,.85));
+      text-align:center;
+      font-weight:800;
+      font-size:14px;
+      color:#fff;
+    }
+    .viewer-left-menu{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .viewer-left-menu .viewer-nav-btn{
+      width:100%;
+      min-height:42px;
+      border:1px solid rgba(148,163,255,.16);
+      background:#46497d;
+      border-radius:10px;
+      color:#f8fafc;
+      font-size:14px;
+      font-weight:600;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      transition:.15s ease;
+    }
+    .viewer-left-menu .viewer-nav-btn:hover{
+      background:#555a93;
+      border-color:var(--accent);
+    }
 
-.reserve-left{
-  width:220px;
-  flex-shrink:0;
-  border:1px solid var(--border-glow);
-  border-radius:14px;
-  padding:14px;
-  background:rgba(38,40,77,.55);
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-}
+    .viewer-reserve-right{
+      flex:1;
+      border:1px solid var(--border-glow);
+      border-radius:12px;
+      padding:18px;
+      background:rgba(38,40,77,.35);
+      display:flex;
+      flex-direction:column;
+      gap:18px;
+    }
 
-.reserve-left-thumb{
-  position:relative;
-  width:100%;
-  aspect-ratio:1 / 1;
-  border-radius:12px;
-  overflow:hidden;
-  background:#3c3f74;
-  border:1px solid rgba(148,163,255,.16);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:#e5e7eb;
-  text-align:center;
-  font-size:14px;
-  line-height:1.5;
-}
-.reserve-left-thumb img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-.reserve-left-menu{
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-.reserve-left-menu .nav-btn{
-  width:100%;
-  min-height:44px;
-  border:1px solid rgba(148,163,255,.16);
-  background:#46497d;
-  border-radius:10px;
-  color:#f8fafc;
-  font-size:14px;
-  font-weight:600;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  transition:.15s ease;
-}
-.reserve-left-menu .nav-btn:hover{
-  background:#555a93;
-  border-color:var(--accent);
-}
+    .viewer-auth-bar{
+      background:#4a4f86;
+      border-radius:10px;
+      padding:12px 16px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .viewer-auth-label{
+      min-width:130px;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:14px;
+      font-weight:700;
+      color:#fff;
+      white-space:nowrap;
+    }
+    .viewer-auth-input{
+      flex:1;
+    }
 
-.reserve-right{
-  flex:1;
-  border:1px solid var(--border-glow);
-  border-radius:14px;
-  padding:18px 22px;
-  background:rgba(38,40,77,.42);
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-}
+    .viewer-form-card{
+      background:#4a4f86;
+      border-radius:12px;
+      padding:16px 18px;
+    }
+    .viewer-form-row{
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+    .viewer-form-row + .viewer-form-row{
+      margin-top:12px;
+    }
+    .viewer-form-label{
+      width:130px;
+      flex-shrink:0;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:#fff;
+      font-weight:700;
+      font-size:14px;
+      white-space:nowrap;
+    }
+    .viewer-form-input{
+      flex:1;
+    }
 
-.reserve-top-auth{
-  margin-left:auto;
-  width:min(430px, 100%);
-  background:#4a4f86;
-  border-radius:12px;
-  padding:10px 14px;
-  display:flex;
-  align-items:center;
-  gap:12px;
-}
-.reserve-top-auth-label{
-  min-width:150px;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  font-size:14px;
-  font-weight:700;
-  color:#fff;
-}
-.reserve-top-auth input{
-  background:#8e90aa;
-  color:#fff;
-}
-.reserve-top-auth input::placeholder{
-  color:#d1d5db;
-}
+    .viewer-select,
+    .viewer-text,
+    .viewer-mini-input{
+      background:#989ab3 !important;
+      color:#fff !important;
+    }
+    .viewer-select::placeholder,
+    .viewer-text::placeholder,
+    .viewer-mini-input::placeholder{
+      color:#e5e7eb !important;
+    }
 
-.reserve-main{
-  display:flex;
-  gap:26px;
-  align-items:flex-start;
-}
+    .viewer-inline-row{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      flex-wrap:wrap;
+      margin-left:130px;
+    }
+    .viewer-inline-item{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      color:#fff;
+      font-size:14px;
+      white-space:nowrap;
+    }
+    .viewer-mini-input{
+      width:34px;
+      min-width:34px;
+      height:24px;
+      padding:0 6px;
+      text-align:center;
+      border-radius:4px;
+    }
+    .viewer-start-input{
+      width:74px;
+      min-width:74px;
+    }
 
-.reserve-hero-card{
-  width:172px;
-  flex-shrink:0;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-}
-.reserve-hero-image{
-  width:100%;
-  aspect-ratio:1 / 1;
-  border-radius:12px;
-  overflow:hidden;
-  background:#2d315f;
-  border:1px solid rgba(148,163,255,.14);
-  position:relative;
-}
-.reserve-hero-image img{
-  width:100%;
-  height:100%;
-  object-fit:cover;
-}
-.reserve-hero-title{
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
-  padding:12px 10px 10px;
-  background:linear-gradient(transparent, rgba(0,0,0,.85));
-  text-align:center;
-  font-weight:800;
-  font-size:15px;
-}
+    .viewer-submit-wrap{
+      display:flex;
+      justify-content:center;
+      margin-top:-2px;
+    }
+    .viewer-submit-btn{
+      min-width:160px;
+      min-height:42px;
+      background:#4a4f86;
+      border:1px solid rgba(148,163,255,.18);
+      border-radius:10px;
+      color:#fff;
+      font-size:15px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    .viewer-submit-btn:hover{
+      background:#5b61a0;
+      border-color:var(--accent);
+    }
 
-.reserve-form-wrap{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  gap:16px;
-}
-
-.reserve-info-card{
-  background:#4a4f86;
-  border-radius:12px;
-  padding:14px 16px;
-}
-
-.reserve-field-row{
-  display:flex;
-  align-items:center;
-  gap:14px;
-}
-.reserve-field-row + .reserve-field-row{
-  margin-top:12px;
-}
-.reserve-field-label{
-  width:150px;
-  flex-shrink:0;
-  display:flex;
-  align-items:center;
-  gap:10px;
-  color:#fff;
-  font-weight:700;
-  font-size:14px;
-}
-.reserve-field-input{
-  flex:1;
-}
-
-.reserve-inline-row{
-  display:flex;
-  align-items:center;
-  gap:18px;
-  flex-wrap:wrap;
-}
-.reserve-inline-group{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  color:#fff;
-  font-size:14px;
-  white-space:nowrap;
-}
-.reserve-inline-group input{
-  width:38px;
-  min-width:38px;
-  height:24px;
-  padding:0 6px;
-  text-align:center;
-  background:#8e90aa;
-}
-
-.reserve-inline-group.reserve-start-group input{
-  width:78px;
-  min-width:78px;
-}
-.reserve-submit-wrap{
-  margin-top:4px;
-}
-.reserve-submit-btn{
-  min-width:172px;
-  min-height:46px;
-  background:#4a4f86;
-  border:1px solid rgba(148,163,255,.18);
-  border-radius:10px;
-  color:#fff;
-  font-size:15px;
-  font-weight:700;
-}
-.reserve-submit-btn:hover{
-  background:#5b61a0;
-  border-color:var(--accent);
-}
-
-.reserve-select,
-.reserve-text{
-  background:#8e90aa !important;
-  color:#fff !important;
-}
-.reserve-select::placeholder,
-.reserve-text::placeholder{
-  color:#e5e7eb !important;
-}
-
-@media (max-width: 980px){
-  .reserve-screen{
-    flex-direction:column;
-  }
-  .reserve-left{
-    width:100%;
-  }
-  .reserve-main{
-    flex-direction:column;
-  }
-  .reserve-hero-card{
-    width:100%;
-    max-width:240px;
-  }
-  .reserve-top-auth{
-    margin-left:0;
-  }
-  .reserve-field-row{
-    flex-direction:column;
-    align-items:flex-start;
-  }
-  .reserve-field-label{
-    width:auto;
-  }
-  .reserve-field-input{
-    width:100%;
-  }
-}
     @media (max-width:1120px){
       .content-wrapper{ flex-direction:column; }
       .sidebar{ width:100%; }
@@ -1188,6 +1093,32 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     @media (max-width:980px){
       .formGrid{ grid-template-columns:1fr 1fr; }
       .fieldFull{ grid-column:1 / -1; }
+      .viewer-reserve-inner{
+        flex-direction:column;
+      }
+      .viewer-reserve-left{
+        width:100%;
+      }
+      .viewer-form-row{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+      .viewer-form-label{
+        width:auto;
+      }
+      .viewer-form-input{
+        width:100%;
+      }
+      .viewer-inline-row{
+        margin-left:0;
+      }
+      .viewer-auth-bar{
+        flex-direction:column;
+        align-items:stretch;
+      }
+      .viewer-auth-label{
+        min-width:0;
+      }
     }
     @media (max-width:640px){
       body{ padding:18px 12px; }
@@ -1199,12 +1130,17 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       .header h1{ font-size:24px; }
       .main-area{ padding:18px; min-height:auto; }
       .raid-grid{ grid-template-columns:1fr; }
-      .commentBox{ width:100%; }
     }
     @media (max-width:520px){
       .formGrid{ grid-template-columns:1fr; }
       .upPartyCard{ width:100%; flex:1 1 auto; max-width:none; }
       .modal-content{ width:calc(100vw - 20px); }
+      .viewer-reserve-shell{
+        padding:12px;
+      }
+      .viewer-reserve-right{
+        padding:14px;
+      }
     }
   </style>
   <script>
@@ -1261,8 +1197,8 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     </header>
 
     <div class="content-wrapper">
-      ${sidebarContent}
-      <main class="main-area">
+      ${hideSidebar ? "" : sidebarContent}
+      <main class="main-area ${hideSidebar ? "full" : ""}">
         ${body}
       </main>
     </div>
@@ -1274,20 +1210,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
 // =====================
 // Auth middleware
 // =====================
-function requireViewerOk(req, res, next) {
-  const raid = String(req.query.raid || req.body.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect("/");
-
-  const activeDay = getActiveDay(raid);
-  const cookieKey = `viewer_ok_${raid}_${activeDay}`;
-
-  if (req.cookies[cookieKey] !== "1") {
-    return res.redirect(`/verify?raid=${encodeURIComponent(raid)}`);
-  }
-  return next();
-}
-
 function requireAdmin(req, res, next) {
   if (!ADMIN_KEY) {
     return res.status(500).send(
@@ -1317,7 +1239,7 @@ app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
 app.get("/", (req, res) => {
   const cardsHtml = RAID_OPTIONS.map(
     (r) => `
-      <a class="raid-card" href="/verify?raid=${encodeURIComponent(r.key)}">
+      <a class="raid-card" href="/reserve?raid=${encodeURIComponent(r.key)}">
         <img src="${esc(r.img)}" alt="${esc(r.label)}"
              onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;height:100%;display:flex;align-items:center;justify-content:center;color:#cbd5e1;&quot;>${esc(r.label)}</div>';">
         <div class="label">${esc(r.label)}</div>
@@ -1332,7 +1254,12 @@ app.get("/", (req, res) => {
         <div class="row sp">
           <div>
             <div style="font-weight:700;font-size:20px;margin-bottom:6px;">진행할 레이드를 선택하세요</div>
-          </div
+            <div class="muted">레이드를 선택하면 바로 예약 화면으로 이동합니다.</div>
+          </div>
+          <div class="row">
+            <a class="btn btnPrimary" href="/lineup">공대편성표 보기</a>
+            <a class="btn btnGhost" href="/check">예약확인</a>
+          </div>
         </div>
 
         <div class="divider"></div>
@@ -1351,94 +1278,9 @@ app.get("/", (req, res) => {
 });
 
 // =====================
-// Viewer: verify
-// =====================
-app.get("/verify", (req, res) => {
-  const raid = String(req.query.raid || "");
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect("/");
-
-  const activeRow = getActiveCodeRow(raid);
-  const activeDay = activeRow?.date_kst || todayKST();
-
-  res.send(
-    layout(
-      `
-      <div class="box">
-        <div class="row sp">
-          <div>
-            <div style="font-weight:900;font-size:20px;margin-bottom:6px;">인증키 입력</div>
-            <div class="muted">레이드: <b>${esc(raidObj.label)}</b> / 진행일: <b>${esc(activeDay)}</b></div>
-          </div>
-          <a class="btn btnGhost" href="/">메인</a>
-        </div>
-
-        <div class="divider"></div>
-
-        <form method="POST" action="/verify" class="row" style="align-items:flex-end;">
-          <input type="hidden" name="raid" value="${esc(raid)}"/>
-          <div style="flex:1; min-width:240px;">
-            <div class="muted" style="margin-bottom:6px;">인증키</div>
-            <input name="code" placeholder="스트리머가 공지한 인증키" required />
-          </div>
-          <button class="btn" type="submit">확인</button>
-        </form>
-
-        ${
-          !activeRow
-            ? `<div class="muted" style="margin-top:12px;">
-                 - 아직 이 레이드의 인증키가 설정되지 않았을 수 있습니다.<br/>
-                 - 스트리머가 관리자 화면에서 인증키를 먼저 설정해야 합니다.
-               </div>`
-            : ""
-        }
-      </div>
-    `,
-      "인증키",
-      { activeRaid: raid }
-    )
-  );
-});
-
-app.post("/verify", (req, res) => {
-  const raid = String(req.body.raid || "");
-  const code = String(req.body.code || "").trim();
-  const raidObj = raidByKey(raid);
-  if (!raidObj) return res.redirect("/");
-
-  const row = getActiveCodeRow(raid);
-  if (!row || String(row.code) !== code) {
-    return res.send(
-      layout(
-        `
-        <div class="box">
-          <div class="bad"><b>인증키가 올바르지 않습니다.</b></div>
-          <div class="divider"></div>
-          <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">다시 입력</a>
-          <a class="btn btnGhost" href="/">메인</a>
-        </div>
-      `,
-        "인증 실패",
-        { activeRaid: raid }
-      )
-    );
-  }
-
-  const activeDay = row.date_kst;
-  res.cookie(`viewer_ok_${raid}_${activeDay}`, "1", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-
-  return res.redirect(`/reserve?raid=${encodeURIComponent(raid)}`);
-});
-
-// =====================
 // Viewer: reserve form
 // =====================
-app.get("/reserve", requireViewerOk, (req, res) => {
+app.get("/reserve", (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
@@ -1446,56 +1288,48 @@ app.get("/reserve", requireViewerOk, (req, res) => {
   const isUp = raid === "updoong";
   const err = String(req.query.err || "");
   const activeDay = getActiveDay(raid);
-  const codeRow = getActiveCodeRow(raid);
-  const currentCode = codeRow?.code || "";
 
   res.send(
     layout(
       `
-      <div class="reserve-screen">
-        <aside class="reserve-left">
-          <div class="reserve-left-thumb">
-            <span class="on-air">● On Air</span>
-            <img src="/images/streamer_profile.png" alt="치지직 라이브 방송 썸네일"
-                 onerror="this.style.display='none'; this.parentNode.innerHTML='<div>치지직 라이브<br/>방송 썸네일</div>';">
-          </div>
-
-          <div class="reserve-left-menu">
-            <a href="/" class="nav-btn">메인 로비</a>
-            <a href="/lineup?raid=${encodeURIComponent(raid)}" class="nav-btn">공격대 편성표</a>
-            <a href="/check?raid=${encodeURIComponent(raid)}" class="nav-btn">예약 상황 확인</a>
-          </div>
-        </aside>
-
-        <section class="reserve-right">
-          <div class="reserve-top-auth">
-            <div class="reserve-top-auth-label">🔐 인증키 입력</div>
-            <input class="reserve-text" value="${esc(currentCode)}" placeholder="스트리머가 공지한 인증키 입력" readonly />
-          </div>
-
-          ${
-            err
-              ? `<div class="bad" style="margin-top:-4px;"><b>${esc(err)}</b></div>`
-              : ``
-          }
-
-          <div class="reserve-main">
-            <div class="reserve-hero-card">
-              <div class="reserve-hero-image">
-                <img src="${esc(raidObj.img || "")}" alt="${esc(raidObj.label)}"
-                     onerror="this.style.display='none'; this.parentNode.innerHTML+='<div style=&quot;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;&quot;>${esc(raidObj.label)}</div>';">
-                <div class="reserve-hero-title">${esc(raidObj.label)}</div>
-              </div>
+      <div class="viewer-reserve-shell">
+        <div class="viewer-reserve-inner">
+          <aside class="viewer-reserve-left">
+            <div class="viewer-raid-thumb">
+              <img src="${esc(raidObj.img || "")}" alt="${esc(raidObj.label)}"
+                   onerror="this.style.display='none'; this.parentNode.innerHTML='<div style=&quot;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;&quot;>${esc(raidObj.label)}</div>';">
+              <div class="viewer-raid-thumb-title">${esc(raidObj.label)}</div>
             </div>
 
-            <form class="reserve-form-wrap" method="POST" action="/reserve">
+            <div class="viewer-left-menu">
+              <a href="/" class="viewer-nav-btn">메인 로비</a>
+              <a href="/lineup?raid=${encodeURIComponent(raid)}" class="viewer-nav-btn">공격대 편성표</a>
+              <a href="/check?raid=${encodeURIComponent(raid)}" class="viewer-nav-btn">예약 상황 확인</a>
+            </div>
+          </aside>
+
+          <section class="viewer-reserve-right">
+            <form method="POST" action="/reserve">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
 
-              <div class="reserve-info-card">
-                <div class="reserve-field-row">
-                  <div class="reserve-field-label">🧀 치즈 색깔</div>
-                  <div class="reserve-field-input">
-                    <select name="viewer_grade" class="reserve-select" required>
+              <div class="viewer-auth-bar">
+                <div class="viewer-auth-label">🔐 인증키 입력</div>
+                <div class="viewer-auth-input">
+                  <input
+                    name="code"
+                    class="viewer-text"
+                    placeholder="스트리머가 공지한 인증키 입력"
+                    required />
+                </div>
+              </div>
+
+              ${err ? `<div class="bad" style="margin:12px 0 0;"><b>${esc(err)}</b></div>` : ``}
+
+              <div class="viewer-form-card" style="margin-top:18px;">
+                <div class="viewer-form-row">
+                  <div class="viewer-form-label">🧀 치즈 색깔</div>
+                  <div class="viewer-form-input">
+                    <select name="viewer_grade" class="viewer-select" required>
                       ${GRADE_OPTIONS.map(
                         (g) => `<option value="${esc(g.key)}">${esc(g.label)}</option>`
                       ).join("")}
@@ -1503,113 +1337,118 @@ app.get("/reserve", requireViewerOk, (req, res) => {
                   </div>
                 </div>
 
-                <div class="reserve-field-row">
-                  <div class="reserve-field-label">🟩 치지직 닉네임</div>
-                  <div class="reserve-field-input">
+                <div class="viewer-form-row">
+                  <div class="viewer-form-label">🟩 치지직 닉네임</div>
+                  <div class="viewer-form-input">
                     <input
                       name="chzzk_nickname"
-                      class="reserve-text"
-                      placeholder="치지직 닉네임"
+                      class="viewer-text"
+                      placeholder=""
                       required
                       maxlength="40"/>
                   </div>
                 </div>
               </div>
 
-              <div class="reserve-info-card">
-                <div class="reserve-field-row">
-                  <div class="reserve-field-label">🎮 모험단 이름</div>
-                  <div class="reserve-field-input">
+              <div class="viewer-form-card" style="margin-top:18px;">
+                <div class="viewer-form-row">
+                  <div class="viewer-form-label">🎮 모험단 이름</div>
+                  <div class="viewer-form-input">
                     <input
                       name="adventure_name"
-                      class="reserve-text"
-                      placeholder="인게임 모험단명"
+                      class="viewer-text"
+                      placeholder=""
                       required
                       maxlength="60"/>
                   </div>
                 </div>
 
-                <div class="reserve-field-row" style="margin-top:14px;">
-                  <div class="reserve-field-input" style="width:100%;">
-                    ${
-                      isUp
-                        ? `
-                          <div class="reserve-inline-row">
-                            <label class="reserve-inline-group">
-                              <span>1세트</span>
-                              <input type="checkbox" name="up2" style="width:22px; min-width:22px; height:22px;" />
-                            </label>
-                            <label class="reserve-inline-group">
-                              <span>2세트</span>
-                              <input type="checkbox" name="up22" style="width:22px; min-width:22px; height:22px;" />
-                            </label>
-                            <label class="reserve-inline-group reserve-start-group">
-                              <span>원하는 시작 기수</span>
-                              <input
-                                name="start_party"
-                                inputmode="numeric"
-                                placeholder="선택 사항" />
-                            </label>
-                          </div>
-                        `
-                        : `
-                          <div class="reserve-inline-row">
-                            <label class="reserve-inline-group">
-                              <span>딜러</span>
-                              <input
-                                name="dealer_count"
-                                inputmode="numeric"
-                                placeholder="" required />
-                            </label>
-
-                            <label class="reserve-inline-group">
-                              <span>버퍼</span>
-                              <input
-                                name="buffer_count"
-                                inputmode="numeric"
-                                placeholder="" required />
-                            </label>
-
-                            <label class="reserve-inline-group reserve-start-group">
-                              <span>원하는 시작 기수</span>
-                              <input
-                                name="start_party"
-                                inputmode="numeric"
-                                placeholder="선택 사항" />
-                            </label>
-                          </div>
-                        `
-                    }
-                  </div>
-                </div>
-              </div>
-
-              <div class="reserve-submit-wrap">
-                <button class="reserve-submit-btn" type="submit">등록 완료</button>
-              </div>
-
-              <div class="muted" style="margin-top:6px;">
-                진행일: <b>${esc(activeDay)}</b><br/>
                 ${
                   isUp
-                    ? "업둥교환는 2업둥(1개/2개) 중 하나 이상 체크해야 합니다."
-                    : "원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다."
+                    ? `
+                      <div class="viewer-inline-row" style="margin-top:16px;">
+                        <label class="viewer-inline-item">
+                          <span>1세트</span>
+                          <input type="checkbox" name="up2" style="width:22px; min-width:22px; height:22px;" />
+                        </label>
+
+                        <label class="viewer-inline-item">
+                          <span>2세트</span>
+                          <input type="checkbox" name="up22" style="width:22px; min-width:22px; height:22px;" />
+                        </label>
+
+                        <label class="viewer-inline-item">
+                          <span>원하는 시작 기수</span>
+                          <input
+                            name="start_party"
+                            class="viewer-mini-input viewer-start-input"
+                            inputmode="numeric"
+                            placeholder="선택 사항" />
+                        </label>
+                      </div>
+                    `
+                    : `
+                      <div class="viewer-inline-row" style="margin-top:16px;">
+                        <label class="viewer-inline-item">
+                          <span>딜러</span>
+                          <input
+                            name="dealer_count"
+                            class="viewer-mini-input"
+                            inputmode="numeric"
+                            placeholder=""
+                            required />
+                        </label>
+
+                        <label class="viewer-inline-item">
+                          <span>버퍼</span>
+                          <input
+                            name="buffer_count"
+                            class="viewer-mini-input"
+                            inputmode="numeric"
+                            placeholder=""
+                            required />
+                        </label>
+
+                        <label class="viewer-inline-item">
+                          <span>원하는 시작 기수</span>
+                          <input
+                            name="start_party"
+                            class="viewer-mini-input viewer-start-input"
+                            inputmode="numeric"
+                            placeholder="선택 사항" />
+                        </label>
+                      </div>
+                    `
                 }
               </div>
+
+              <div class="viewer-submit-wrap" style="margin-top:16px;">
+                <button class="viewer-submit-btn" type="submit">등록 완료</button>
+              </div>
             </form>
-          </div>
-        </section>
+
+            <div class="muted" style="margin-top:8px;">
+              진행일: <b>${esc(activeDay)}</b><br/>
+              ${
+                isUp
+                  ? "업둥교환는 1세트 또는 2세트 중 하나 이상 체크해야 합니다."
+                  : "원하는 시작 기수는 선택 항목이며, 비우면 1기수부터 참여하는 것으로 처리됩니다."
+              }
+            </div>
+          </section>
+        </div>
       </div>
     `,
       "예약 신청",
-      { activeRaid: raid }
+      { activeRaid: raid, hideSidebar: true }
     )
   );
 });
+
 // =====================
 // Viewer: reserve save
 // =====================
-app.post("/reserve", requireViewerOk, (req, res) => {
+app.post("/reserve", (req, res) => {
   const raid = String(req.body.raid || "");
   const raidObj = raidByKey(raid);
   if (!raidObj) return res.redirect("/");
@@ -1617,6 +1456,8 @@ app.post("/reserve", requireViewerOk, (req, res) => {
   const isUp = raid === "updoong";
 
   const activeRow = getActiveCodeRow(raid);
+  const code = String(req.body.code || "").trim();
+
   if (!activeRow || !activeRow.code) {
     return res.redirect(
       `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
@@ -1624,6 +1465,15 @@ app.post("/reserve", requireViewerOk, (req, res) => {
       )}`
     );
   }
+
+  if (code !== String(activeRow.code)) {
+    return res.redirect(
+      `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
+        "인증키가 올바르지 않습니다."
+      )}`
+    );
+  }
+
   const activeDay = activeRow.date_kst;
 
   const viewer_grade = String(req.body.viewer_grade || "");
@@ -1661,7 +1511,7 @@ app.post("/reserve", requireViewerOk, (req, res) => {
     if (!up2 && !up22) {
       return res.redirect(
         `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
-          "업둥교환는 2업둥(1개/2개) 중 하나를 반드시 체크해야 합니다."
+          "업둥교환는 1세트 또는 2세트 중 하나를 반드시 체크해야 합니다."
         )}`
       );
     }
@@ -1826,7 +1676,7 @@ app.get("/check", (req, res) => {
           </div>
           <div class="row">
             <a class="btn btnGhost" href="/">메인</a>
-            <a class="btn" href="/verify?raid=${encodeURIComponent(raid)}">예약하기</a>
+            <a class="btn" href="/reserve?raid=${encodeURIComponent(raid)}">예약하기</a>
           </div>
         </div>
 
@@ -1839,7 +1689,7 @@ app.get("/check", (req, res) => {
             <th>모험단 이름</th>
             ${
               isUp
-                ? `<th class="center">2업둥(1개)</th><th class="center">2업둥(2개)</th>`
+                ? `<th class="center">1세트</th><th class="center">2세트</th>`
                 : `<th class="center">딜러</th><th class="center">버퍼</th>`
             }
             <th class="center">상태</th>
@@ -1874,8 +1724,7 @@ app.get("/check", (req, res) => {
         </table>
 
         <div class="muted" style="margin-top:12px;">
-          - “등록완료”는 스트리머가 확인 체크한 상태입니다.<br/>
-          - 코멘트는 스트리머가 남기는 안내/요청사항입니다.
+          - “등록완료”는 스트리머가 확인 체크한 상태입니다.
         </div>
       </div>
     `,
@@ -2031,7 +1880,7 @@ function renderUpLineupParties({ dateKst, editable, adminMode, valuesMap = new M
   let html = `
     <div class="muted" style="margin-bottom:10px;">
       - 업둥교환는 <b>12명=1세트</b>이며, <b>4명 단위</b>로 구분 표시됩니다.<br/>
-      - 공대 내 같은 닉네임은 1번만 들어갑니다. (2업둥(2개)은 다음 세트로 넘어가서 배치)
+      - 공대 내 같은 닉네임은 1번만 들어갑니다. (2세트 체크는 다음 세트로 넘어가서 배치)
     </div>
     <div class="upPartyGrid">
   `;
@@ -2351,7 +2200,6 @@ app.get(`${ADMIN_BASE}/logout`, (req, res) => {
   res.redirect(`${ADMIN_BASE}/login`);
 });
 
-// Admin: 메인
 app.get(`${ADMIN_BASE}/raid`, requireAdmin, (req, res) => {
   const cardsHtml = RAID_OPTIONS.map(
     (r) => `
@@ -2529,9 +2377,6 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
 
-// =====================
-// Admin: 치즈 등급별 일괄 등록
-// =====================
 app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   const raid = String(req.body.raid || "");
   const sort = String(req.body.sort || "grade");
@@ -2584,7 +2429,6 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}${upQS}`);
 });
 
-// Admin: 신청목록
 app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
   const sort = String(req.query.sort || "grade");
@@ -2743,7 +2587,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
                   .map((a) => {
                     const formId = `confirmForm_${a.id}`;
                     const checked = a.confirmed === 1 ? "checked" : "";
-                    const commentVal = String(a.comment || "");
                     const startPartyNum = Number(a.start_party || 0);
                     const startPartyHtml =
                       startPartyNum > 1 ? `${esc(startPartyNum)}기수부터` : `<span class="muted">-</span>`;
@@ -2796,7 +2639,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
         <div class="muted" style="margin-top:12px;">
           - 등록완료 체크는 시청자 화면에도 ✔ 등록완료/⏳ 대기중으로 표시됩니다.<br/>
           - “원하는 시작 기수”는 선택 항목이며, 자동 배치 시 해당 기수부터 배치를 시작하기 위한 참고용입니다.<br/>
-          - 업둥교환 필터에서 “2업둥(1개)”는 1개 + 2개가 함께 표시됩니다.
+          - 업둥교환 필터에서 “2세트”는 2세트 체크 신청자만 표시됩니다.
         </div>
       </div>
     `,
@@ -2817,18 +2660,6 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
     applyLineupForApplication(id, confirmed === 1);
   }
 
-  return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
-});
-
-app.post(`${ADMIN_BASE}/comment`, requireAdmin, (req, res) => {
-  const id = Number(req.body.id);
-  const raid = String(req.body.raid || "");
-  const sort = String(req.body.sort || "grade");
-  const comment = String(req.body.comment || "").slice(0, 12);
-
-  if (Number.isInteger(id)) {
-    db.prepare("UPDATE applications SET comment=? WHERE id=?").run(comment, id);
-  }
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
@@ -2870,9 +2701,6 @@ app.post(`${ADMIN_BASE}/clear`, requireAdmin, (req, res) => {
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
 });
 
-// =====================
-// Admin: lineup manage
-// =====================
 app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
   const raid = String(req.query.raid || "");
   const raidObj = raidByKey(raid);
