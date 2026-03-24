@@ -2601,7 +2601,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "암종호", "암종호", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "쉰종호", "쉰종호", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
