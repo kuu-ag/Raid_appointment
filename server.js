@@ -1873,7 +1873,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
       } else {
         html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
@@ -1885,7 +1885,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
       } else {
         html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
