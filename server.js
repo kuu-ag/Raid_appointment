@@ -1875,7 +1875,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
         else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
       } else {
-        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">버퍼</div>`;
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
@@ -1887,7 +1887,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
         else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
       } else {
-        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">딜러</div>`;
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div></div></div>`;
