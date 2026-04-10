@@ -436,7 +436,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
   const activeRaid = String(options.activeRaid || "");
   const hideSidebar = !!options.hideSidebar;
   const autoRefresh = !!options.autoRefresh;
-  const autoRefreshMs = Number(options.autoRefreshMs || 180000);
+  const autoRefreshMs = Number(options.autoRefreshMs || 10000);
   const sidebarContent = hideSidebar ? "" : buildSidebar(activeRaid, isAdmin);
 
   return `<!doctype html>
