@@ -37,7 +37,7 @@ const GRADE_OPTIONS = [
   { key: "pink", label: "분홍색 치즈" },
   { key: "yellow", label: "노란색 치즈" },
   { key: "log", label: "통나무" },
-  { key: "normal", label: "일반 치즈" },
+  { key: "normal", label: "시청자" },
 ];
 
 const GRADE_SORT = {
@@ -351,7 +351,7 @@ function buildRaidCard(r, href) {
     `
     : `
       <div class="raid-card-fallback">
-        <div style="font-size:18px;font-weight:800;">${esc(r.label)}</div>
+        <div style="font-size:16px;font-weight:800;">${esc(r.label)}</div>
         <div style="font-size:12px;opacity:.85;margin-top:6px;">${
           r.raid_type === "updoong"
             ? "커스텀"
@@ -1376,7 +1376,7 @@ app.get("/", (req, res) => {
         <div class="raid-grid">${cardsHtml}</div>
 
         <div class="muted" style="margin-top:14px;">
-          - 일반 레이드는 각 레이드의 기본 버퍼/딜러 수 기준으로 편성됩니다.<br/>
+          - 일반 레이드는 각 레이드의 기본 딜러/버퍼 수 기준으로 편성됩니다.<br/>
           - 업둥교환은 12명 = 1세트로 표시됩니다.<br/>
           - 이미지가 없는 커스텀 레이드는 텍스트 카드로 표시됩니다.
         </div>
@@ -2732,7 +2732,7 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
       </form>
 
       <form method="POST" action="${esc(ADMIN_BASE)}/bulk-confirm" style="margin:0;"
-            onsubmit="return confirm('일반 치즈 인원을 일괄 등록할까요?');">
+            onsubmit="return confirm('시청자 인원을 일괄 등록할까요?');">
         <input type="hidden" name="raid" value="${esc(raid)}"/>
         <input type="hidden" name="sort" value="${esc(sort)}"/>
         ${bulkUpHidden}
