@@ -796,7 +796,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       gap:6px;
     }
     .partyTitle{
-      font-size:18px;
+      font-size:16px;
       font-weight:800;
       line-height:1.1;
       white-space:nowrap;
@@ -824,7 +824,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     }
     .slotSectionTitle{
       font-size:12px;
-      color:#bfdbfe;
+      color:rgba(255,255,255,.45);
       margin:0 0 6px 2px;
     }
     .slotDivider{
@@ -836,7 +836,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       width:100%;
       padding:7px 10px;
       margin-bottom:6px;
-      font-size:13px;
+      font-size:15px;
       border-radius:999px;
       background:#141833;
       color:var(--text-main);
@@ -873,7 +873,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       gap:8px;
     }
     .upPartyTitle{
-      font-size:20px;
+      font-size:18px;
       font-weight:900;
       line-height:1.05;
     }
@@ -907,7 +907,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       width:100%;
       padding:7px 6px;
       margin:0;
-      font-size:13px;
+      font-size:15px;
       border-radius:999px;
       background:#141833;
       color:var(--text-main);
@@ -1868,7 +1868,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 
       <div class="partyBody">`;
 
-    html += `<div class="slotSection"><div class="slotSectionTitle">버퍼</div>`;
+    html += `<div class="slotSection"><div class="slotSectionTitle">선착순</div>`;
     for (let b = 1; b <= buffersPerParty; b++) {
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
@@ -1880,7 +1880,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     }
     html += `</div><div class="slotDivider"></div>`;
 
-    html += `<div class="slotSection"><div class="slotSectionTitle">딜러</div>`;
+    html += `<div class="slotSection"><div class="slotSectionTitle">선착순</div>`;
     for (let d = 1; d <= dealersPerParty; d++) {
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
