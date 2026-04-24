@@ -170,7 +170,6 @@ CREATE TABLE IF NOT EXISTS raid_lineups (
   slot_index INTEGER NOT NULL,
   nickname TEXT NOT NULL,
   application_id INTEGER,
-  consumed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 
@@ -211,7 +210,6 @@ ensureColumn("applications", "is_streamer", "is_streamer INTEGER NOT NULL DEFAUL
 ensureColumn("applications", "start_party", "start_party INTEGER NOT NULL DEFAULT 1");
 ensureColumn("applications", "up2", "up2 INTEGER NOT NULL DEFAULT 0");
 ensureColumn("applications", "up22", "up22 INTEGER NOT NULL DEFAULT 0");
-ensureColumn("raid_lineups", "consumed", "consumed INTEGER NOT NULL DEFAULT 0");
 
 ensureColumn("raids", "img", "img TEXT NOT NULL DEFAULT ''");
 ensureColumn("raids", "default_buffer_slots", "default_buffer_slots INTEGER NOT NULL DEFAULT 3");
@@ -360,110 +358,26 @@ function cleanupCompletedNormalApplications(raidKey, dateKst) {
   return Number(result?.changes || 0);
 }
 
-function normalizeLineupName(v) {
-  return String(v ?? "").trim();
+
+function isPlaceholderLineupName(name) {
+  const v = String(name || "").trim();
+  return !v || v === "선착순" || v === "닉네임" || v === "비활성" || v === "-";
 }
 
-function isPlaceholderLineupName(v) {
-  const name = normalizeLineupName(v);
-  return !name || name === "선착순" || name === "닉네임" || name === "비활성" || name === "-";
-}
-
-function lineupPoolKey(role, nickname) {
-  return `${role}|${normalizeLineupName(nickname)}`;
-}
-
-function consumeApplicationSeat(appId, role, count = 1) {
-  const id = Number(appId || 0);
-  const amount = Math.max(0, Number(count || 0));
-  if (!id || amount <= 0) return;
-
-  if (role === "buffer") {
-    db.prepare(
-      `
-      UPDATE applications
-      SET buffer_count = CASE
-        WHEN COALESCE(buffer_count, 0) - ? < 0 THEN 0
-        ELSE COALESCE(buffer_count, 0) - ?
-      END
-      WHERE id=?
-    `
-    ).run(amount, amount, id);
-  } else {
-    db.prepare(
-      `
-      UPDATE applications
-      SET dealer_count = CASE
-        WHEN COALESCE(dealer_count, 0) - ? < 0 THEN 0
-        ELSE COALESCE(dealer_count, 0) - ?
-      END
-      WHERE id=?
-    `
-    ).run(amount, amount, id);
-  }
-}
-
-function consumeManualLineupRows(rows) {
-  const usageMap = new Map();
-
-  for (const row of rows || []) {
-    const appId = Number(row.application_id || 0);
-    if (!appId || Number(row.consumed || 0) === 1) continue;
-
-    if (!usageMap.has(appId)) usageMap.set(appId, { buffer: 0, dealer: 0 });
-    const usage = usageMap.get(appId);
-    if (row.role === "buffer") usage.buffer += 1;
-    else if (row.role === "dealer") usage.dealer += 1;
-  }
-
-  for (const [appId, usage] of usageMap.entries()) {
-    if (usage.buffer > 0) consumeApplicationSeat(appId, "buffer", usage.buffer);
-    if (usage.dealer > 0) consumeApplicationSeat(appId, "dealer", usage.dealer);
-  }
-}
-
-function buildReusableLineupPool(rows) {
-  const pool = new Map();
-
-  for (const row of rows || []) {
-    const name = normalizeLineupName(row.nickname);
-    if (isPlaceholderLineupName(name)) continue;
-
-    const key = lineupPoolKey(row.role, name);
-    if (!pool.has(key)) pool.set(key, []);
-
-    pool.get(key).push({
-      application_id: row.application_id ? Number(row.application_id) : null,
-      consumed: Number(row.consumed || 0) === 1 ? 1 : 0,
-    });
-  }
-
-  return pool;
-}
-
-function shiftReusableApplicationId(pool, role, nickname) {
-  const key = lineupPoolKey(role, nickname);
-  const list = pool.get(key);
-  if (!list || list.length === 0) return null;
-
-  const item = list.shift();
-  return item?.application_id || null;
-}
-
-function consumeApplicationSeatByName(raidKey, dateKst, role, nickname) {
-  const name = normalizeLineupName(nickname);
+function findApplicationIdForManualSlot(raidKey, dateKst, nickname, role, usedByAppRole = new Map()) {
+  const name = String(nickname || "").trim();
   if (isPlaceholderLineupName(name)) return null;
+  if (role !== "buffer" && role !== "dealer") return null;
 
-  const countCol = role === "buffer" ? "buffer_count" : "dealer_count";
-  const row = db
+  const rows = db
     .prepare(
       `
-      SELECT id
+      SELECT id, dealer_count, buffer_count
       FROM applications
       WHERE raid_key=?
         AND date_kst=?
         AND chzzk_nickname=?
-        AND COALESCE(${countCol}, 0) > 0
+        AND confirmed=1
       ORDER BY
         CASE viewer_grade
           WHEN 'streamer' THEN 0
@@ -478,12 +392,45 @@ function consumeApplicationSeatByName(raidKey, dateKst, role, nickname) {
         id ASC
     `
     )
-    .get(raidKey, dateKst, name);
+    .all(raidKey, dateKst, name);
 
-  if (!row) return null;
+  for (const row of rows) {
+    const appId = Number(row.id);
+    const key = `${appId}:${role}`;
+    const alreadyUsed = Number(usedByAppRole.get(key) || 0);
+    const available = role === "buffer" ? Number(row.buffer_count || 0) : Number(row.dealer_count || 0);
+    if (available > alreadyUsed) {
+      usedByAppRole.set(key, alreadyUsed + 1);
+      return appId;
+    }
+  }
 
-  consumeApplicationSeat(row.id, role, 1);
-  return Number(row.id);
+  return null;
+}
+
+function countExistingAssignedSlots(raidKey, dateKst) {
+  const rows = db
+    .prepare(
+      `
+      SELECT application_id, role, COUNT(*) AS cnt
+      FROM raid_lineups
+      WHERE raid_key=?
+        AND date_kst=?
+        AND application_id IS NOT NULL
+      GROUP BY application_id, role
+    `
+    )
+    .all(raidKey, dateKst);
+
+  const m = new Map();
+  for (const r of rows) {
+    const appId = Number(r.application_id || 0);
+    if (!appId) continue;
+    const role = String(r.role || "");
+    if (role !== "buffer" && role !== "dealer") continue;
+    m.set(`${appId}:${role}`, Number(r.cnt || 0));
+  }
+  return m;
 }
 
 function buildRaidCard(r, href) {
@@ -990,14 +937,6 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     }
     .slotInput{ border:1px solid rgba(71,85,105,.95); }
     .slotInput[disabled]{ opacity:.45; cursor:not-allowed; }
-
-    .partyCard .slotInput.slotFirstCome{
-      color:#22c55e !important;
-      opacity:1 !important;
-      font-weight:800 !important;
-      border-color:rgba(34,197,94,.65) !important;
-      background:rgba(34,197,94,.10) !important;
-    }
 
     /* 일반 공대 편성표 - 관리자 화면 빈 슬롯 '선착순' 글자 초록색 */
     .partyCard .slotInput::placeholder{
@@ -1847,14 +1786,6 @@ app.post("/reserve", (req, res) => {
       );
     }
 
-    if (dealer_count + buffer_count <= 0) {
-      return res.redirect(
-        `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
-          "딜러 또는 버퍼 중 최소 1개 이상 입력해야 예약이 가능합니다."
-        )}`
-      );
-    }
-
     db.prepare(
       `
       INSERT INTO applications
@@ -2077,14 +2008,11 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     html += `<div class="slotSection"><div class="slotSectionTitle">버퍼</div>`;
     for (let b = 1; b <= buffersPerParty; b++) {
       const bName = data.buffers[b] || "";
-      const bIsFirstCome = normalizeLineupName(bName) === "선착순";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput ${bIsFirstCome ? "slotFirstCome" : ""}" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
       } else {
-        html += bName
-          ? `<div class="slotStatic ${bIsFirstCome ? "slotEmpty" : ""}">${esc(bName)}</div>`
-          : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
@@ -2092,14 +2020,11 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
     html += `<div class="slotSection"><div class="slotSectionTitle">딜러</div>`;
     for (let d = 1; d <= dealersPerParty; d++) {
       const dName = data.dealers[d] || "";
-      const dIsFirstCome = normalizeLineupName(dName) === "선착순";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput ${dIsFirstCome ? "slotFirstCome" : ""}" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
       } else {
-        html += dName
-          ? `<div class="slotStatic ${dIsFirstCome ? "slotEmpty" : ""}">${esc(dName)}</div>`
-          : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div></div></div>`;
@@ -2399,13 +2324,10 @@ function applyLineupForApplication(appId, confirmed) {
   const insert = db.prepare(
     `
     INSERT INTO raid_lineups
-      (date_kst, raid_key, party_index, role, slot_index, nickname, application_id, consumed, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+      (date_kst, raid_key, party_index, role, slot_index, nickname, application_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `
   );
-
-  let assignedBuffers = 0;
-  let assignedDealers = 0;
 
   function assignSeats(role, count) {
     const perParty = role === "buffer" ? cfg.buffersPerParty : cfg.dealersPerParty;
@@ -2427,21 +2349,11 @@ function applyLineupForApplication(appId, confirmed) {
       insert.run(dateKst, raidKey, idx, role, slotIndex, nickname, appId, nowISO());
       slots.add(slotIndex);
       info.names.add(nickname);
-
-      if (role === "buffer") assignedBuffers += 1;
-      else if (role === "dealer") assignedDealers += 1;
     }
   }
 
-  assignSeats("buffer", Number(appRow.buffer_count || 0));
-  assignSeats("dealer", Number(appRow.dealer_count || 0));
-
-  if (assignedBuffers > 0 || assignedDealers > 0) {
-    const newBuffer = Math.max(0, Number(appRow.buffer_count || 0) - assignedBuffers);
-    const newDealer = Math.max(0, Number(appRow.dealer_count || 0) - assignedDealers);
-    db.prepare("UPDATE applications SET dealer_count=?, buffer_count=? WHERE id=?").run(newDealer, newBuffer, appId);
-    cleanupCompletedNormalApplications(raidKey, dateKst);
-  }
+  assignSeats("buffer", appRow.buffer_count || 0);
+  assignSeats("dealer", appRow.dealer_count || 0);
 }
 
 // =====================
@@ -2870,10 +2782,10 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   `
   ).run(dateKst, raid, ...gradeKeys);
 
+  // 일괄 등록완료는 신청자 확인 상태만 변경합니다.
+  // 일반 레이드에서는 이 시점에 자동 배치/수량 차감/삭제를 하지 않습니다.
   if (raidDisplayType(raid) === "updoong") {
     rebuildUpdoongLineup(dateKst);
-  } else {
-    for (const r of targetRows) applyLineupForApplication(Number(r.id), true);
   }
 
   const upQS = up === "1" || up === "2" ? `&up=${encodeURIComponent(up)}` : "";
@@ -3095,8 +3007,17 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
   const confirmed = String(req.body.confirmed || "0") === "1" ? 1 : 0;
 
   if (Number.isInteger(id)) {
+    const appRow = db.prepare("SELECT raid_key, date_kst FROM applications WHERE id=?").get(id);
     db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(confirmed, id);
-    applyLineupForApplication(id, confirmed === 1);
+
+    // 등록완료는 신청자 확인 상태만 변경합니다.
+    // 일반 레이드에서는 등록완료를 눌렀다고 예약 수량을 차감하거나 신청목록에서 삭제하지 않습니다.
+    // 체크를 해제하는 경우에만 해당 신청자의 기존 편성표 배치를 제거합니다.
+    if (appRow && raidDisplayType(appRow.raid_key) === "updoong") {
+      rebuildUpdoongLineup(appRow.date_kst);
+    } else if (confirmed === 0) {
+      db.prepare("DELETE FROM raid_lineups WHERE application_id=?").run(id);
+    }
   }
 
   return res.redirect(`${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=${encodeURIComponent(sort)}`);
@@ -3291,62 +3212,70 @@ app.post(`${ADMIN_BASE}/lineup/save`, requireAdmin, (req, res) => {
   const partyCount = Number(req.body.party_count || 0) || 0;
   const disabledSet = getDisabledPartySet(raid, dateKst);
 
-  const oldRows = db
+  const existingRows = db
     .prepare(
       `
-      SELECT role, nickname, application_id, consumed
+      SELECT party_index, role, slot_index, nickname, application_id
       FROM raid_lineups
       WHERE raid_key=? AND date_kst=?
-      ORDER BY party_index ASC, role ASC, slot_index ASC, id ASC
     `
     )
     .all(raid, dateKst);
 
-  const reusablePool = buildReusableLineupPool(oldRows);
+  const existingSlotMap = new Map();
+  for (const row of existingRows) {
+    const key = `${row.party_index}:${row.role}:${row.slot_index}`;
+    existingSlotMap.set(key, {
+      nickname: String(row.nickname || "").trim(),
+      application_id: row.application_id == null ? null : Number(row.application_id),
+    });
+  }
 
-  const saveLineupTx = db.transaction(() => {
-    // 기존 편성표 중 아직 신청 수량에 반영되지 않은 좌석은 먼저 소진 처리합니다.
-    // 이후 수동 저장에서 위치만 이동된 좌석은 기존 application_id를 재사용하므로 중복 차감되지 않습니다.
-    consumeManualLineupRows(oldRows);
+  db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
 
-    db.prepare("DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=?").run(raid, dateKst);
+  const usedByAppRole = countExistingAssignedSlots(raid, dateKst);
+  usedByAppRole.clear();
 
-    const insert = db.prepare(
-      `
-      INSERT INTO raid_lineups
-        (date_kst, raid_key, party_index, role, slot_index, nickname, application_id, consumed, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+  const insert = db.prepare(
     `
-    );
+    INSERT INTO raid_lineups
+      (date_kst, raid_key, party_index, role, slot_index, nickname, application_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `
+  );
 
-    function saveSeat(partyIndex, role, slotIndex, rawName) {
-      const name = normalizeLineupName(rawName);
-      if (isPlaceholderLineupName(name)) return;
+  function saveManualSlot(partyIndex, role, slotIndex, rawName) {
+    const name = String(rawName || "").trim();
+    if (isPlaceholderLineupName(name)) return;
 
-      let appId = shiftReusableApplicationId(reusablePool, role, name);
+    const slotKey = `${partyIndex}:${role}:${slotIndex}`;
+    const prev = existingSlotMap.get(slotKey);
+    let appId = null;
 
-      // 새로 추가된 수동 배치 좌석은 닉네임이 같은 신청자의 남은 수량을 1 소진합니다.
-      // 신청자를 찾지 못한 경우에도 편성표 저장 자체는 허용하되, 자동 재예약 방지를 위해 application_id는 NULL로 둡니다.
-      if (!appId) appId = consumeApplicationSeatByName(raid, dateKst, role, name);
-
-      insert.run(dateKst, raid, partyIndex, role, slotIndex, name, appId, nowISO());
+    if (prev && prev.nickname === name && prev.application_id) {
+      appId = Number(prev.application_id);
+      const usedKey = `${appId}:${role}`;
+      usedByAppRole.set(usedKey, Number(usedByAppRole.get(usedKey) || 0) + 1);
+    } else {
+      appId = findApplicationIdForManualSlot(raid, dateKst, name, role, usedByAppRole);
     }
 
-    for (let p = 1; p <= partyCount; p++) {
-      if (disabledSet.has(p)) continue;
+    insert.run(dateKst, raid, partyIndex, role, slotIndex, name, appId, nowISO());
+  }
 
-      for (let b = 1; b <= cfg.buffersPerParty; b++) {
-        saveSeat(p, "buffer", b, req.body[`b_${p}_${b}`]);
-      }
-      for (let d = 1; d <= cfg.dealersPerParty; d++) {
-        saveSeat(p, "dealer", d, req.body[`d_${p}_${d}`]);
-      }
+  for (let p = 1; p <= partyCount; p++) {
+    if (disabledSet.has(p)) continue;
+
+    for (let b = 1; b <= cfg.buffersPerParty; b++) {
+      saveManualSlot(p, "buffer", b, req.body[`b_${p}_${b}`]);
     }
-  });
+    for (let d = 1; d <= cfg.dealersPerParty; d++) {
+      saveManualSlot(p, "dealer", d, req.body[`d_${p}_${d}`]);
+    }
+  }
 
-  saveLineupTx();
-  cleanupCompletedNormalApplications(raid, dateKst);
-
+  // 수동 저장은 위치 저장만 수행합니다.
+  // 신청자의 딜러/버퍼 수량 차감과 0/0 삭제는 공대 삭제/진행 완료 처리에서만 수행합니다.
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
@@ -3393,9 +3322,7 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
       `
       SELECT application_id, role, COUNT(*) AS cnt
       FROM raid_lineups
-      WHERE raid_key=? AND date_kst=? AND party_index=?
-        AND application_id IS NOT NULL
-        AND COALESCE(consumed, 0) = 0
+      WHERE raid_key=? AND date_kst=? AND party_index=? AND application_id IS NOT NULL
       GROUP BY application_id, role
     `
     )
