@@ -1847,6 +1847,14 @@ app.post("/reserve", (req, res) => {
       );
     }
 
+    if (dealer_count + buffer_count <= 0) {
+      return res.redirect(
+        `/reserve?raid=${encodeURIComponent(raid)}&err=${encodeURIComponent(
+          "딜러 또는 버퍼 중 최소 1개 이상 입력해야 예약이 가능합니다."
+        )}`
+      );
+    }
+
     db.prepare(
       `
       INSERT INTO applications
@@ -1925,10 +1933,6 @@ app.get("/check", (req, res) => {
 
   const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
-
-  // 일반 레이드에서 딜러/버퍼가 모두 0이 된 신청자는 예약이 모두 소진된 상태로 보고 실제 신청목록에서 삭제합니다.
-  // 업둥교환은 딜러/버퍼 수를 사용하지 않으므로 제외합니다.
-  cleanupCompletedNormalApplications(raid, activeDay);
 
   const apps = db
     .prepare(
@@ -2885,9 +2889,6 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
 
   const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
-
-  // 관리자 신청목록에서도 딜러/버퍼가 모두 0이 된 일반 레이드 신청자는 자동 삭제합니다.
-  cleanupCompletedNormalApplications(raid, activeDay);
 
   const gradeHeaderLink =
     sort === "grade"
