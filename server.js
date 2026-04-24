@@ -1886,24 +1886,24 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
 
       <div class="partyBody">`;
 
-    html += `<div class="slotSection"><div class="slotSectionTitle">선착순</div>`;
+    html += `<div class="slotSection"><div class="slotSectionTitle">버퍼</div>`;
     for (let b = 1; b <= buffersPerParty; b++) {
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
       } else {
         html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
 
-    html += `<div class="slotSection"><div class="slotSectionTitle">선착순</div>`;
+    html += `<div class="slotSection"><div class="slotSectionTitle">딜러</div>`;
     for (let d = 1; d <= dealersPerParty; d++) {
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
       } else {
         html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
