@@ -339,6 +339,25 @@ function getRaidConfig(raidKey) {
   };
 }
 
+function cleanupCompletedNormalApplications(raidKey, dateKst) {
+  const raid = raidByKey(raidKey, true);
+  if (!raid || raid.raid_type === "updoong") return 0;
+
+  const result = db
+    .prepare(
+      `
+      DELETE FROM applications
+      WHERE raid_key=?
+        AND date_kst=?
+        AND COALESCE(dealer_count, 0) <= 0
+        AND COALESCE(buffer_count, 0) <= 0
+    `
+    )
+    .run(raidKey, dateKst);
+
+  return Number(result?.changes || 0);
+}
+
 function buildRaidCard(r, href) {
   const hasImg = String(r.img || "").trim() !== "";
   const cardInner = hasImg
@@ -1740,7 +1759,12 @@ app.get("/check", (req, res) => {
 
   const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
-  const rawApps = db
+
+  // 일반 레이드에서 딜러/버퍼가 모두 0이 된 신청자는 예약이 모두 소진된 상태로 보고 실제 신청목록에서 삭제합니다.
+  // 업둥교환은 딜러/버퍼 수를 사용하지 않으므로 제외합니다.
+  cleanupCompletedNormalApplications(raid, activeDay);
+
+  const apps = db
     .prepare(
       `
         SELECT * FROM applications
@@ -1759,12 +1783,6 @@ app.get("/check", (req, res) => {
       `
     )
     .all(activeDay, raid);
-
-  // 일반 레이드 예약확인에서는 공대 편성/진행 처리 후 남은 수량이 없는 신청자를 숨김 처리합니다.
-  // DB 기록은 남겨두고, 시청자 예약확인 화면에서만 제외됩니다.
-  const apps = isUp
-    ? rawApps
-    : rawApps.filter((a) => !(Number(a.dealer_count || 0) === 0 && Number(a.buffer_count || 0) === 0));
 
   res.send(
     layout(
@@ -2683,6 +2701,9 @@ app.get(`${ADMIN_BASE}/list`, requireAdmin, (req, res) => {
   const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
 
+  // 관리자 신청목록에서도 딜러/버퍼가 모두 0이 된 일반 레이드 신청자는 자동 삭제합니다.
+  cleanupCompletedNormalApplications(raid, activeDay);
+
   const gradeHeaderLink =
     sort === "grade"
       ? `${ADMIN_BASE}/list?raid=${encodeURIComponent(raid)}&sort=time${isUp && upFilter ? `&up=${encodeURIComponent(upFilter)}` : ""}`
@@ -3189,6 +3210,9 @@ app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
   ).run(dateKst, raid, partyIndex);
 
   db.prepare(`DELETE FROM raid_lineups WHERE raid_key=? AND date_kst=? AND party_index=?`).run(raid, dateKst, partyIndex);
+
+  // 공대 삭제/진행 처리 후 남은 딜러/버퍼 수가 모두 0이 된 신청자는 관리자/시청자 목록에서 실제 삭제합니다.
+  cleanupCompletedNormalApplications(raid, dateKst);
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
