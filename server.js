@@ -862,6 +862,28 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     }
     .slotInput{ border:1px solid rgba(71,85,105,.95); }
     .slotInput[disabled]{ opacity:.45; cursor:not-allowed; }
+
+    /* 일반 공대 편성표 - 관리자 화면 빈 슬롯 '선착순' 글자 초록색 */
+    .partyCard .slotInput::placeholder{
+      color:#22c55e !important;
+      opacity:1 !important;
+      font-weight:800 !important;
+    }
+
+    /* 크롬/엣지/사파리 대응 */
+    .partyCard .slotInput::-webkit-input-placeholder{
+      color:#22c55e !important;
+      opacity:1 !important;
+      font-weight:800 !important;
+    }
+
+    /* 파이어폭스 대응 */
+    .partyCard .slotInput::-moz-placeholder{
+      color:#22c55e !important;
+      opacity:1 !important;
+      font-weight:800 !important;
+    }
+
     .slotStatic{
       border:1px solid rgba(59,130,246,.55);
       text-align:center;
