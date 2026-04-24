@@ -867,11 +867,19 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       text-align:center;
     }
     .slotStatic.slotEmpty{
-      opacity:1;
-      color:#86efac;
-      background:rgba(34,197,94,.16);
-      border-color:rgba(34,197,94,.65);
-      font-weight:800;
+      opacity:1 !important;
+      color:#22c55e !important;
+      background:rgba(34,197,94,.10) !important;
+      border-color:rgba(34,197,94,.65) !important;
+      font-weight:800 !important;
+    }
+
+    .partyCard .slotStatic.slotEmpty{
+      opacity:1 !important;
+      color:#22c55e !important;
+      background:rgba(34,197,94,.10) !important;
+      border-color:rgba(34,197,94,.65) !important;
+      font-weight:800 !important;
     }
 
     .upPartyGrid{
