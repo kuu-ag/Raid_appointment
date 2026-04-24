@@ -2782,10 +2782,13 @@ app.post(`${ADMIN_BASE}/bulk-confirm`, requireAdmin, (req, res) => {
   `
   ).run(dateKst, raid, ...gradeKeys);
 
-  // 일괄 등록완료는 신청자 확인 상태만 변경합니다.
-  // 일반 레이드에서는 이 시점에 자동 배치/수량 차감/삭제를 하지 않습니다.
+  // 일괄 등록완료 시 편성표에도 즉시 배치합니다.
+  // 단, 신청목록의 dealer_count/buffer_count는 차감하지 않습니다.
+  // 신청자가 삭제되는 시점은 공대 삭제/진행 완료 처리 후 남은 수량이 0/0이 되었을 때입니다.
   if (raidDisplayType(raid) === "updoong") {
     rebuildUpdoongLineup(dateKst);
+  } else {
+    for (const r of targetRows) applyLineupForApplication(Number(r.id), true);
   }
 
   const upQS = up === "1" || up === "2" ? `&up=${encodeURIComponent(up)}` : "";
@@ -3010,12 +3013,14 @@ app.post(`${ADMIN_BASE}/confirm`, requireAdmin, (req, res) => {
     const appRow = db.prepare("SELECT raid_key, date_kst FROM applications WHERE id=?").get(id);
     db.prepare("UPDATE applications SET confirmed=? WHERE id=?").run(confirmed, id);
 
-    // 등록완료는 신청자 확인 상태만 변경합니다.
-    // 일반 레이드에서는 등록완료를 눌렀다고 예약 수량을 차감하거나 신청목록에서 삭제하지 않습니다.
-    // 체크를 해제하는 경우에만 해당 신청자의 기존 편성표 배치를 제거합니다.
+    // 등록완료를 누르면 편성표에 즉시 배치합니다.
+    // 단, 이 단계에서는 신청목록의 dealer_count/buffer_count를 차감하거나 신청자를 삭제하지 않습니다.
+    // 신청자가 삭제되는 시점은 공대 삭제/진행 완료 처리 후 남은 수량이 0/0이 되었을 때입니다.
     if (appRow && raidDisplayType(appRow.raid_key) === "updoong") {
       rebuildUpdoongLineup(appRow.date_kst);
-    } else if (confirmed === 0) {
+    } else if (confirmed === 1) {
+      applyLineupForApplication(id, true);
+    } else {
       db.prepare("DELETE FROM raid_lineups WHERE application_id=?").run(id);
     }
   }
