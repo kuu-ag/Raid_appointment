@@ -1728,7 +1728,7 @@ app.get("/check", (req, res) => {
 
   const isUp = raidObj.raid_type === "updoong";
   const activeDay = getActiveDay(raid);
-  const apps = db
+  const rawApps = db
     .prepare(
       `
         SELECT * FROM applications
@@ -1747,6 +1747,12 @@ app.get("/check", (req, res) => {
       `
     )
     .all(activeDay, raid);
+
+  // 일반 레이드 예약확인에서는 공대 편성/진행 처리 후 남은 수량이 없는 신청자를 숨김 처리합니다.
+  // DB 기록은 남겨두고, 시청자 예약확인 화면에서만 제외됩니다.
+  const apps = isUp
+    ? rawApps
+    : rawApps.filter((a) => !(Number(a.dealer_count || 0) === 0 && Number(a.buffer_count || 0) === 0));
 
   res.send(
     layout(
@@ -1873,7 +1879,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="버퍼"/>`;
       } else {
         html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
@@ -1885,7 +1891,7 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="딜러"/>`;
       } else {
         html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
