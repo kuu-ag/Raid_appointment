@@ -550,7 +550,7 @@ function registerTimelineFeature(app, db, options = {}) {
               <label>서버</label>
               <select name="server_id">${serverOptionsHtml}</select>
               <label>캐릭터명</label>
-              <input name="character_name" placeholder="예: 마창까마귀" required />
+              <input name="character_name" placeholder="예: 데본베일" required />
               <label>메모</label>
               <input name="memo" placeholder="선택" />
               <div style="margin-top:12px"><button type="submit">검색 후 등록</button></div>
@@ -559,9 +559,9 @@ function registerTimelineFeature(app, db, options = {}) {
 
           <section class="card">
             <h2>캐릭터 일괄 등록</h2>
-            <p class="muted">한 줄에 하나씩 입력. 형식: 서버ID,캐릭터명<br>예: cain,마창까마귀</p>
+            <p class="muted">한 줄에 하나씩 입력. 형식: 서버ID,캐릭터명<br>예: cain,데본베일</p>
             <form method="post" action="${ADMIN_BASE}/timeline/characters/bulk-add">
-              <textarea name="bulk_text" placeholder="cain,마창까마귀&#10;cain,암월까마귀"></textarea>
+              <textarea name="bulk_text" placeholder="cain,데본베일&#10;cain,데본베일[명]"></textarea>
               <div style="margin-top:12px"><button type="submit">일괄 등록</button></div>
             </form>
           </section>
