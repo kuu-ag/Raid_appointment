@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import { registerTimelineFeature } from "./timelineFeature.js";
 
 dotenv.config();
 
@@ -3524,6 +3525,14 @@ app.get("/health", (req, res) =>
 // Start
 // =====================
 seedDefaultRaids();
+
+// =====================
+// Timeline Feature
+// =====================
+registerTimelineFeature(app, db, {
+  ADMIN_BASE,
+  requireAdmin,
+});
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
