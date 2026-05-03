@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const NEOPLE_API_BASE = "https://api.neople.co.kr/df";
+const TIMELINE_MAX_DAYS = 7;
 
 const SERVER_OPTIONS = [
   ["anton", "안톤"],
@@ -37,6 +38,45 @@ function addDays(dateText, days) {
   const date = new Date(`${dateText}T00:00:00+09:00`);
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function diffDays(startDateText, endDateText) {
+  const start = new Date(`${startDateText}T00:00:00+09:00`);
+  const end = new Date(`${endDateText}T00:00:00+09:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 0;
+  }
+
+  return Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+function clampTimelineDateRange(startDate, endDate) {
+  let safeStartDate = String(startDate || "").trim();
+  let safeEndDate = String(endDate || "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(safeEndDate)) {
+    safeEndDate = todayKSTDate();
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(safeStartDate)) {
+    safeStartDate = addDays(safeEndDate, -(TIMELINE_MAX_DAYS - 1));
+  }
+
+  if (diffDays(safeStartDate, safeEndDate) < 0) {
+    safeStartDate = addDays(safeEndDate, -(TIMELINE_MAX_DAYS - 1));
+  }
+
+  // 날짜 기준 7일 범위: 시작일~종료일 포함 7일
+  // 예: 2026-05-01 ~ 2026-05-07
+  if (diffDays(safeStartDate, safeEndDate) > TIMELINE_MAX_DAYS - 1) {
+    safeStartDate = addDays(safeEndDate, -(TIMELINE_MAX_DAYS - 1));
+  }
+
+  return {
+    startDate: safeStartDate,
+    endDate: safeEndDate,
+  };
 }
 
 function normalizeNeopleDate(dateText, end = false) {
@@ -771,15 +811,19 @@ function registerTimelineFeature(app, db, options = {}) {
           <section class="card">
             <h2>타임라인 갱신</h2>
             <p class="muted">
-              활성화된 모든 캐릭터를 한 번에 갱신합니다.<br>
+              활성화된 모든 캐릭터의 최근 7일 타임라인을 갱신합니다.<br>
               수동 갱신은 서버 부담을 줄이기 위해 5분 쿨타임이 적용됩니다.
             </p>
-            <form method="post" action="${ADMIN_BASE}/timeline/refresh" onsubmit="return confirm('활성화된 모든 캐릭터의 타임라인을 갱신할까요?')">
+            <form method="post" action="${ADMIN_BASE}/timeline/refresh" onsubmit="return confirm('활성화된 모든 캐릭터의 최근 7일 타임라인을 갱신할까요?')">
               <label>조회 시작일</label>
-              <input name="start_date" value="${escapeHtml(addDays(todayKSTDate(), -7))}" />
+              <input name="start_date" value="${escapeHtml(addDays(todayKSTDate(), -(TIMELINE_MAX_DAYS - 1)))}" />
 
               <label>조회 종료일</label>
               <input name="end_date" value="${escapeHtml(todayKSTDate())}" />
+
+              <div class="muted" style="margin-top:8px;">
+                ※ 조회 기간은 최대 7일까지만 적용됩니다.
+              </div>
 
               <div style="margin-top:12px">
                 <button type="submit">전체 캐릭터 갱신</button>
@@ -955,8 +999,18 @@ function registerTimelineFeature(app, db, options = {}) {
 
   app.post(`${ADMIN_BASE}/timeline/refresh`, requireAdmin, async (req, res) => {
     const COOLDOWN_MS = 5 * 60 * 1000;
-    const startDate = String(req.body.start_date || addDays(todayKSTDate(), -7)).trim();
-    const endDate = String(req.body.end_date || todayKSTDate()).trim();
+
+    const requestedStartDate = String(
+      req.body.start_date || addDays(todayKSTDate(), -(TIMELINE_MAX_DAYS - 1))
+    ).trim();
+
+    const requestedEndDate = String(
+      req.body.end_date || todayKSTDate()
+    ).trim();
+
+    const safeRange = clampTimelineDateRange(requestedStartDate, requestedEndDate);
+    const startDate = safeRange.startDate;
+    const endDate = safeRange.endDate;
 
     const refreshState = db.prepare(`
       SELECT last_refreshed_at
@@ -1102,6 +1156,11 @@ function registerTimelineFeature(app, db, options = {}) {
           <p class="desc">
             ${escapeHtml(startDate)} ~ ${escapeHtml(endDate)} / 활성 캐릭터 ${targets.length}명 전체 갱신
           </p>
+          ${
+            startDate !== requestedStartDate || endDate !== requestedEndDate
+              ? `<p class="desc">입력한 기간이 7일을 초과해 자동으로 최근 7일 범위로 보정되었습니다.</p>`
+              : ""
+          }
         </div>
         <a class="btn" href="${ADMIN_BASE}/timeline">돌아가기</a>
       </div>
