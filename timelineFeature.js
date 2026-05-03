@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 
 const NEOPLE_API_BASE = "https://api.neople.co.kr/df";
 const TIMELINE_MAX_DAYS = 7;
+const REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
 
 const SERVER_OPTIONS = [
   ["anton", "안톤"],
@@ -32,6 +33,18 @@ function todayKSTDate() {
   const now = new Date();
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 10);
+}
+
+function nowKSTDateTime() {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function hoursAgoKSTDateTime(hours) {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000 - hours * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 16).replace("T", " ");
 }
 
 function addDays(dateText, days) {
@@ -67,8 +80,6 @@ function clampTimelineDateRange(startDate, endDate) {
     safeStartDate = addDays(safeEndDate, -(TIMELINE_MAX_DAYS - 1));
   }
 
-  // 날짜 기준 7일 범위: 시작일~종료일 포함 7일
-  // 예: 2026-05-01 ~ 2026-05-07
   if (diffDays(safeStartDate, safeEndDate) > TIMELINE_MAX_DAYS - 1) {
     safeStartDate = addDays(safeEndDate, -(TIMELINE_MAX_DAYS - 1));
   }
@@ -79,8 +90,18 @@ function clampTimelineDateRange(startDate, endDate) {
   };
 }
 
-function normalizeNeopleDate(dateText, end = false) {
-  return `${dateText} ${end ? "23:59" : "00:00"}`;
+function normalizeNeopleDate(value, end = false) {
+  const text = String(value || "").trim();
+
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) {
+    return text;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return `${text} ${end ? "23:59" : "00:00"}`;
+  }
+
+  return `${todayKSTDate()} ${end ? "23:59" : "00:00"}`;
 }
 
 function getApiKey() {
@@ -486,6 +507,7 @@ function layout(title, body) {
     }
     .btnSub { background: #27272a; }
     .btnDanger { background: #7f1d1d; }
+    .btnRefresh { background: linear-gradient(135deg, #7c3aed, #4f46e5); }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .muted { color: #a1a1aa; font-size: 12px; line-height: 1.45; }
     table {
@@ -577,6 +599,135 @@ function renderLogRows(logs) {
   }).join("");
 }
 
+function getRefreshCooldown(db) {
+  const refreshState = db.prepare(`
+    SELECT last_refreshed_at
+    FROM timeline_refresh_state
+    WHERE id = 1
+  `).get();
+
+  if (!refreshState?.last_refreshed_at) {
+    return {
+      blocked: false,
+      lastRefreshedAt: "",
+      remainMin: 0,
+      remainRestSec: 0,
+    };
+  }
+
+  const lastTime = new Date(`${refreshState.last_refreshed_at}Z`).getTime();
+  const now = Date.now();
+  const diff = now - lastTime;
+
+  if (!Number.isFinite(lastTime) || diff >= REFRESH_COOLDOWN_MS) {
+    return {
+      blocked: false,
+      lastRefreshedAt: refreshState.last_refreshed_at,
+      remainMin: 0,
+      remainRestSec: 0,
+    };
+  }
+
+  const remainMs = REFRESH_COOLDOWN_MS - diff;
+  const remainSec = Math.ceil(remainMs / 1000);
+
+  return {
+    blocked: true,
+    lastRefreshedAt: refreshState.last_refreshed_at,
+    remainMin: Math.floor(remainSec / 60),
+    remainRestSec: remainSec % 60,
+  };
+}
+
+function setRefreshCooldownNow(db) {
+  db.prepare(`
+    INSERT INTO timeline_refresh_state (id, last_refreshed_at)
+    VALUES (1, CURRENT_TIMESTAMP)
+    ON CONFLICT(id) DO UPDATE SET last_refreshed_at = CURRENT_TIMESTAMP
+  `).run();
+}
+
+async function refreshTimelineLogs(db, targets, startDate, endDate) {
+  const inserted = [];
+  const failed = [];
+
+  const insertLog = db.prepare(`
+    INSERT OR IGNORE INTO character_timeline_logs
+      (server_id, server_name, character_id, character_name, log_key, timeline_date, log_type, rarity, message, raw_json)
+    VALUES
+      (@server_id, @server_name, @character_id, @character_name, @log_key, @timeline_date, @log_type, @rarity, @message, @raw_json)
+  `);
+
+  const updateRefreshed = db.prepare(`
+    UPDATE tracked_characters
+    SET last_refreshed_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+
+  let totalFetched = 0;
+  let totalInserted = 0;
+
+  for (const ch of targets) {
+    try {
+      const rows = await fetchCharacterTimeline(ch.server_id, ch.character_id, startDate, endDate);
+      let count = 0;
+
+      totalFetched += rows.length;
+
+      for (const row of rows) {
+        const timelineDate = extractTimelineDate(row);
+
+        if (!timelineDate) {
+          continue;
+        }
+
+        const code = extractTimelineCode(row);
+        const message = extractTimelineMessage(row);
+        const { logType, rarity } = classifyTimeline(row);
+
+        const logKey = String(
+          row.logId ||
+          row.id ||
+          row.no ||
+          `${timelineDate}_${code}_${message}`
+        ).slice(0, 300);
+
+        const result = insertLog.run({
+          server_id: ch.server_id,
+          server_name: ch.server_name,
+          character_id: ch.character_id,
+          character_name: ch.character_name,
+          log_key: logKey,
+          timeline_date: timelineDate,
+          log_type: logType,
+          rarity,
+          message,
+          raw_json: JSON.stringify(row),
+        });
+
+        if (result.changes > 0) {
+          count += 1;
+          totalInserted += 1;
+        }
+      }
+
+      updateRefreshed.run(ch.id);
+      inserted.push(`${ch.character_name}: 신규 ${count}건 / 조회 ${rows.length}건`);
+    } catch (error) {
+      failed.push(`${ch.character_name}: ${error.message}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+
+  return {
+    inserted,
+    failed,
+    totalFetched,
+    totalInserted,
+  };
+}
+
 function registerTimelineFeature(app, db, options = {}) {
   const ADMIN_BASE = options.ADMIN_BASE || "";
   initTimelineTables(db);
@@ -644,6 +795,9 @@ function registerTimelineFeature(app, db, options = {}) {
           <p class="desc">등록된 캐릭터들의 타임라인을 모아 보여주는 읽기 전용 페이지입니다.</p>
         </div>
         <div class="row">
+          <form method="post" action="/observer/refresh" onsubmit="return confirm('현재 시점 기준 과거 24시간 타임라인을 갱신할까요?')">
+            <button class="btnRefresh" type="submit">최근 24시간 갱신</button>
+          </form>
           <a class="btn btnSub" href="/">메인 로비</a>
         </div>
       </div>
@@ -682,6 +836,89 @@ function registerTimelineFeature(app, db, options = {}) {
       <section>
         ${renderLogRows(logs) || `<div class="card muted">표시할 타임라인 로그가 없습니다.</div>`}
       </section>
+    `));
+  });
+
+  app.post("/observer/refresh", async (req, res) => {
+    const cooldown = getRefreshCooldown(db);
+
+    if (cooldown.blocked) {
+      return res.status(429).send(layout("관측기 갱신 대기", `
+        <div class="top">
+          <div>
+            <h1>관측기 갱신 대기</h1>
+            <p class="desc">갱신은 5분마다 1회만 실행할 수 있습니다.</p>
+          </div>
+          <a class="btn" href="/observer">돌아가기</a>
+        </div>
+
+        <section class="card">
+          <h2>아직 쿨타임이 남아있습니다.</h2>
+          <p class="muted">
+            남은 시간: ${cooldown.remainMin}분 ${cooldown.remainRestSec}초<br>
+            마지막 갱신 시각: ${escapeHtml(cooldown.lastRefreshedAt)}
+          </p>
+        </section>
+      `));
+    }
+
+    const targets = db.prepare(`
+      SELECT *
+      FROM tracked_characters
+      WHERE enabled = 1
+      ORDER BY id ASC
+    `).all();
+
+    if (targets.length === 0) {
+      return res.send(layout("관측기 갱신 결과", `
+        <div class="top">
+          <div>
+            <h1>관측기 갱신 결과</h1>
+            <p class="desc">갱신할 활성 캐릭터가 없습니다.</p>
+          </div>
+          <a class="btn" href="/observer">돌아가기</a>
+        </div>
+      `));
+    }
+
+    const startDate = hoursAgoKSTDateTime(24);
+    const endDate = nowKSTDateTime();
+
+    setRefreshCooldownNow(db);
+
+    const result = await refreshTimelineLogs(db, targets, startDate, endDate);
+
+    res.send(layout("관측기 갱신 결과", `
+      <div class="top">
+        <div>
+          <h1>관측기 갱신 결과</h1>
+          <p class="desc">
+            ${escapeHtml(startDate)} ~ ${escapeHtml(endDate)} / 현재 시점 기준 과거 24시간 갱신
+          </p>
+        </div>
+        <a class="btn" href="/observer">관측기로 돌아가기</a>
+      </div>
+
+      <div class="pillbar">
+        <div class="stat"><span>갱신 캐릭터</span><strong>${targets.length.toLocaleString()}</strong></div>
+        <div class="stat"><span>조회 로그</span><strong>${result.totalFetched.toLocaleString()}</strong></div>
+        <div class="stat"><span>신규 저장</span><strong>${result.totalInserted.toLocaleString()}</strong></div>
+        <div class="stat"><span>실패</span><strong>${result.failed.length.toLocaleString()}</strong></div>
+      </div>
+
+      <section class="card">
+        <h2>안내</h2>
+        <p class="muted">
+          시청자 갱신은 설정 없이 최근 24시간만 조회합니다.<br>
+          같은 로그는 중복 저장되지 않습니다.
+        </p>
+      </section>
+
+      ${
+        result.failed.length
+          ? `<section class="card"><h2>실패</h2><pre style="white-space:pre-wrap; line-height:1.6">${escapeHtml(result.failed.join("\n"))}</pre></section>`
+          : ""
+      }
     `));
   });
 
@@ -798,17 +1035,6 @@ function registerTimelineFeature(app, db, options = {}) {
           </section>
 
           <section class="card">
-            <h2>캐릭터 일괄 등록</h2>
-            <p class="muted">한 줄에 하나씩 입력. 형식: 서버ID,캐릭터명<br>예: cain,데본베일</p>
-            <form method="post" action="${ADMIN_BASE}/timeline/characters/bulk-add">
-              <textarea name="bulk_text" placeholder="cain,데본베일&#10;cain,데본베일[혈]"></textarea>
-              <div style="margin-top:12px">
-                <button type="submit">일괄 등록</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="card">
             <h2>타임라인 갱신</h2>
             <p class="muted">
               활성화된 모든 캐릭터의 최근 7일 타임라인을 갱신합니다.<br>
@@ -915,60 +1141,7 @@ function registerTimelineFeature(app, db, options = {}) {
   });
 
   app.post(`${ADMIN_BASE}/timeline/characters/bulk-add`, requireAdmin, async (req, res) => {
-    const text = String(req.body.bulk_text || "");
-    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const results = [];
-
-    for (const line of lines) {
-      try {
-        const [serverIdRaw, ...nameParts] = line.split(",");
-        const serverId = String(serverIdRaw || "").trim();
-        const characterName = nameParts.join(",").trim();
-
-        if (!serverId || !characterName) {
-          results.push(`실패: ${line} - 형식 오류`);
-          continue;
-        }
-
-        const serverName = SERVER_OPTIONS.find(([id]) => id === serverId)?.[1] || serverId;
-        const found = await searchCharacter(serverId, characterName);
-
-        if (!found) {
-          results.push(`실패: ${line} - 캐릭터 없음`);
-          continue;
-        }
-
-        db.prepare(`
-          INSERT OR IGNORE INTO tracked_characters
-            (server_id, server_name, character_id, character_name, memo, enabled)
-          VALUES
-            (@server_id, @server_name, @character_id, @character_name, '', 1)
-        `).run({
-          server_id: serverId,
-          server_name: serverName,
-          character_id: found.characterId,
-          character_name: found.characterName,
-        });
-
-        results.push(`성공: ${serverName} / ${found.characterName}`);
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        results.push(`실패: ${line} - ${error.message}`);
-      }
-    }
-
-    res.send(layout("일괄 등록 결과", `
-      <div class="top">
-        <div>
-          <h1>일괄 등록 결과</h1>
-          <p class="desc">등록 결과입니다.</p>
-        </div>
-        <a class="btn" href="${ADMIN_BASE}/timeline">돌아가기</a>
-      </div>
-      <section class="card">
-        <pre style="white-space:pre-wrap; line-height:1.6">${escapeHtml(results.join("\n"))}</pre>
-      </section>
-    `));
+    res.redirect(`${ADMIN_BASE}/timeline`);
   });
 
   app.post(`${ADMIN_BASE}/timeline/characters/:id/toggle`, requireAdmin, (req, res) => {
@@ -998,8 +1171,6 @@ function registerTimelineFeature(app, db, options = {}) {
   });
 
   app.post(`${ADMIN_BASE}/timeline/refresh`, requireAdmin, async (req, res) => {
-    const COOLDOWN_MS = 5 * 60 * 1000;
-
     const requestedStartDate = String(
       req.body.start_date || addDays(todayKSTDate(), -(TIMELINE_MAX_DAYS - 1))
     ).trim();
@@ -1012,41 +1183,26 @@ function registerTimelineFeature(app, db, options = {}) {
     const startDate = safeRange.startDate;
     const endDate = safeRange.endDate;
 
-    const refreshState = db.prepare(`
-      SELECT last_refreshed_at
-      FROM timeline_refresh_state
-      WHERE id = 1
-    `).get();
+    const cooldown = getRefreshCooldown(db);
 
-    if (refreshState?.last_refreshed_at) {
-      const lastTime = new Date(`${refreshState.last_refreshed_at}Z`).getTime();
-      const now = Date.now();
-      const diff = now - lastTime;
-
-      if (Number.isFinite(lastTime) && diff < COOLDOWN_MS) {
-        const remainMs = COOLDOWN_MS - diff;
-        const remainSec = Math.ceil(remainMs / 1000);
-        const remainMin = Math.floor(remainSec / 60);
-        const remainRestSec = remainSec % 60;
-
-        return res.status(429).send(layout("타임라인 갱신 대기", `
-          <div class="top">
-            <div>
-              <h1>타임라인 갱신 대기</h1>
-              <p class="desc">수동 갱신은 5분마다 1회만 실행할 수 있습니다.</p>
-            </div>
-            <a class="btn" href="${ADMIN_BASE}/timeline">돌아가기</a>
+    if (cooldown.blocked) {
+      return res.status(429).send(layout("타임라인 갱신 대기", `
+        <div class="top">
+          <div>
+            <h1>타임라인 갱신 대기</h1>
+            <p class="desc">수동 갱신은 5분마다 1회만 실행할 수 있습니다.</p>
           </div>
+          <a class="btn" href="${ADMIN_BASE}/timeline">돌아가기</a>
+        </div>
 
-          <section class="card">
-            <h2>아직 쿨타임이 남아있습니다.</h2>
-            <p class="muted">
-              남은 시간: ${remainMin}분 ${remainRestSec}초<br>
-              마지막 갱신 시각: ${escapeHtml(refreshState.last_refreshed_at)}
-            </p>
-          </section>
-        `));
-      }
+        <section class="card">
+          <h2>아직 쿨타임이 남아있습니다.</h2>
+          <p class="muted">
+            남은 시간: ${cooldown.remainMin}분 ${cooldown.remainRestSec}초<br>
+            마지막 갱신 시각: ${escapeHtml(cooldown.lastRefreshedAt)}
+          </p>
+        </section>
+      `));
     }
 
     const targets = db.prepare(`
@@ -1071,83 +1227,9 @@ function registerTimelineFeature(app, db, options = {}) {
       `));
     }
 
-    db.prepare(`
-      INSERT INTO timeline_refresh_state (id, last_refreshed_at)
-      VALUES (1, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET last_refreshed_at = CURRENT_TIMESTAMP
-    `).run();
+    setRefreshCooldownNow(db);
 
-    const inserted = [];
-    const failed = [];
-
-    const insertLog = db.prepare(`
-      INSERT OR IGNORE INTO character_timeline_logs
-        (server_id, server_name, character_id, character_name, log_key, timeline_date, log_type, rarity, message, raw_json)
-      VALUES
-        (@server_id, @server_name, @character_id, @character_name, @log_key, @timeline_date, @log_type, @rarity, @message, @raw_json)
-    `);
-
-    const updateRefreshed = db.prepare(`
-      UPDATE tracked_characters
-      SET last_refreshed_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
-
-    let totalFetched = 0;
-    let totalInserted = 0;
-
-    for (const ch of targets) {
-      try {
-        const rows = await fetchCharacterTimeline(ch.server_id, ch.character_id, startDate, endDate);
-        let count = 0;
-
-        totalFetched += rows.length;
-
-        for (const row of rows) {
-          const timelineDate = extractTimelineDate(row);
-
-          if (!timelineDate) {
-            continue;
-          }
-
-          const code = extractTimelineCode(row);
-          const message = extractTimelineMessage(row);
-          const { logType, rarity } = classifyTimeline(row);
-
-          const logKey = String(
-            row.logId ||
-            row.id ||
-            row.no ||
-            `${timelineDate}_${code}_${message}`
-          ).slice(0, 300);
-
-          const result = insertLog.run({
-            server_id: ch.server_id,
-            server_name: ch.server_name,
-            character_id: ch.character_id,
-            character_name: ch.character_name,
-            log_key: logKey,
-            timeline_date: timelineDate,
-            log_type: logType,
-            rarity,
-            message,
-            raw_json: JSON.stringify(row),
-          });
-
-          if (result.changes > 0) {
-            count += 1;
-            totalInserted += 1;
-          }
-        }
-
-        updateRefreshed.run(ch.id);
-        inserted.push(`${ch.character_name}: 신규 ${count}건 / 조회 ${rows.length}건`);
-      } catch (error) {
-        failed.push(`${ch.character_name}: ${error.message}`);
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    }
+    const result = await refreshTimelineLogs(db, targets, startDate, endDate);
 
     res.send(layout("타임라인 갱신 결과", `
       <div class="top">
@@ -1167,19 +1249,19 @@ function registerTimelineFeature(app, db, options = {}) {
 
       <div class="pillbar">
         <div class="stat"><span>갱신 캐릭터</span><strong>${targets.length.toLocaleString()}</strong></div>
-        <div class="stat"><span>조회 로그</span><strong>${totalFetched.toLocaleString()}</strong></div>
-        <div class="stat"><span>신규 저장</span><strong>${totalInserted.toLocaleString()}</strong></div>
-        <div class="stat"><span>실패</span><strong>${failed.length.toLocaleString()}</strong></div>
+        <div class="stat"><span>조회 로그</span><strong>${result.totalFetched.toLocaleString()}</strong></div>
+        <div class="stat"><span>신규 저장</span><strong>${result.totalInserted.toLocaleString()}</strong></div>
+        <div class="stat"><span>실패</span><strong>${result.failed.length.toLocaleString()}</strong></div>
       </div>
 
       <section class="card">
         <h2>성공</h2>
-        <pre style="white-space:pre-wrap; line-height:1.6">${escapeHtml(inserted.join("\n") || "없음")}</pre>
+        <pre style="white-space:pre-wrap; line-height:1.6">${escapeHtml(result.inserted.join("\n") || "없음")}</pre>
       </section>
 
       <section class="card">
         <h2>실패</h2>
-        <pre style="white-space:pre-wrap; line-height:1.6">${escapeHtml(failed.join("\n") || "없음")}</pre>
+        <pre style="white-space:pre-wrap; line-height:1.6">${escapeHtml(result.failed.join("\n") || "없음")}</pre>
       </section>
     `));
   });
