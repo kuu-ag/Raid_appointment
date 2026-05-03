@@ -452,13 +452,17 @@ function layout(title, body) {
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
+      table-layout: fixed;
     }
     th, td {
       border-bottom: 1px solid #272b3a;
       padding: 10px 8px;
       vertical-align: top;
+      word-break: break-all;
     }
     th { text-align: left; color: #a1a1aa; font-size: 12px; }
+    th:nth-child(1), td:nth-child(1) { width: 54px; }
+    th:nth-child(3), td:nth-child(3) { width: 58px; text-align: center; }
     .badge {
       display: inline-flex;
       padding: 4px 7px;
@@ -704,17 +708,11 @@ function registerTimelineFeature(app, db, options = {}) {
     const characterRows = characters.map((c) => `
       <tr>
         <td>${escapeHtml(c.server_name)}</td>
-        <td><strong>${escapeHtml(c.character_name)}</strong><br><span class="muted">${escapeHtml(c.character_id)}</span></td>
-        <td>${c.enabled ? `<span class="badge">ON</span>` : `<span class="badge">OFF</span>`}</td>
-        <td><span class="muted">${escapeHtml(c.last_refreshed_at || "-")}</span></td>
         <td>
-          <form method="post" action="${ADMIN_BASE}/timeline/characters/${c.id}/toggle" style="display:inline">
-            <button class="btnSub" type="submit">${c.enabled ? "비활성" : "활성"}</button>
-          </form>
-          <form method="post" action="${ADMIN_BASE}/timeline/characters/${c.id}/delete" style="display:inline" onsubmit="return confirm('삭제할까요?')">
-            <button class="btnDanger" type="submit">삭제</button>
-          </form>
+          <strong>${escapeHtml(c.character_name)}</strong><br>
+          <span class="muted">${escapeHtml(c.character_id)}</span>
         </td>
+        <td>${c.enabled ? `<span class="badge">ON</span>` : `<span class="badge">OFF</span>`}</td>
       </tr>
     `).join("");
 
@@ -797,11 +795,9 @@ function registerTimelineFeature(app, db, options = {}) {
                   <th>서버</th>
                   <th>캐릭터</th>
                   <th>상태</th>
-                  <th>갱신</th>
-                  <th>관리</th>
                 </tr>
               </thead>
-              <tbody>${characterRows || `<tr><td colspan="5" class="muted">등록된 캐릭터가 없습니다.</td></tr>`}</tbody>
+              <tbody>${characterRows || `<tr><td colspan="3" class="muted">등록된 캐릭터가 없습니다.</td></tr>`}</tbody>
             </table>
           </section>
         </aside>
