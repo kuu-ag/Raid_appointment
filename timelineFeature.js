@@ -93,15 +93,29 @@ function clampTimelineDateRange(startDate, endDate) {
 function normalizeNeopleDate(value, end = false) {
   const text = String(value || "").trim();
 
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text)) {
-    return text;
+  // 입력: 2026-05-04 12:30
+  const dateTimeMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (dateTimeMatch) {
+    const [, yyyy, mm, dd, hh, mi] = dateTimeMatch;
+    return `${yyyy}${mm}${dd}T${hh}${mi}`;
   }
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    return `${text} ${end ? "23:59" : "00:00"}`;
+  // 입력: 2026-05-04
+  const dateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateMatch) {
+    const [, yyyy, mm, dd] = dateMatch;
+    return `${yyyy}${mm}${dd}T${end ? "2359" : "0000"}`;
   }
 
-  return `${todayKSTDate()} ${end ? "23:59" : "00:00"}`;
+  const today = todayKSTDate();
+  const fallbackMatch = today.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (fallbackMatch) {
+    const [, yyyy, mm, dd] = fallbackMatch;
+    return `${yyyy}${mm}${dd}T${end ? "2359" : "0000"}`;
+  }
+
+  return "";
 }
 
 function getApiKey() {
@@ -167,12 +181,15 @@ async function fetchCharacterTimeline(serverId, characterId, startDate, endDate)
   while (safety < 20) {
     safety += 1;
 
-    const data = await neopleGet(`/servers/${serverId}/characters/${characterId}/timeline`, {
-      startDate: normalizeNeopleDate(startDate, false),
-      endDate: normalizeNeopleDate(endDate, true),
-      limit: 100,
-      next,
-    });
+  const apiStartDate = normalizeNeopleDate(startDate, false);
+  const apiEndDate = normalizeNeopleDate(endDate, true);
+
+  const data = await neopleGet(`/servers/${serverId}/characters/${characterId}/timeline`, {
+    startDate: apiStartDate,
+    endDate: apiEndDate,
+    limit: 100,
+    next,
+  });
 
     const timeline = data.timeline || data;
     const pageRows = Array.isArray(timeline.rows) ? timeline.rows : [];
