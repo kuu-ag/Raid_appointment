@@ -279,6 +279,137 @@ function registerTimelineFeature(app, db, options = {}) {
 
   const requireAdmin = options.requireAdmin || ((req, res, next) => next());
 
+
+  // =====================
+  // Public: DevonVail Observer
+  // - 시청자/관리자 모두 접근 가능
+  // - 등록/수정/갱신 기능 없이 저장된 타임라인 로그만 읽기 전용 표시
+  // =====================
+  app.get("/observer", (req, res) => {
+    const q = String(req.query.q || "").trim();
+    const type = String(req.query.type || "").trim();
+    const rarity = String(req.query.rarity || "").trim();
+    const character = String(req.query.character || "").trim();
+
+    const where = [];
+    const params = {};
+
+    if (q) {
+      where.push(`message LIKE @q`);
+      params.q = `%${q}%`;
+    }
+    if (type) {
+      where.push(`log_type = @type`);
+      params.type = type;
+    }
+    if (rarity) {
+      where.push(`rarity = @rarity`);
+      params.rarity = rarity;
+    }
+    if (character) {
+      where.push(`character_name LIKE @character`);
+      params.character = `%${character}%`;
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    const logs = db.prepare(`
+      SELECT *
+      FROM character_timeline_logs
+      ${whereSql}
+      ORDER BY timeline_date DESC, id DESC
+      LIMIT 300
+    `).all(params);
+
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN log_type = '아이템' THEN 1 ELSE 0 END) AS itemCount,
+        SUM(CASE WHEN log_type = '클리어' THEN 1 ELSE 0 END) AS clearCount,
+        SUM(CASE WHEN rarity = '태초' THEN 1 ELSE 0 END) AS primevalCount,
+        SUM(CASE WHEN rarity = '에픽' THEN 1 ELSE 0 END) AS epicCount,
+        SUM(CASE WHEN rarity = '레전더리' THEN 1 ELSE 0 END) AS legendaryCount
+      FROM character_timeline_logs
+    `).get();
+
+    const lastRefresh = db.prepare(`
+      SELECT last_refreshed_at
+      FROM timeline_refresh_state
+      WHERE id = 1
+    `).get();
+
+    const logRows = logs.map((log) => {
+      const rarityClass =
+        log.rarity === "태초" ? "badgePrimeval" :
+        log.rarity === "에픽" ? "badgeEpic" :
+        log.rarity === "레전더리" ? "badgeLegend" : "";
+
+      return `
+        <div class="log">
+          <div class="logTop">
+            <div><strong>${escapeHtml(log.character_name)}</strong><span class="muted"> · ${escapeHtml(log.server_name)} · ${escapeHtml(log.timeline_date)}</span></div>
+            <div class="row">
+              ${log.log_type ? `<span class="badge">${escapeHtml(log.log_type)}</span>` : ""}
+              ${log.rarity ? `<span class="badge ${rarityClass}">${escapeHtml(log.rarity)}</span>` : ""}
+            </div>
+          </div>
+          <div class="logMsg">${escapeHtml(log.message)}</div>
+        </div>
+      `;
+    }).join("");
+
+    res.send(layout("데본베일 관측기", `
+      <div class="top">
+        <div>
+          <h1>데본베일 관측기</h1>
+          <p class="desc">
+            등록된 캐릭터들의 타임라인을 통합해서 보여주는 읽기 전용 페이지입니다.<br>
+            시청자는 조회만 가능하며, 캐릭터 등록/삭제/갱신은 관리자 페이지에서만 가능합니다.
+          </p>
+        </div>
+        <div class="row">
+          <a class="btn btnSub" href="/">메인 로비</a>
+        </div>
+      </div>
+
+      <div class="pillbar">
+        <div class="stat"><span>총 로그</span><strong>${Number(stats.total || 0).toLocaleString()}</strong></div>
+        <div class="stat"><span>아이템</span><strong>${Number(stats.itemCount || 0).toLocaleString()}</strong></div>
+        <div class="stat"><span>클리어</span><strong>${Number(stats.clearCount || 0).toLocaleString()}</strong></div>
+        <div class="stat"><span>태초</span><strong>${Number(stats.primevalCount || 0).toLocaleString()}</strong></div>
+        <div class="stat"><span>에픽</span><strong>${Number(stats.epicCount || 0).toLocaleString()}</strong></div>
+        <div class="stat"><span>레전더리</span><strong>${Number(stats.legendaryCount || 0).toLocaleString()}</strong></div>
+      </div>
+
+      <section class="card">
+        <h2>필터</h2>
+        <form method="get" action="/observer" class="row">
+          <input name="q" value="${escapeHtml(q)}" placeholder="검색어: 최후의 조율자, 디레지에, 아이템명 등" style="flex:2; min-width:220px" />
+          <input name="character" value="${escapeHtml(character)}" placeholder="캐릭터명" style="flex:1; min-width:140px" />
+          <select name="type" style="flex:0 0 120px">
+            <option value="">전체 타입</option>
+            <option value="아이템" ${type === "아이템" ? "selected" : ""}>아이템</option>
+            <option value="클리어" ${type === "클리어" ? "selected" : ""}>클리어</option>
+            <option value="기타" ${type === "기타" ? "selected" : ""}>기타</option>
+          </select>
+          <select name="rarity" style="flex:0 0 130px">
+            <option value="">전체 등급</option>
+            <option value="태초" ${rarity === "태초" ? "selected" : ""}>태초</option>
+            <option value="에픽" ${rarity === "에픽" ? "selected" : ""}>에픽</option>
+            <option value="레전더리" ${rarity === "레전더리" ? "selected" : ""}>레전더리</option>
+          </select>
+          <button type="submit">적용</button>
+          <a class="btn btnSub" href="/observer">초기화</a>
+        </form>
+        <p class="muted" style="margin-top:10px;">마지막 관리자 갱신: ${escapeHtml(lastRefresh?.last_refreshed_at || "-")}</p>
+      </section>
+
+      <section>
+        ${logRows || `<div class="card muted">표시할 타임라인 로그가 없습니다. 관리자가 먼저 캐릭터를 등록하고 타임라인을 갱신해야 합니다.</div>`}
+      </section>
+    `));
+  });
+
   app.get(`${ADMIN_BASE}/timeline`, requireAdmin, (req, res) => {
     const q = String(req.query.q || "").trim();
     const type = String(req.query.type || "").trim();
