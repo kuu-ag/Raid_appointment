@@ -93,15 +93,15 @@ function clampTimelineDateRange(startDate, endDate) {
 function normalizeNeopleDate(value, end = false) {
   const text = String(value || "").trim();
 
-  // 입력: 2026-05-04 12:30
   const dateTimeMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+
   if (dateTimeMatch) {
     const [, yyyy, mm, dd, hh, mi] = dateTimeMatch;
     return `${yyyy}${mm}${dd}T${hh}${mi}`;
   }
 
-  // 입력: 2026-05-04
   const dateMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
   if (dateMatch) {
     const [, yyyy, mm, dd] = dateMatch;
     return `${yyyy}${mm}${dd}T${end ? "2359" : "0000"}`;
@@ -181,15 +181,15 @@ async function fetchCharacterTimeline(serverId, characterId, startDate, endDate)
   while (safety < 20) {
     safety += 1;
 
-  const apiStartDate = normalizeNeopleDate(startDate, false);
-  const apiEndDate = normalizeNeopleDate(endDate, true);
+    const apiStartDate = normalizeNeopleDate(startDate, false);
+    const apiEndDate = normalizeNeopleDate(endDate, true);
 
-  const data = await neopleGet(`/servers/${serverId}/characters/${characterId}/timeline`, {
-    startDate: apiStartDate,
-    endDate: apiEndDate,
-    limit: 100,
-    next,
-  });
+    const data = await neopleGet(`/servers/${serverId}/characters/${characterId}/timeline`, {
+      startDate: apiStartDate,
+      endDate: apiEndDate,
+      limit: 100,
+      next,
+    });
 
     const timeline = data.timeline || data;
     const pageRows = Array.isArray(timeline.rows) ? timeline.rows : [];
@@ -245,62 +245,184 @@ function extractTimelineCode(row) {
   return String(row.code || row.type || row.name || "");
 }
 
-function extractTimelineMessage(row) {
+function getKoreanSubjectParticle(text) {
+  const str = String(text || "").trim();
+
+  if (!str) {
+    return "이";
+  }
+
+  const lastChar = str[str.length - 1];
+  const code = lastChar.charCodeAt(0);
+
+  if (code < 0xac00 || code > 0xd7a3) {
+    return "이";
+  }
+
+  return (code - 0xac00) % 28 === 0 ? "가" : "이";
+}
+
+function getKoreanObjectParticle(text) {
+  const str = String(text || "").trim();
+
+  if (!str) {
+    return "을";
+  }
+
+  const lastChar = str[str.length - 1];
+  const code = lastChar.charCodeAt(0);
+
+  if (code < 0xac00 || code > 0xd7a3) {
+    return "을";
+  }
+
+  return (code - 0xac00) % 28 === 0 ? "를" : "을";
+}
+
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function getTimelineItemName(row) {
+  const data = row.data || {};
+  return String(
+    data.itemName ||
+    row.itemName ||
+    ""
+  ).trim();
+}
+
+function getTimelineItemRarity(row) {
   const data = row.data || {};
 
-  const candidates = [
+  const direct = String(
+    data.itemRarity ||
+    data.itemGradeName ||
+    row.itemRarity ||
+    row.itemGradeName ||
+    ""
+  ).trim();
+
+  if (direct) {
+    return direct;
+  }
+
+  const rawText = [
     row.name,
     row.message,
     row.htmlMessage,
     row.description,
-    data.dungeonName,
-    data.itemName,
-    data.itemRarity,
-    data.itemGradeName,
-    data.channelName,
-    data.raidName,
-    data.result,
     JSON.stringify(data),
-  ].filter(Boolean);
+  ].filter(Boolean).join(" ");
 
-  return candidates.join(" ");
+  if (rawText.includes("태초")) return "태초";
+  if (rawText.includes("에픽")) return "에픽";
+  if (rawText.includes("레전더리")) return "레전더리";
+  if (rawText.includes("유니크")) return "유니크";
+  if (rawText.includes("레어")) return "레어";
+
+  return "";
 }
 
-function classifyTimeline(row) {
-  const text = extractTimelineMessage(row);
+function getTimelineDungeonName(row) {
+  const data = row.data || {};
+  return String(
+    data.dungeonName ||
+    data.regionName ||
+    data.raidName ||
+    row.dungeonName ||
+    row.regionName ||
+    row.raidName ||
+    ""
+  ).trim();
+}
 
-  let logType = "기타";
+function buildSimpleTimelineMessage(row, characterName = "") {
+  const name = String(characterName || "").trim() || "캐릭터";
+  const subject = getKoreanSubjectParticle(name);
 
-  if (
-    text.includes("획득") ||
-    text.includes("itemName") ||
-    text.includes("아이템")
-  ) {
-    logType = "아이템";
+  const itemName = getTimelineItemName(row);
+  const rarity = getTimelineItemRarity(row);
+  const dungeonName = getTimelineDungeonName(row);
+
+  const rawText = [
+    row.name,
+    row.message,
+    row.htmlMessage,
+    row.description,
+  ].filter(Boolean).join(" ");
+
+  if (itemName) {
+    const itemLabel = `${itemName}${rarity ? `[${rarity}]` : ""}`;
+    const object = getKoreanObjectParticle(itemLabel);
+    return `${name}${subject} ${itemLabel}${object} 먹었다.`;
   }
 
   if (
-    text.includes("클리어") ||
-    text.includes("처치") ||
-    text.includes("성공") ||
-    text.includes("clear")
+    rawText.includes("클리어") ||
+    rawText.includes("성공") ||
+    rawText.includes("처치")
+  ) {
+    const dungeonLabel = dungeonName || "던전";
+    const object = getKoreanObjectParticle(dungeonLabel);
+    return `${name}${subject} ${dungeonLabel}${object} 클리어했다.`;
+  }
+
+  if (dungeonName) {
+    const object = getKoreanObjectParticle(dungeonName);
+    return `${name}${subject} ${dungeonName}${object} 진행했다.`;
+  }
+
+  return `${name}${subject} 기록이 등록되었다.`;
+}
+
+function buildDisplayMessage(log) {
+  const parsed = safeJsonParse(log.raw_json);
+
+  if (parsed) {
+    return buildSimpleTimelineMessage(parsed, log.character_name);
+  }
+
+  const fallbackName = String(log.character_name || "캐릭터").trim() || "캐릭터";
+  const subject = getKoreanSubjectParticle(fallbackName);
+
+  if (log.message) {
+    return log.message;
+  }
+
+  return `${fallbackName}${subject} 기록이 등록되었다.`;
+}
+
+function extractTimelineMessage(row, characterName = "") {
+  return buildSimpleTimelineMessage(row, characterName);
+}
+
+function classifyTimeline(row) {
+  const rawText = [
+    row.name,
+    row.message,
+    row.htmlMessage,
+    row.description,
+    JSON.stringify(row.data || {}),
+  ].filter(Boolean).join(" ");
+
+  let logType = "기타";
+
+  if (getTimelineItemName(row) || rawText.includes("획득")) {
+    logType = "아이템";
+  } else if (
+    rawText.includes("클리어") ||
+    rawText.includes("성공") ||
+    rawText.includes("처치")
   ) {
     logType = "클리어";
   }
 
-  let rarity = "";
-
-  if (text.includes("태초")) {
-    rarity = "태초";
-  } else if (text.includes("에픽")) {
-    rarity = "에픽";
-  } else if (text.includes("레전더리")) {
-    rarity = "레전더리";
-  } else if (text.includes("유니크")) {
-    rarity = "유니크";
-  } else if (text.includes("레어")) {
-    rarity = "레어";
-  }
+  const rarity = getTimelineItemRarity(row);
 
   return {
     logType,
@@ -568,7 +690,13 @@ function layout(title, body) {
       gap: 8px;
       margin-bottom: 8px;
     }
-    .logMsg { color: #e4e4e7; line-height: 1.5; font-size: 13px; word-break: keep-all; }
+    .logMsg {
+      color: #e4e4e7;
+      line-height: 1.5;
+      font-size: 14px;
+      word-break: keep-all;
+      font-weight: 800;
+    }
     .pillbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
     .stat {
       flex: 1 1 120px;
@@ -593,6 +721,7 @@ function layout(title, body) {
 
 function renderLogRows(logs) {
   return logs.map((log) => {
+    const displayMessage = buildDisplayMessage(log);
     const rarityClass =
       log.rarity === "태초" ? "badgePrimeval" :
       log.rarity === "에픽" ? "badgeEpic" :
@@ -603,14 +732,14 @@ function renderLogRows(logs) {
         <div class="logTop">
           <div>
             <strong>${escapeHtml(log.character_name)}</strong>
-            <span class="muted"> · ${escapeHtml(log.server_name)} · ${escapeHtml(log.timeline_date)}</span>
+            <span class="muted"> · ${escapeHtml(log.timeline_date)}</span>
           </div>
           <div class="row">
             ${log.log_type ? `<span class="badge">${escapeHtml(log.log_type)}</span>` : ""}
             ${log.rarity ? `<span class="badge ${rarityClass}">${escapeHtml(log.rarity)}</span>` : ""}
           </div>
         </div>
-        <div class="logMsg">${escapeHtml(log.message)}</div>
+        <div class="logMsg">${escapeHtml(displayMessage)}</div>
       </div>
     `;
   }).join("");
@@ -699,7 +828,7 @@ async function refreshTimelineLogs(db, targets, startDate, endDate) {
         }
 
         const code = extractTimelineCode(row);
-        const message = extractTimelineMessage(row);
+        const message = extractTimelineMessage(row, ch.character_name);
         const { logType, rarity } = classifyTimeline(row);
 
         const logKey = String(
