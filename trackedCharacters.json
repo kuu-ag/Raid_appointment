@@ -16,7 +16,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "서사시리븐버",
+    "character_name": "서사시리볼버",
     "memo": ""
   },
   {
@@ -31,7 +31,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[녀]",
+    "character_name": "데본베일[떡]",
     "memo": ""
   },
   {
@@ -41,7 +41,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[쉥]",
+    "character_name": "데본베일[날]",
     "memo": ""
   },
   {
@@ -51,32 +51,37 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[치]",
+    "character_name": "데본베일[기]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[머]",
+    "character_name": "데본베일[처]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[나]",
+    "character_name": "데본베일[뀨]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[밍]",
+    "character_name": "데본베일[다]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[룡]",
+    "character_name": "데본베일[명]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[릿]",
+    "character_name": "데본베일[롬]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[솨]",
     "memo": ""
   },
   {
@@ -96,7 +101,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[전]",
+    "character_name": "데본베일[천]",
     "memo": ""
   },
   {
@@ -106,7 +111,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[딥]",
+    "character_name": "데본베일[런]",
     "memo": ""
   },
   {
@@ -121,12 +126,12 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[팡]",
+    "character_name": "데본베일[탱]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[달]",
+    "character_name": "데본베일[탑]",
     "memo": ""
   },
   {
@@ -141,17 +146,17 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[퀴]",
+    "character_name": "데본베일[퀸]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "LV포스선지자",
+    "character_name": "LV포스님저자",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[화]",
+    "character_name": "데본베일[퇴]",
     "memo": ""
   },
   {
@@ -166,7 +171,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[비]",
+    "character_name": "데본베일[버]",
     "memo": ""
   },
   {
@@ -176,12 +181,12 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[블]",
+    "character_name": "데본베일[글]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[뇌]",
+    "character_name": "데본베일[뉴]",
     "memo": ""
   },
   {
@@ -191,12 +196,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[처]",
-    "memo": ""
-  },
-  {
-    "server_id": "cain",
-    "character_name": "데본베일[딱]",
+    "character_name": "데본베일[쳐]",
     "memo": ""
   },
   {
@@ -206,7 +206,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[남]",
+    "character_name": "데본베일[닝]",
     "memo": ""
   },
   {
@@ -216,22 +216,32 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[키]",
+    "character_name": "데본베일[극]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[두]",
+    "character_name": "데본베일[탁]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[네]",
+    "character_name": "데본베일[잡]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[입]",
+    "character_name": "데본베일[듀]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[넨]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[알]",
     "memo": ""
   },
   {
@@ -246,37 +256,32 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[디]",
+    "character_name": "데본베일[건]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[진]",
+    "character_name": "데본베일[물]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[론]",
+    "character_name": "데본베일[뻘]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[뭄]",
+    "character_name": "데본베일[뱁]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[밉]",
+    "character_name": "데본베일[검]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[김]",
-    "memo": ""
-  },
-  {
-    "server_id": "cain",
-    "character_name": "데본베일[고]",
+    "character_name": "데본베일[코]",
     "memo": ""
   },
   {
@@ -286,22 +291,27 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[님]",
+    "character_name": "데본베일[왕]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[뜰]",
+    "character_name": "데본베일[빙]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[알]",
+    "character_name": "데본베일[종]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[엑]",
+    "character_name": "데본베일[랄]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[쓸]",
     "memo": ""
   },
   {
@@ -311,7 +321,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[덴]",
+    "character_name": "데본베일[텔]",
     "memo": ""
   },
   {
@@ -321,12 +331,12 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[라]",
+    "character_name": "데본베일[화]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[리]",
+    "character_name": "데본베일[러]",
     "memo": ""
   },
   {
@@ -336,17 +346,12 @@
   },
   {
     "server_id": "cain",
-    "character_name": "GO☆난로",
+    "character_name": "GO자사토루",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[환]",
-    "memo": ""
-  },
-  {
-    "server_id": "cain",
-    "character_name": "데본베일[바]",
+    "character_name": "데본베일[철]",
     "memo": ""
   },
   {
@@ -356,12 +361,12 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[날]",
+    "character_name": "데본베일[남]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[뱀]",
+    "character_name": "데본베일[번]",
     "memo": ""
   },
   {
@@ -371,7 +376,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[떳]",
+    "character_name": "데본베일[뚜]",
     "memo": ""
   },
   {
@@ -381,27 +386,27 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[름]",
+    "character_name": "데본베일[럽]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[랑]",
+    "character_name": "데본베일[흥]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[맴]",
+    "character_name": "데본베일[형]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "리제스트키",
+    "character_name": "리제스토커",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "에이타노마",
+    "character_name": "에이티스마",
     "memo": ""
   },
   {
@@ -416,17 +421,17 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[왕]",
+    "character_name": "데본베일[광]",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "보코나피코",
+    "character_name": "보쿠노피코",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[창]",
+    "character_name": "데본베일[랑]",
     "memo": ""
   },
   {
@@ -441,17 +446,17 @@
   },
   {
     "server_id": "cain",
-    "character_name": "로우가시키",
+    "character_name": "로우기-시키",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "카나아보",
+    "character_name": "키라-야마토",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "상시피",
+    "character_name": "상시딸피",
     "memo": ""
   },
   {
@@ -466,7 +471,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "뿌엥뿌엥",
+    "character_name": "뿌잉뿌잉",
     "memo": ""
   },
   {
@@ -476,87 +481,87 @@
   },
   {
     "server_id": "cain",
-    "character_name": "울트라",
+    "character_name": "월드컵",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "허홍호",
+    "character_name": "히종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "넌홍호",
+    "character_name": "넌종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "카홍호",
+    "character_name": "키종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "파홍호",
+    "character_name": "패종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "팔홍호",
+    "character_name": "팔종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "소중호",
+    "character_name": "소종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "아중호",
+    "character_name": "아종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "크중호",
+    "character_name": "크종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "검홍호",
+    "character_name": "갈종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "다중호",
+    "character_name": "다종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "늘중호",
+    "character_name": "블종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "천중호",
+    "character_name": "챈종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운여금무",
+    "character_name": "차가운여줌마",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운눈이",
+    "character_name": "차가운늙은이",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운익수요",
+    "character_name": "차가운익숙모",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운딕크나",
+    "character_name": "차가운핑크남",
     "memo": ""
   },
   {
