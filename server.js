@@ -220,7 +220,7 @@ ensureColumn("raids", "raid_type", "raid_type TEXT NOT NULL DEFAULT 'normal'");
 ensureColumn("raids", "sort_order", "sort_order INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
-ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT '');
+ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
 registerDuncleDropRateFeature(app, db, {
   adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
