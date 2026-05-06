@@ -1492,8 +1492,9 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-app.get("/admin", (req, res) => res.status(404).send("Not Found"));
-app.get("/admin/*", (req, res) => res.status(404).send("Not Found"));
+app.get(/^\/admin(?:\/.*)?$/, (req, res) => {
+  return res.status(404).send("Not Found");
+});
 
 // =====================
 // Viewer: main
