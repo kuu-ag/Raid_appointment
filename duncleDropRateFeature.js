@@ -121,8 +121,6 @@ function initDuncleDropRateTables(db) {
   `);
 }
 
-// 수동 삭제/테스트 데이터 삭제 등으로 sqlite_sequence가 MAX(id)보다 커졌을 때만 낮춰준다.
-// 기존 id를 바꾸지는 않는다. 새 등록이 현재 MAX(id)+1로 이어지게 하기 위한 안전장치다.
 function normalizeDuncleSequence(db) {
   const row = db.prepare(`
     SELECT COALESCE(MAX(id), 0) AS max_id
@@ -134,14 +132,12 @@ function normalizeDuncleSequence(db) {
   db.prepare(`
     DELETE FROM sqlite_sequence
     WHERE name = 'duncle_drop_rates'
-      AND seq > ?
-  `).run(maxId);
+  `).run();
 
   if (maxId > 0) {
     db.prepare(`
       INSERT INTO sqlite_sequence(name, seq)
       VALUES ('duncle_drop_rates', ?)
-      ON CONFLICT(name) DO UPDATE SET seq = excluded.seq
     `).run(maxId);
   }
 }
