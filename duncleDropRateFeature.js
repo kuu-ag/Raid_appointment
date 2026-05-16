@@ -118,6 +118,41 @@ function initDuncleDropRateTables(db) {
 
     CREATE INDEX IF NOT EXISTS idx_duncle_drop_rates_season_updated
       ON duncle_drop_rates(season_key, updated_at, id);
+
+    CREATE TABLE IF NOT EXISTS duncle_weekly_rankings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      anonymous_id TEXT NOT NULL,
+      source TEXT DEFAULT 'unknown',
+      season_key TEXT NOT NULL DEFAULT 'total',
+
+      week_key TEXT NOT NULL,
+
+      weekly_endkeeper_clear INTEGER NOT NULL DEFAULT 0,
+      weekly_primeval_oath_count INTEGER NOT NULL DEFAULT 0,
+      weekly_primeval_crystal_count INTEGER NOT NULL DEFAULT 0,
+      weekly_primeval_total_count INTEGER NOT NULL DEFAULT 0,
+
+      weekly_oath_rate REAL NOT NULL DEFAULT 0,
+      weekly_crystal_rate REAL NOT NULL DEFAULT 0,
+      weekly_total_rate REAL NOT NULL DEFAULT 0,
+
+      is_hidden INTEGER NOT NULL DEFAULT 0,
+
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+
+      UNIQUE(anonymous_id, season_key, week_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_duncle_weekly_rankings_week
+      ON duncle_weekly_rankings(season_key, week_key);
+
+    CREATE INDEX IF NOT EXISTS idx_duncle_weekly_rankings_hidden
+      ON duncle_weekly_rankings(is_hidden);
+
+    CREATE INDEX IF NOT EXISTS idx_duncle_weekly_rankings_anon
+      ON duncle_weekly_rankings(anonymous_id, season_key, week_key);
   `);
 }
 
@@ -432,6 +467,353 @@ function getMyLuckRanking(db, seasonKey, anonymousId) {
   };
 }
 
+
+function getCurrentWeekKeyKST() {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+
+  // KST 기준 목요일 10:00 리셋.
+  // JS getUTCDay: 0=일, 4=목. kst는 이미 +9 적용된 UTC 객체로 다룬다.
+  const day = kst.getUTCDay();
+  const hour = kst.getUTCHours();
+
+  let daysSinceThursday = (day - 4 + 7) % 7;
+
+  if (daysSinceThursday === 0 && hour < 10) {
+    daysSinceThursday = 7;
+  }
+
+  const start = new Date(kst.getTime() - daysSinceThursday * 24 * 60 * 60 * 1000);
+  start.setUTCHours(10, 0, 0, 0);
+
+  return start.toISOString().slice(0, 10);
+}
+
+function getWeekKey(value) {
+  const text = String(value || "").trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  return getCurrentWeekKeyKST();
+}
+
+function getRankResultBySql(db, { totalSql, higherSql, tieSql, params, value }) {
+  const totalRow = db.prepare(totalSql).get(...params);
+  const total = Number(totalRow?.cnt || 0);
+
+  if (!total) {
+    return buildRankResult({ rank: 0, total: 0, value, tieCount: 0 });
+  }
+
+  const higherRow = db.prepare(higherSql).get(value, ...params);
+  const tieRow = db.prepare(tieSql).get(value, ...params);
+
+  return buildRankResult({
+    rank: Number(higherRow?.cnt || 0) + 1,
+    total,
+    value,
+    tieCount: Number(tieRow?.cnt || 1),
+  });
+}
+
+function getTotalPrimevalRank(db, seasonKey, myRow, kind) {
+  const expressionMap = {
+    oath: "primeval_oath_count",
+    crystal: "primeval_crystal_count",
+    total: "(primeval_oath_count + primeval_crystal_count)",
+  };
+
+  const expression = expressionMap[kind];
+
+  if (!expression || !myRow) {
+    return buildRankResult({ rank: 0, total: 0, value: 0, tieCount: 0 });
+  }
+
+  const myValue =
+    kind === "oath"
+      ? Number(myRow.primeval_oath_count || 0)
+      : kind === "crystal"
+        ? Number(myRow.primeval_crystal_count || 0)
+        : Number(myRow.primeval_oath_count || 0) + Number(myRow.primeval_crystal_count || 0);
+
+  return getRankResultBySql(db, {
+    value: myValue,
+    params: [seasonKey],
+    totalSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_drop_rates
+      WHERE season_key = ?
+        AND is_hidden = 0
+        AND endkeeper_clear >= ${MIN_ENDKEEPER_CLEAR}
+    `,
+    higherSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_drop_rates
+      WHERE ${expression} > ?
+        AND season_key = ?
+        AND is_hidden = 0
+        AND endkeeper_clear >= ${MIN_ENDKEEPER_CLEAR}
+    `,
+    tieSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_drop_rates
+      WHERE ${expression} = ?
+        AND season_key = ?
+        AND is_hidden = 0
+        AND endkeeper_clear >= ${MIN_ENDKEEPER_CLEAR}
+    `,
+  });
+}
+
+function getWeeklyPrimevalRank(db, seasonKey, weekKey, myWeekRow, kind) {
+  const expressionMap = {
+    oath: "weekly_primeval_oath_count",
+    crystal: "weekly_primeval_crystal_count",
+    total: "weekly_primeval_total_count",
+  };
+
+  const expression = expressionMap[kind];
+
+  if (!expression || !myWeekRow) {
+    return buildRankResult({ rank: 0, total: 0, value: 0, tieCount: 0 });
+  }
+
+  const myValue =
+    kind === "oath"
+      ? Number(myWeekRow.weekly_primeval_oath_count || 0)
+      : kind === "crystal"
+        ? Number(myWeekRow.weekly_primeval_crystal_count || 0)
+        : Number(myWeekRow.weekly_primeval_total_count || 0);
+
+  return getRankResultBySql(db, {
+    value: myValue,
+    params: [seasonKey, weekKey],
+    totalSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_weekly_rankings
+      WHERE season_key = ?
+        AND week_key = ?
+        AND is_hidden = 0
+    `,
+    higherSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_weekly_rankings
+      WHERE ${expression} > ?
+        AND season_key = ?
+        AND week_key = ?
+        AND is_hidden = 0
+    `,
+    tieSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_weekly_rankings
+      WHERE ${expression} = ?
+        AND season_key = ?
+        AND week_key = ?
+        AND is_hidden = 0
+    `,
+  });
+}
+
+function getWeeklyTunerRank(db, seasonKey, weekKey, myWeekRow, kind) {
+  const expressionMap = {
+    oath: "weekly_oath_rate",
+    crystal: "weekly_crystal_rate",
+    total: "weekly_total_rate",
+  };
+
+  const expression = expressionMap[kind];
+
+  if (!expression || !myWeekRow) {
+    return buildRankResult({ rank: 0, total: 0, value: 0, tieCount: 0 });
+  }
+
+  const myValue =
+    kind === "oath"
+      ? Number(myWeekRow.weekly_oath_rate || 0)
+      : kind === "crystal"
+        ? Number(myWeekRow.weekly_crystal_rate || 0)
+        : Number(myWeekRow.weekly_total_rate || 0);
+
+  return getRankResultBySql(db, {
+    value: myValue,
+    params: [seasonKey, weekKey],
+    totalSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_weekly_rankings
+      WHERE season_key = ?
+        AND week_key = ?
+        AND is_hidden = 0
+        AND weekly_endkeeper_clear > 0
+    `,
+    higherSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_weekly_rankings
+      WHERE ${expression} > ?
+        AND season_key = ?
+        AND week_key = ?
+        AND is_hidden = 0
+        AND weekly_endkeeper_clear > 0
+    `,
+    tieSql: `
+      SELECT COUNT(*) AS cnt
+      FROM duncle_weekly_rankings
+      WHERE ${expression} = ?
+        AND season_key = ?
+        AND week_key = ?
+        AND is_hidden = 0
+        AND weekly_endkeeper_clear > 0
+    `,
+  });
+}
+
+function getDuncleRankingSummary(db, seasonKey, anonymousId, weekKeyInput = "") {
+  const weekKey = getWeekKey(weekKeyInput);
+
+  const myRow = db.prepare(`
+    SELECT *
+    FROM duncle_drop_rates
+    WHERE season_key = ?
+      AND anonymous_id = ?
+      AND is_hidden = 0
+    LIMIT 1
+  `).get(seasonKey, anonymousId);
+
+  if (!myRow) {
+    return {
+      eligible: false,
+      reason: "등록된 기록이 없습니다.",
+      weekKey,
+    };
+  }
+
+  const myWeekRow = db.prepare(`
+    SELECT *
+    FROM duncle_weekly_rankings
+    WHERE season_key = ?
+      AND week_key = ?
+      AND anonymous_id = ?
+      AND is_hidden = 0
+    LIMIT 1
+  `).get(seasonKey, weekKey, anonymousId);
+
+  return {
+    eligible: true,
+    weekKey,
+    resetRule: "KST_THURSDAY_10",
+    totalPrimeval: {
+      oath: getTotalPrimevalRank(db, seasonKey, myRow, "oath"),
+      crystal: getTotalPrimevalRank(db, seasonKey, myRow, "crystal"),
+      total: getTotalPrimevalRank(db, seasonKey, myRow, "total"),
+    },
+    weeklyPrimeval: {
+      eligible: !!myWeekRow,
+      oath: getWeeklyPrimevalRank(db, seasonKey, weekKey, myWeekRow, "oath"),
+      crystal: getWeeklyPrimevalRank(db, seasonKey, weekKey, myWeekRow, "crystal"),
+      total: getWeeklyPrimevalRank(db, seasonKey, weekKey, myWeekRow, "total"),
+    },
+    weeklyTuner: {
+      eligible: !!myWeekRow && Number(myWeekRow.weekly_endkeeper_clear || 0) > 0,
+      weeklyEndkeeperClear: Number(myWeekRow?.weekly_endkeeper_clear || 0),
+      oath: getWeeklyTunerRank(db, seasonKey, weekKey, myWeekRow, "oath"),
+      crystal: getWeeklyTunerRank(db, seasonKey, weekKey, myWeekRow, "crystal"),
+      total: getWeeklyTunerRank(db, seasonKey, weekKey, myWeekRow, "total"),
+    },
+  };
+}
+
+function saveWeeklyRanking(db, {
+  anonymousId,
+  source,
+  seasonKey,
+  weekKey,
+  weeklyEndkeeperClear,
+  weeklyPrimevalOathCount,
+  weeklyPrimevalCrystalCount,
+  now,
+}) {
+  const safeWeekKey = getWeekKey(weekKey);
+  const safeWeeklyEndkeeperClear = toInt(weeklyEndkeeperClear);
+  const safeWeeklyPrimevalOathCount = toInt(weeklyPrimevalOathCount);
+  const safeWeeklyPrimevalCrystalCount = toInt(weeklyPrimevalCrystalCount);
+  const weeklyPrimevalTotalCount = safeWeeklyPrimevalOathCount + safeWeeklyPrimevalCrystalCount;
+
+  const weeklyOathRate = calcRate(safeWeeklyPrimevalOathCount, safeWeeklyEndkeeperClear);
+  const weeklyCrystalRate = calcRate(safeWeeklyPrimevalCrystalCount, safeWeeklyEndkeeperClear);
+  const weeklyTotalRate = calcRate(weeklyPrimevalTotalCount, safeWeeklyEndkeeperClear);
+
+  db.prepare(`
+    INSERT INTO duncle_weekly_rankings (
+      anonymous_id,
+      source,
+      season_key,
+      week_key,
+      weekly_endkeeper_clear,
+      weekly_primeval_oath_count,
+      weekly_primeval_crystal_count,
+      weekly_primeval_total_count,
+      weekly_oath_rate,
+      weekly_crystal_rate,
+      weekly_total_rate,
+      is_hidden,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      @anonymous_id,
+      @source,
+      @season_key,
+      @week_key,
+      @weekly_endkeeper_clear,
+      @weekly_primeval_oath_count,
+      @weekly_primeval_crystal_count,
+      @weekly_primeval_total_count,
+      @weekly_oath_rate,
+      @weekly_crystal_rate,
+      @weekly_total_rate,
+      0,
+      @now,
+      @now
+    )
+    ON CONFLICT(anonymous_id, season_key, week_key) DO UPDATE SET
+      source = excluded.source,
+      weekly_endkeeper_clear = excluded.weekly_endkeeper_clear,
+      weekly_primeval_oath_count = excluded.weekly_primeval_oath_count,
+      weekly_primeval_crystal_count = excluded.weekly_primeval_crystal_count,
+      weekly_primeval_total_count = excluded.weekly_primeval_total_count,
+      weekly_oath_rate = excluded.weekly_oath_rate,
+      weekly_crystal_rate = excluded.weekly_crystal_rate,
+      weekly_total_rate = excluded.weekly_total_rate,
+      is_hidden = 0,
+      updated_at = excluded.updated_at
+  `).run({
+    anonymous_id: anonymousId,
+    source,
+    season_key: seasonKey,
+    week_key: safeWeekKey,
+    weekly_endkeeper_clear: safeWeeklyEndkeeperClear,
+    weekly_primeval_oath_count: safeWeeklyPrimevalOathCount,
+    weekly_primeval_crystal_count: safeWeeklyPrimevalCrystalCount,
+    weekly_primeval_total_count: weeklyPrimevalTotalCount,
+    weekly_oath_rate: weeklyOathRate,
+    weekly_crystal_rate: weeklyCrystalRate,
+    weekly_total_rate: weeklyTotalRate,
+    now,
+  });
+
+  return {
+    weekKey: safeWeekKey,
+    weeklyEndkeeperClear: safeWeeklyEndkeeperClear,
+    weeklyPrimevalOathCount: safeWeeklyPrimevalOathCount,
+    weeklyPrimevalCrystalCount: safeWeeklyPrimevalCrystalCount,
+    weeklyPrimevalTotalCount,
+    weeklyOathRate,
+    weeklyCrystalRate,
+    weeklyTotalRate,
+  };
+}
+
+
 function renderAdminPage(db, options = {}) {
   const ADMIN_PATH = options.adminPath || "duncle_hidden";
   const seasonKey = "total";
@@ -675,6 +1057,11 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
     res.status(204).end();
   });
 
+  app.options("/api/duncle/ranking-summary", (req, res) => {
+    setApiCors(req, res);
+    res.status(204).end();
+  });
+
   app.get("/api/duncle/drop-rate/average", (req, res) => {
     setApiCors(req, res);
 
@@ -714,6 +1101,26 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
     });
   });
 
+  app.get("/api/duncle/ranking-summary", (req, res) => {
+    setApiCors(req, res);
+
+    const anonymousId = clampText(req.query.anonymousId || req.query.anonymous_id, 120);
+    const seasonKey = getSeasonKey(req.query.seasonKey || req.query.season_key || "total");
+    const weekKey = getWeekKey(req.query.weekKey || req.query.week_key || "");
+
+    if (!anonymousId) {
+      return res.status(400).json({
+        ok: false,
+        message: "익명 식별자가 없습니다.",
+      });
+    }
+
+    res.json({
+      ok: true,
+      rankingSummary: getDuncleRankingSummary(db, seasonKey, anonymousId, weekKey),
+    });
+  });
+
   app.post("/api/duncle/drop-rate", (req, res) => {
     setApiCors(req, res);
 
@@ -725,6 +1132,11 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
       const endkeeperClear = toInt(req.body.endkeeperClear || req.body.endkeeper_clear);
       const primevalOathCount = toInt(req.body.primevalOathCount || req.body.primeval_oath_count);
       const primevalCrystalCount = toInt(req.body.primevalCrystalCount || req.body.primeval_crystal_count);
+
+      const weekKey = getWeekKey(req.body.weekKey || req.body.week_key || "");
+      const weeklyEndkeeperClear = toInt(req.body.weeklyEndkeeperClear || req.body.weekly_endkeeper_clear);
+      const weeklyPrimevalOathCount = toInt(req.body.weeklyPrimevalOathCount || req.body.weekly_primeval_oath_count);
+      const weeklyPrimevalCrystalCount = toInt(req.body.weeklyPrimevalCrystalCount || req.body.weekly_primeval_crystal_count);
 
       if (!anonymousId) {
         return res.status(400).json({
@@ -818,6 +1230,7 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
 
       const average = getAverage(db, seasonKey);
       const ranking = getMyLuckRanking(db, seasonKey, anonymousId);
+      const rankingSummary = getDuncleRankingSummary(db, seasonKey, anonymousId, weekKey);
 
       res.json({
         ok: true,
@@ -830,6 +1243,8 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
         },
         average,
         ranking,
+        rankingSummary,
+        weekly,
         rule: {
           minEndkeeperClear: MIN_ENDKEEPER_CLEAR,
         },
@@ -852,12 +1267,28 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
     const id = Number(req.params.id);
 
     if (Number.isFinite(id)) {
+      const row = db.prepare(`
+        SELECT anonymous_id, season_key
+        FROM duncle_drop_rates
+        WHERE id = ?
+      `).get(id);
+
       db.prepare(`
         UPDATE duncle_drop_rates
         SET is_hidden = 1,
             updated_at = ?
         WHERE id = ?
       `).run(nowKST(), id);
+
+      if (row?.anonymous_id) {
+        db.prepare(`
+          UPDATE duncle_weekly_rankings
+          SET is_hidden = 1,
+              updated_at = ?
+          WHERE anonymous_id = ?
+            AND season_key = ?
+        `).run(nowKST(), row.anonymous_id, row.season_key || "total");
+      }
     }
 
     res.redirect(`/${adminPath}/duncle`);
@@ -867,12 +1298,28 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
     const id = Number(req.params.id);
 
     if (Number.isFinite(id)) {
+      const row = db.prepare(`
+        SELECT anonymous_id, season_key
+        FROM duncle_drop_rates
+        WHERE id = ?
+      `).get(id);
+
       db.prepare(`
         UPDATE duncle_drop_rates
         SET is_hidden = 0,
             updated_at = ?
         WHERE id = ?
       `).run(nowKST(), id);
+
+      if (row?.anonymous_id) {
+        db.prepare(`
+          UPDATE duncle_weekly_rankings
+          SET is_hidden = 0,
+              updated_at = ?
+          WHERE anonymous_id = ?
+            AND season_key = ?
+        `).run(nowKST(), row.anonymous_id, row.season_key || "total");
+      }
     }
 
     res.redirect(`/${adminPath}/duncle`);
