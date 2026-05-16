@@ -362,7 +362,7 @@ function renderHomeworkPage(summary) {
       <div class="header">
         <div>
           <h1>숙제현황</h1>
-          <div class="muted">trackedcharacters.json에 저장된 캐릭터 기준으로 주간 콘텐츠 클리어 총합만 표시합니다.</div>
+          <div class="muted">주간 숙제 종합입니다.</div>
         </div>
         <div class="actions">
           <a class="btn" href="/observer">관측기</a>
