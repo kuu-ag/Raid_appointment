@@ -22,8 +22,14 @@ const CONTENTS = [
     clearKeywords: ["클리어", "토벌", "공격대", "레이드"],
   },
   {
+    key: "nabel",
+    label: "나벨 레이드",
+    contentKeywords: ["나벨", "인공신 나벨", "나벨 : 하드", "인공신 나벨 : 하드"],
+    clearKeywords: ["클리어", "토벌", "공격대", "레이드", "완료"],
+  },
+  {
     key: "apocalypse",
-    label: "아포칼립스",
+    label: "안티엔바이-아포칼립스",
     contentKeywords: ["아포칼립스"],
     clearKeywords: ["클리어", "토벌", "완료"],
   },
@@ -382,7 +388,7 @@ function renderHomeworkPage(summary) {
 
       <div class="notice">
         ※ 조회 기준은 KST 매주 목요일 오전 10시입니다.<br/>
-        ※ 캐릭터별 상세 목록은 표시하지 않고, 디레지에 레이드/아포칼립스 총합만 제공합니다.<br/>
+        ※ 캐릭터별 상세 목록은 표시하지 않고, 레이드/레기온 총합만 제공합니다.<br/>
         ※ 조회가 느릴 수 있어 결과는 기본 10분간 캐시됩니다. 즉시 재조회하려면 새로고침 버튼을 누르세요.
       </div>
     </div>
@@ -393,5 +399,6 @@ function renderHomeworkPage(summary) {
 
 function renderHomeworkErrorPage(error) {
   const message = error?.message || "숙제현황을 불러오지 못했습니다.";
-  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>숙제현황 오류</title><style>body{margin:0;background:#111327;color:#fff;font-family:sans-serif;padding:24px}.box{max-width:760px;margin:0 auto;border:1px solid #6b72ff;border-radius:16px;padding:22px;background:#1b1c3b}.bad{color:#fca5a5;font-weight:800}.muted{color:#9ca3af;line-height:1.7}a{color:#c7d2fe}</style></head><body><div class="box"><div class="bad">숙제현황 조회 오류</div><p class="muted">${esc(message)}</p><p class="muted">NEOPLE_API_KEY 환경변수와 trackedcharacters.json 파일 위치를 확인해 주세요.</p><a href="/observer">관측기로 돌아가기</a></div></body></html>`;
+  return 
+    `<!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>숙제현황 오류</title><style>body{margin:0;background:#111327;color:#fff;font-family:sans-serif;padding:24px}.box{max-width:760px;margin:0 auto;border:1px solid #6b72ff;border-radius:16px;padding:22px;background:#1b1c3b}.bad{color:#fca5a5;font-weight:800}.muted{color:#9ca3af;line-height:1.7}a{color:#c7d2fe}</style></head><body><div class="box"><div class="bad">숙제현황 조회 오류</div><p class="muted">${esc(message)}</p><p class="muted">NEOPLE_API_KEY 환경변수와 trackedcharacters.json 파일 위치를 확인해 주세요.</p><a href="/observer">관측기로 돌아가기</a></div></body></html>`;
 }
