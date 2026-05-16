@@ -399,6 +399,79 @@ function renderHomeworkPage(summary) {
 
 function renderHomeworkErrorPage(error) {
   const message = error?.message || "숙제현황을 불러오지 못했습니다.";
-  return 
-    `<!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>숙제현황 오류</title><style>body{margin:0;background:#111327;color:#fff;font-family:sans-serif;padding:24px}.box{max-width:760px;margin:0 auto;border:1px solid #6b72ff;border-radius:16px;padding:22px;background:#1b1c3b}.bad{color:#fca5a5;font-weight:800}.muted{color:#9ca3af;line-height:1.7}a{color:#c7d2fe}</style></head><body><div class="box"><div class="bad">숙제현황 조회 오류</div><p class="muted">${esc(message)}</p><p class="muted">NEOPLE_API_KEY 환경변수와 trackedcharacters.json 파일 위치를 확인해 주세요.</p><a href="/observer">관측기로 돌아가기</a></div></body></html>`;
+
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>숙제현황 오류</title>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+    *{
+      box-sizing:border-box;
+      font-family:Pretendard,sans-serif;
+    }
+
+    body{
+      margin:0;
+      min-height:100vh;
+      background:linear-gradient(180deg,#0f1024,#13142b);
+      color:#f8fafc;
+      padding:24px;
+    }
+
+    .box{
+      max-width:760px;
+      margin:0 auto;
+      border:1px solid rgba(107,114,255,.65);
+      border-radius:16px;
+      padding:22px;
+      background:linear-gradient(180deg,rgba(27,28,59,.96),rgba(24,25,52,.96));
+    }
+
+    .bad{
+      color:#fca5a5;
+      font-weight:900;
+      font-size:20px;
+      margin-bottom:12px;
+    }
+
+    .muted{
+      color:#9ca3af;
+      line-height:1.7;
+      font-size:14px;
+    }
+
+    .btn{
+      display:inline-flex;
+      margin-top:14px;
+      align-items:center;
+      justify-content:center;
+      border:1px solid rgba(148,163,255,.35);
+      background:rgba(38,40,77,.85);
+      border-radius:10px;
+      padding:10px 14px;
+      color:#c7d2fe;
+      text-decoration:none;
+      font-size:13px;
+      font-weight:800;
+    }
+
+    .btn:hover{
+      background:rgba(63,66,128,.85);
+      border-color:#6b72ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="bad">숙제현황 조회 오류</div>
+    <p class="muted">${esc(message)}</p>
+    <p class="muted">NEOPLE_API_KEY 환경변수와 trackedcharacters.json 파일 위치를 확인해 주세요.</p>
+    <a class="btn" href="/observer">관측기로 돌아가기</a>
+  </div>
+</body>
+</html>`;
 }
