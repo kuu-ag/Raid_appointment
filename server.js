@@ -10,6 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { registerTimelineFeature } from "./timelineFeature.js";
 import { registerDuncleDropRateFeature } from "./duncleDropRateFeature.js";
+import { registerHomeworkFeature } from "./homeworkFeature.js";
 
 dotenv.config();
 
@@ -491,6 +492,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <a href="/lineup" class="side-btn">공대 편성표</a>
         <a href="/check" class="side-btn">예약 확인</a>
         <a href="/observer" class="side-btn">데본베일 관측기</a>
+        <a href="/observer/homework" class="side-btn">숙제현황</a>
       </aside>
     `;
   }
@@ -508,6 +510,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <button type="button" class="side-btn" onclick="openModal('modal-streamer')">스트리머 예약</button>
         <button type="button" class="side-btn" onclick="openModal('modal-custom-raid')">커스텀 레이드 추가</button>
         <a href="/observer" class="side-btn">데본베일 관측기</a>
+        <a href="/observer/homework" class="side-btn">숙제현황</a>
         <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
         <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
       </aside>
@@ -530,6 +533,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
       <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
       <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
       <a href="/observer" class="side-btn">데본베일 관측기</a>
+        <a href="/observer/homework" class="side-btn">숙제현황</a>
       <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
     </aside>
   `;
@@ -3535,6 +3539,11 @@ app.get("/health", (req, res) =>
 // Start
 // =====================
 seedDefaultRaids();
+
+// =====================
+// Homework Feature
+// =====================
+registerHomeworkFeature(app);
 
 // =====================
 // Timeline Feature
