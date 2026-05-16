@@ -2,7 +2,7 @@
 "use strict";
 
 const MIN_ENDKEEPER_CLEAR = 500;
-const MAX_REASONABLE_RATE = 10; // 10% 초과는 비정상 데이터로 간주
+const MAX_REASONABLE_RATE = 1; // 1% 초과는 비정상 데이터로 간주
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -216,67 +216,78 @@ function getLuckTier(rank, total) {
     return {
       key: "none",
       label: "순위 없음",
-      description: "순위를 계산할 수 없습니다.",
+      description: "기록을 확인할 수 없습니다.",
+    };
+  }
+
+  if (r === 1) {
+    return {
+      key: "rank_1",
+      label: "아라드의 유일신",
+      description: "경배하십시오. 아라드의 모든 운이 이곳에 모였습니다.",
+    };
+  }
+
+  if (r === t) {
+    return {
+      key: "rank_last",
+      label: "통계학적 기적",
+      description: "참... 고생한다... 힘내라는 말 밖에 할 수 없네.",
     };
   }
 
   const topPercent = (r / t) * 100;
 
-  if (topPercent <= 1) {
+  if (topPercent <= 5) {
     return {
-      key: "top_1",
+      key: "top_5",
       label: "조율자가 편애하는 사람",
-      description: "전체 유저 중에서도 손에 꼽히는 운빨입니다.",
+      description: "헬 도는 게 매일 기다려지겠는데?",
     };
   }
 
   if (topPercent <= 10) {
     return {
       key: "top_10",
-      label: "운빨 상위권",
-      description: "평균을 확실히 앞서는 좋은 결과입니다.",
+      label: "선택받은 모험가",
+      description: "헬 도는 게 지루하진 않겠는데?",
     };
   }
 
   if (topPercent <= 30) {
     return {
       key: "top_30",
-      label: "평균보다 잘 먹은 편",
-      description: "전체 평균보다 운이 좋은 구간입니다.",
+      label: "평균 이상",
+      description: "아직은 헬 도는 게 지루하진 않겠다.",
     };
   }
 
-  if (topPercent <= 70) {
+  if (topPercent <= 60) {
     return {
       key: "middle",
       label: "평균권",
-      description: "전체 유저 평균에 가까운 무난한 결과입니다.",
+      description: "헬 도는 게 지루하고 재미없겠네.",
     };
   }
 
-  if (topPercent <= 90) {
+  if (topPercent <= 80) {
     return {
-      key: "bottom_30",
-      label: "살짝 억까 구간",
-      description: "평균보다 조금 아쉬운 결과입니다.",
-    };
-  }
-
-  if (topPercent <= 99) {
-    return {
-      key: "bottom_10",
-      label: "진짜 운이 없는 편",
-      description: "전체 유저 중에서도 꽤 낮은 운빨 구간입니다.",
+      key: "bottom_40",
+      label: "기약 없는 기다림",
+      description: "아직도 헬을 돌아? 응원한다...",
     };
   }
 
   return {
-    key: "bottom_1",
+    key: "bottom_20",
     label: "조율자에게 버림받은 자",
-    description: "오히려 공유하고 싶은 수준의 억까 구간입니다.",
+    description: "그냥... 그렇게 됐다... 힘내라...",
   };
 }
 
+
+// 운빨 문구는 서버 응답의 tier.label / tier.description을 기준으로 관리한다.
+// 확장프로그램은 종합 운빨에 한해 이 값을 그대로 표시하면 된다.
 function buildRankResult({ rank, total, value, tieCount = 1 }) {
   const safeRank = Number(rank || 0);
   const safeTotal = Number(total || 0);
