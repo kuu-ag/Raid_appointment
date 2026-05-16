@@ -201,6 +201,11 @@
   },
   {
     "server_id": "cain",
+    "character_name": "데본베일[딱]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
     "character_name": "데본베일[무]",
     "memo": ""
   },
@@ -252,6 +257,11 @@
   {
     "server_id": "cain",
     "character_name": "데본베일[체]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[뢰]",
     "memo": ""
   },
   {
@@ -352,6 +362,11 @@
   {
     "server_id": "cain",
     "character_name": "데본베일[철]",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[배]",
     "memo": ""
   },
   {
@@ -471,7 +486,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "뿌잉뿌잉",
+    "character_name": "뿌잉뽀잉",
     "memo": ""
   },
   {
