@@ -2,7 +2,7 @@
 "use strict";
 
 const MIN_ENDKEEPER_CLEAR = 500;
-const MAX_REASONABLE_RATE = 1; // 1% 초과는 비정상 데이터로 간주
+const MAX_REASONABLE_RATE = 10; // 10% 초과는 비정상 데이터로 간주
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -1227,6 +1227,33 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
       });
 
       normalizeDuncleSequence(db);
+
+      const shouldSaveWeekly =
+        weeklyEndkeeperClear > 0 ||
+        weeklyPrimevalOathCount > 0 ||
+        weeklyPrimevalCrystalCount > 0;
+
+      const weekly = shouldSaveWeekly
+        ? saveWeeklyRanking(db, {
+            anonymousId,
+            source,
+            seasonKey,
+            weekKey,
+            weeklyEndkeeperClear,
+            weeklyPrimevalOathCount,
+            weeklyPrimevalCrystalCount,
+            now,
+          })
+        : {
+            weekKey,
+            weeklyEndkeeperClear: 0,
+            weeklyPrimevalOathCount: 0,
+            weeklyPrimevalCrystalCount: 0,
+            weeklyPrimevalTotalCount: 0,
+            weeklyOathRate: 0,
+            weeklyCrystalRate: 0,
+            weeklyTotalRate: 0,
+          };
 
       const average = getAverage(db, seasonKey);
       const ranking = getMyLuckRanking(db, seasonKey, anonymousId);
