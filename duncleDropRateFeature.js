@@ -850,19 +850,26 @@ function renderAdminPage(db, options = {}) {
         <td>${hiddenBadge}</td>
         <td>${escapeHtml(row.updated_at)}</td>
         <td>
-          ${
-            row.is_hidden
-              ? `
-                <form method="post" action="/${escapeHtml(ADMIN_PATH)}/duncle/${row.id}/show">
-                  <button type="submit">반영</button>
-                </form>
-              `
-              : `
-                <form method="post" action="/${escapeHtml(ADMIN_PATH)}/duncle/${row.id}/hide">
-                  <button class="dangerBtn" type="submit">숨김</button>
-                </form>
-              `
-          }
+          <div class="actionGroup">
+            ${
+              row.is_hidden
+                ? `
+                  <form method="post" action="/${escapeHtml(ADMIN_PATH)}/duncle/${row.id}/show">
+                    <button type="submit">반영</button>
+                  </form>
+                `
+                : `
+                  <form method="post" action="/${escapeHtml(ADMIN_PATH)}/duncle/${row.id}/hide">
+                    <button class="dangerBtn" type="submit">숨김</button>
+                  </form>
+                `
+            }
+
+            <form method="post" action="/${escapeHtml(ADMIN_PATH)}/duncle/${row.id}/delete"
+                  onsubmit="return confirm('ID ${row.id} 데이터를 완전히 삭제할까요?\\n삭제하면 평균/랭킹 집계에서도 제거되며 되돌릴 수 없습니다.');">
+              <button class="deleteBtn" type="submit">삭제</button>
+            </form>
+          </div>
         </td>
       </tr>
     `;
@@ -965,6 +972,19 @@ function renderAdminPage(db, options = {}) {
     }
     .dangerBtn {
       background: #7f1d1d;
+    }
+    .deleteBtn {
+      background: #991b1b;
+      border: 1px solid #ef4444;
+      color: #fee2e2;
+    }
+    .actionGroup {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .actionGroup form {
+      margin: 0;
     }
     @media (max-width: 1000px) {
       .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1346,6 +1366,41 @@ function registerDuncleDropRateFeature(app, db, options = {}) {
           WHERE anonymous_id = ?
             AND season_key = ?
         `).run(nowKST(), row.anonymous_id, row.season_key || "total");
+      }
+    }
+
+    res.redirect(`/${adminPath}/duncle`);
+  });
+
+  app.post(`/${adminPath}/duncle/:id/delete`, (req, res) => {
+    const id = Number(req.params.id);
+
+    if (Number.isFinite(id)) {
+      const row = db.prepare(`
+        SELECT anonymous_id, season_key
+        FROM duncle_drop_rates
+        WHERE id = ?
+      `).get(id);
+
+      if (row?.anonymous_id) {
+        const seasonKey = row.season_key || "total";
+
+        const tx = db.transaction(() => {
+          db.prepare(`
+            DELETE FROM duncle_weekly_rankings
+            WHERE anonymous_id = ?
+              AND season_key = ?
+          `).run(row.anonymous_id, seasonKey);
+
+          db.prepare(`
+            DELETE FROM duncle_drop_rates
+            WHERE id = ?
+          `).run(id);
+
+          normalizeDuncleSequence(db);
+        });
+
+        tx();
       }
     }
 
