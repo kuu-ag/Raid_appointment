@@ -29,7 +29,7 @@ const CONTENTS = [
   },
   {
     key: "apocalypse",
-    label: "안티엔바이-아포칼립스",
+    label: "아포칼립스 레기온",
     contentKeywords: ["아포칼립스"],
     clearKeywords: ["클리어", "토벌", "완료"],
   },
@@ -317,7 +317,6 @@ function renderHomeworkPage(summary) {
           <div class="homework-bar">
             <div class="homework-bar-fill" style="width:${Math.max(0, Math.min(100, Number(c.progressRate || 0)))}%"></div>
           </div>
-          <div class="homework-bottom">남은 캐릭터 ${esc(c.remainingCount)}개</div>
         </section>
       `;
     })
