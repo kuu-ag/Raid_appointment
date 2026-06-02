@@ -4061,6 +4061,8 @@ function renderOathStatsAdminPage(db, options = {}) {
     h1 { margin: 0 0 8px; font-size: 26px; }
     .desc { margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.6; }
     .nav a, .linkButton { display:inline-flex; color:#dbeafe; text-decoration:none; border:1px solid #334155; border-radius:10px; padding:8px 10px; background:#111827; font-weight:800; }
+    .dangerButton { display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(239,68,68,.55); border-radius:10px; padding:9px 12px; background:rgba(127,29,29,.72); color:#fee2e2; font-weight:900; cursor:pointer; }
+    .dangerButton:hover { background:rgba(185,28,28,.82); border-color:#f87171; }
     .notice { border:1px solid #854d0e; background:#1c1917; color:#fde68a; padding:12px 14px; border-radius:14px; margin:14px 0 18px; line-height:1.55; font-size:13px; }
     .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:end; margin-bottom:16px; border:1px solid #272b3a; background:#111827; border-radius:16px; padding:14px; }
     label { display:flex; flex-direction:column; gap:6px; color:#a1a1aa; font-size:12px; font-weight:800; }
@@ -4127,6 +4129,11 @@ function renderOathStatsAdminPage(db, options = {}) {
       <button type="submit">조회</button>
       <a class="linkButton" href="/${escapeHtml(adminPath)}/duncle/oath-stats?weekKey=${escapeHtml(currentWeekKey)}">이번 주 보기</a>
       <a class="linkButton" href="/${escapeHtml(adminPath)}/duncle/oath-stats?weekKey=all">전체 보기</a>
+    </form>
+
+    <form method="post" action="/${escapeHtml(adminPath)}/duncle/oath-stats/reset" style="margin: -4px 0 16px; display:flex; justify-content:flex-end;"
+      onsubmit="return confirm('서약 통계 조회 내역만 초기화할까요? 기존 던클리 평균 드랍률/랭킹 데이터는 유지됩니다.');">
+      <button class="dangerButton" type="submit">서약 통계 조회 내역 초기화</button>
     </form>
 
     <section class="stats">
@@ -4239,6 +4246,17 @@ function registerDuncleOathStatsFeature(app, db, options = {}) {
       weekKey: req.query.weekKey || req.query.week_key || "all",
       source: req.query.source || "all",
     }));
+  });
+
+  app.post(`/${adminPath}/duncle/oath-stats/reset`, (req, res) => {
+    try {
+      db.prepare("DELETE FROM duncle_oath_drop_logs").run();
+      db.prepare("DELETE FROM sqlite_sequence WHERE name='duncle_oath_drop_logs'").run();
+      return res.redirect(`/${adminPath}/duncle/oath-stats?weekKey=all&source=all`);
+    } catch (error) {
+      console.error("[Duncle Oath Stats Reset]", error);
+      return res.status(500).send("서약 통계 조회 내역 초기화 중 오류가 발생했습니다: " + String(error?.message || error));
+    }
   });
 
   console.log(`[Duncle] Oath item stats feature enabled. Admin: /${adminPath}/duncle/oath-stats`);
