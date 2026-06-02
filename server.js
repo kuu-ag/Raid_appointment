@@ -3536,9 +3536,727 @@ app.get("/health", (req, res) =>
 );
 
 // =====================
+// Duncle Oath Stats Feature - inline
+// =====================
+// 던클리 1.6.5+ 서버 패치 v3
+// 확장 프로그램이 전송한 /api/duncle/oath-drop-logs 값을 저장하고,
+// 비밀 관리자 페이지에서 "요일별로 어떤 서약이 가장 많이 나왔는지"와
+// "시간대별로 어떤 서약이 가장 많이 나왔는지"를 12개 서약 기준으로 확인합니다.
+const MAX_LOGS_PER_REQUEST = 3000;
+const WEEKDAY_LABELS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+
+const DUNCLE_OATH_ITEM_NAMES = [
+  "태동하는 울림의 무리 서약",
+  "찬란한 신념의 정화 서약",
+  "태초에 고동치는 마력 서약",
+  "근원에 닿는 자연 서약",
+  "초월하는 한계 서약",
+  "세계를 태우는 용투 서약",
+  "현실이 된 이상 속 황금 서약",
+  "태초로 인도하는 페어리 서약",
+  "태초에서 현신한 발키리 서약",
+  "태초의 어둠 속 그림자 서약",
+  "강림한 여우 서약",
+  "영원불변의 행운 서약"
+];
+
+function normalizeOathItemKey(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\s\[\]\(\){}:：,，.·\-_\'"“”‘’]/g, "")
+    .trim();
+}
+
+const DUNCLE_OATH_ITEM_KEYS = DUNCLE_OATH_ITEM_NAMES.map((name) => ({ name, key: normalizeOathItemKey(name) }));
+
+function normalizeKnownOathItemName(value) {
+  const key = normalizeOathItemKey(value);
+  if (!key) return "";
+  const exact = DUNCLE_OATH_ITEM_KEYS.find((row) => row.key === key);
+  if (exact) return exact.name;
+  const included = DUNCLE_OATH_ITEM_KEYS.find((row) => key.includes(row.key) || row.key.includes(key));
+  return included ? included.name : "";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function clampText(value, maxLength = 200) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function toInt(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.floor(n);
+}
+
+function getSource(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (text === "nexon") return "nexon";
+  if (text === "naver") return "naver";
+  return "unknown";
+}
+
+function nowKST() {
+  const d = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return d.toISOString().replace("T", " ").slice(0, 19);
+}
+
+function getCurrentWeekKeyKST() {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const day = kst.getUTCDay();
+  const hour = kst.getUTCHours();
+
+  let daysSinceThursday = (day - 4 + 7) % 7;
+  if (daysSinceThursday === 0 && hour < 10) daysSinceThursday = 7;
+
+  const start = new Date(kst.getTime() - daysSinceThursday * 24 * 60 * 60 * 1000);
+  start.setUTCHours(10, 0, 0, 0);
+  return start.toISOString().slice(0, 10);
+}
+
+function getWeekKey(value) {
+  const text = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  return getCurrentWeekKeyKST();
+}
+
+function isValidDateTimeText(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}[-.]\d{2}[-.]\d{2}[ T]\d{1,2}:\d{2}/.test(text);
+}
+
+function normalizeDroppedAt(value) {
+  const text = String(value || "").trim().replaceAll(".", "-");
+  if (!text) return "";
+  return text.replace("T", " ").slice(0, 19);
+}
+
+function normalizeWeekday(value) {
+  const n = toInt(value, -1);
+  return n >= 0 && n <= 6 ? n : -1;
+}
+
+function normalizeHour(value) {
+  const n = toInt(value, -1);
+  return n >= 0 && n <= 23 ? n : -1;
+}
+
+function setApiCors(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+}
+
+function initDuncleOathStatsTables(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS duncle_oath_drop_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      anonymous_id TEXT NOT NULL,
+      source TEXT DEFAULT 'unknown',
+      week_key TEXT NOT NULL,
+      log_id INTEGER DEFAULT 0,
+      item_name TEXT NOT NULL,
+      grade TEXT DEFAULT '',
+      content_name TEXT DEFAULT '',
+      dropped_at TEXT NOT NULL,
+      weekday INTEGER NOT NULL,
+      hour INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(anonymous_id, source, dropped_at, item_name, content_name)
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_duncle_oath_logs_anon_logid
+      ON duncle_oath_drop_logs(anonymous_id, source, log_id)
+      WHERE log_id IS NOT NULL AND log_id > 0;
+
+    CREATE INDEX IF NOT EXISTS idx_duncle_oath_logs_week ON duncle_oath_drop_logs(week_key);
+    CREATE INDEX IF NOT EXISTS idx_duncle_oath_logs_weekday ON duncle_oath_drop_logs(weekday);
+    CREATE INDEX IF NOT EXISTS idx_duncle_oath_logs_hour ON duncle_oath_drop_logs(hour);
+    CREATE INDEX IF NOT EXISTS idx_duncle_oath_logs_item ON duncle_oath_drop_logs(item_name);
+    CREATE INDEX IF NOT EXISTS idx_duncle_oath_logs_source ON duncle_oath_drop_logs(source);
+  `);
+}
+
+function sanitizeOathLog(raw, fallbackWeekKey) {
+  const itemName = normalizeKnownOathItemName(raw?.itemName || raw?.item_name);
+  const droppedAt = normalizeDroppedAt(raw?.droppedAt || raw?.dropped_at);
+  const weekday = normalizeWeekday(raw?.weekday);
+  const hour = normalizeHour(raw?.hour);
+
+  // 정확한 12종 서약명으로 판별되지 않는 값은 저장하지 않습니다.
+  // "이름 미확인 서약" 같은 fallback 데이터도 여기서 제외됩니다.
+  if (!itemName) return null;
+  if (!droppedAt || !isValidDateTimeText(droppedAt)) return null;
+  if (weekday < 0 || hour < 0) return null;
+
+  return {
+    logId: Math.max(0, toInt(raw?.logId || raw?.log_id, 0)),
+    itemName,
+    grade: clampText(raw?.grade, 40),
+    contentName: clampText(raw?.contentName || raw?.content_name, 120),
+    droppedAt,
+    weekday,
+    hour,
+    weekKey: getWeekKey(raw?.weekKey || raw?.week_key || fallbackWeekKey),
+  };
+}
+
+function saveOathDropLogs(db, { anonymousId, source, weekKey, logs }) {
+  const safeAnonymousId = clampText(anonymousId, 120);
+  const safeSource = getSource(source);
+  const safeWeekKey = getWeekKey(weekKey);
+  const now = nowKST();
+
+  if (!safeAnonymousId) {
+    return { ok: false, status: 400, message: "익명 식별자가 없습니다." };
+  }
+
+  const rawLogs = Array.isArray(logs) ? logs.slice(0, MAX_LOGS_PER_REQUEST) : [];
+  const sanitizedLogs = rawLogs.map((row) => sanitizeOathLog(row, safeWeekKey)).filter(Boolean);
+
+  if (!sanitizedLogs.length) {
+    return { ok: true, insertedCount: 0, receivedCount: rawLogs.length, validCount: 0, ignored: true };
+  }
+
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO duncle_oath_drop_logs (
+      anonymous_id, source, week_key, log_id, item_name, grade, content_name,
+      dropped_at, weekday, hour, created_at, updated_at
+    )
+    VALUES (
+      @anonymous_id, @source, @week_key, @log_id, @item_name, @grade, @content_name,
+      @dropped_at, @weekday, @hour, @now, @now
+    )
+  `);
+
+  let insertedCount = 0;
+  const tx = db.transaction(() => {
+    for (const row of sanitizedLogs) {
+      const result = insertStmt.run({
+        anonymous_id: safeAnonymousId,
+        source: safeSource,
+        week_key: row.weekKey,
+        log_id: row.logId,
+        item_name: row.itemName,
+        grade: row.grade,
+        content_name: row.contentName,
+        dropped_at: row.droppedAt,
+        weekday: row.weekday,
+        hour: row.hour,
+        now,
+      });
+      insertedCount += Number(result?.changes || 0);
+    }
+  });
+
+  tx();
+
+  return {
+    ok: true,
+    insertedCount,
+    receivedCount: rawLogs.length,
+    validCount: sanitizedLogs.length,
+    weekKey: safeWeekKey,
+  };
+}
+
+function getFilterWhere(filter = {}) {
+  const where = [];
+  const params = {};
+
+  if (filter.weekKey && filter.weekKey !== "all") {
+    where.push("week_key = @weekKey");
+    params.weekKey = getWeekKey(filter.weekKey);
+  }
+
+  if (filter.source && ["nexon", "naver", "unknown"].includes(filter.source)) {
+    where.push("source = @source");
+    params.source = filter.source;
+  }
+
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
+function getTopRows(db, sql, params = {}) {
+  return db.prepare(sql).all(params).map((row) => ({ ...row, count: Number(row.count || 0) }));
+}
+
+function makeItemNames(rows, max = 30) {
+  const present = new Set((Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeKnownOathItemName(row.itemName || row.item_name || ""))
+    .filter(Boolean));
+  return DUNCLE_OATH_ITEM_NAMES.filter((name) => present.has(name)).slice(0, max);
+}
+
+function buildAxisItemStats({ axisValues, axisLabel, itemNames, pairRows }) {
+  const byAxis = new Map();
+
+  for (const axis of axisValues) {
+    byAxis.set(axis.value, {
+      [axisLabel]: axis.value,
+      label: axis.label,
+      total: 0,
+      topItem: "",
+      topCount: 0,
+      topItems: [],
+      counts: Object.fromEntries(itemNames.map((name) => [name, 0])),
+    });
+  }
+
+  for (const row of pairRows) {
+    const axisValue = Number(row[axisLabel]);
+    const itemName = String(row.itemName || row.item_name || "").trim();
+    const count = Number(row.count || 0);
+    if (!byAxis.has(axisValue) || !itemName) continue;
+
+    const bucket = byAxis.get(axisValue);
+    bucket.total += count;
+    bucket.counts[itemName] = (bucket.counts[itemName] || 0) + count;
+  }
+
+  for (const bucket of byAxis.values()) {
+    const topItems = Object.entries(bucket.counts)
+      .map(([itemName, count]) => ({ itemName, count: Number(count || 0) }))
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count || a.itemName.localeCompare(b.itemName, "ko"));
+
+    bucket.topItems = topItems;
+    bucket.topItem = topItems[0]?.itemName || "-";
+    bucket.topCount = Number(topItems[0]?.count || 0);
+  }
+
+  return Array.from(byAxis.values());
+}
+
+function getOathStats(db, filter = {}) {
+  const { clause, params } = getFilterWhere(filter);
+
+  const total = db.prepare(`
+    SELECT
+      COUNT(*) AS total_count,
+      COUNT(DISTINCT anonymous_id) AS user_count,
+      SUM(CASE WHEN source = 'nexon' THEN 1 ELSE 0 END) AS nexon_count,
+      SUM(CASE WHEN source = 'naver' THEN 1 ELSE 0 END) AS naver_count,
+      MAX(updated_at) AS last_updated_at
+    FROM duncle_oath_drop_logs
+    ${clause}
+  `).get(params);
+
+  const rawItemRows = getTopRows(db, `
+    SELECT item_name AS itemName, COUNT(*) AS count
+    FROM duncle_oath_drop_logs
+    ${clause}
+    GROUP BY item_name
+    ORDER BY count DESC, item_name ASC
+  `, params);
+
+  const mergedItemCounts = new Map();
+  for (const row of rawItemRows) {
+    const itemName = normalizeKnownOathItemName(row.itemName);
+    if (!itemName) continue;
+    mergedItemCounts.set(itemName, (mergedItemCounts.get(itemName) || 0) + Number(row.count || 0));
+  }
+  const itemRows = Array.from(mergedItemCounts.entries())
+    .map(([itemName, count]) => ({ itemName, count }))
+    .sort((a, b) => b.count - a.count || DUNCLE_OATH_ITEM_NAMES.indexOf(a.itemName) - DUNCLE_OATH_ITEM_NAMES.indexOf(b.itemName));
+
+  const itemNames = makeItemNames(itemRows, 30);
+
+  const weekdayPairRowsRaw = getTopRows(db, `
+    SELECT weekday, item_name AS itemName, COUNT(*) AS count
+    FROM duncle_oath_drop_logs
+    ${clause}
+    GROUP BY weekday, item_name
+    ORDER BY weekday ASC, count DESC, item_name ASC
+  `, params);
+
+  const hourPairRowsRaw = getTopRows(db, `
+    SELECT hour, item_name AS itemName, COUNT(*) AS count
+    FROM duncle_oath_drop_logs
+    ${clause}
+    GROUP BY hour, item_name
+    ORDER BY hour ASC, count DESC, item_name ASC
+  `, params);
+
+  const normalizePairRows = (rows) => {
+    const map = new Map();
+    for (const row of rows) {
+      const itemName = normalizeKnownOathItemName(row.itemName);
+      if (!itemName) continue;
+      const axisKey = row.weekday !== undefined ? `weekday:${Number(row.weekday)}` : `hour:${Number(row.hour)}`;
+      const key = `${axisKey}::${itemName}`;
+      const prev = map.get(key) || { ...row, itemName, count: 0 };
+      prev.count += Number(row.count || 0);
+      map.set(key, prev);
+    }
+    return Array.from(map.values());
+  };
+
+  const weekdayPairRows = normalizePairRows(weekdayPairRowsRaw);
+  const hourPairRows = normalizePairRows(hourPairRowsRaw);
+
+  const weekdayItemLeaders = buildAxisItemStats({
+    axisValues: WEEKDAY_LABELS.map((label, value) => ({ value, label })),
+    axisLabel: "weekday",
+    itemNames,
+    pairRows: weekdayPairRows,
+  });
+
+  const hourItemLeaders = buildAxisItemStats({
+    axisValues: Array.from({ length: 24 }, (_, value) => ({ value, label: `${String(value).padStart(2, "0")}시` })),
+    axisLabel: "hour",
+    itemNames,
+    pairRows: hourPairRows,
+  });
+
+  const recent = db.prepare(`
+    SELECT item_name, grade, content_name, dropped_at, weekday, hour, source, anonymous_id
+    FROM duncle_oath_drop_logs
+    ${clause}
+    ORDER BY datetime(dropped_at) DESC, id DESC
+    LIMIT 200
+  `).all(params)
+    .map((row) => ({
+      itemName: normalizeKnownOathItemName(row.item_name),
+      grade: row.grade,
+      contentName: row.content_name,
+      droppedAt: row.dropped_at,
+      weekday: Number(row.weekday),
+      hour: Number(row.hour),
+      source: row.source,
+      anonymousId: row.anonymous_id,
+    }))
+    .filter((row) => row.itemName)
+    .slice(0, 100);
+
+  return {
+    totalCount: itemRows.reduce((sum, row) => sum + Number(row.count || 0), 0),
+    userCount: Number(total?.user_count || 0),
+    nexonCount: Number(total?.nexon_count || 0),
+    naverCount: Number(total?.naver_count || 0),
+    lastUpdatedAt: total?.last_updated_at || "",
+    itemNames,
+    items: itemRows,
+    weekdayItemLeaders,
+    hourItemLeaders,
+    recent,
+  };
+}
+
+function renderTopItems(row, limit = 3) {
+  const topItems = Array.isArray(row.topItems) ? row.topItems.slice(0, limit) : [];
+  if (!topItems.length) return "-";
+  return topItems.map((item, index) => `${index + 1}. ${escapeHtml(item.itemName)} ${Number(item.count || 0).toLocaleString()}개`).join("<br>");
+}
+
+function renderLeaderTable(rows, axisHeader) {
+  const body = rows.map((row) => `
+    <tr>
+      <td class="axis">${escapeHtml(row.label)}</td>
+      <td class="leader">${escapeHtml(row.topItem || "-")}</td>
+      <td class="num">${Number(row.topCount || 0).toLocaleString()}개</td>
+      <td class="num">${Number(row.total || 0).toLocaleString()}개</td>
+      <td>${renderTopItems(row, 3)}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <table class="compactTable">
+      <thead>
+        <tr>
+          <th>${escapeHtml(axisHeader)}</th>
+          <th>가장 많이 집계된 서약</th>
+          <th>해당 서약 수</th>
+          <th>전체 서약 수</th>
+          <th>TOP 3</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
+function renderMatrixTable(rows, itemNames, axisHeader) {
+  if (!itemNames.length) {
+    return `<div class="emptyBox">집계된 서약명이 없습니다.</div>`;
+  }
+
+  const headItems = itemNames.map((name) => `<th class="itemHead">${escapeHtml(name)}</th>`).join("");
+  const body = rows.map((row) => {
+    const max = Math.max(0, ...itemNames.map((name) => Number(row.counts?.[name] || 0)));
+    const cells = itemNames.map((name) => {
+      const count = Number(row.counts?.[name] || 0);
+      const cls = count > 0 && count === max ? " class=\"maxCell\"" : "";
+      return `<td${cls}>${count ? count.toLocaleString() : "-"}</td>`;
+    }).join("");
+    return `<tr><td class="axis">${escapeHtml(row.label)}</td><td class="num totalCell">${Number(row.total || 0).toLocaleString()}</td>${cells}</tr>`;
+  }).join("");
+
+  return `
+    <table class="matrixTable">
+      <thead>
+        <tr>
+          <th>${escapeHtml(axisHeader)}</th>
+          <th>전체</th>
+          ${headItems}
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
+function maskAnonymousId(value) {
+  const text = String(value || "");
+  if (text.length <= 12) return text;
+  return `${text.slice(0, 8)}...${text.slice(-4)}`;
+}
+
+function renderOathStatsAdminPage(db, options = {}) {
+  const adminPath = options.adminPath || "duncle_hidden";
+  const requestedWeekKey = String(options.weekKey || "all");
+  const requestedSource = String(options.source || "all");
+  const weekKey = requestedWeekKey === "all" ? "all" : getWeekKey(requestedWeekKey);
+  const source = ["nexon", "naver", "unknown"].includes(requestedSource) ? requestedSource : "all";
+
+  const stats = getOathStats(db, { weekKey, source });
+  const currentWeekKey = getCurrentWeekKeyKST();
+  const itemCountLabel = stats.itemNames.length ? `${stats.itemNames.length}종` : "-";
+
+  const recentRows = stats.recent.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.droppedAt)}</td>
+      <td>${escapeHtml(WEEKDAY_LABELS[row.weekday] || "-")}</td>
+      <td>${String(row.hour).padStart(2, "0")}시</td>
+      <td>${escapeHtml(row.itemName)}</td>
+      <td>${escapeHtml(row.grade || "-")}</td>
+      <td>${escapeHtml(row.contentName || "-")}</td>
+      <td>${escapeHtml(row.source)}</td>
+      <td>${escapeHtml(maskAnonymousId(row.anonymousId))}</td>
+    </tr>
+  `).join("");
+
+  const detectedItems = stats.itemNames.map((name) => `<span>${escapeHtml(name)}</span>`).join("") || `<span>집계 전</span>`;
+
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>던클리 서약별 요일/시간 통계</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #080b12; color: #f4f4f5; font-family: Arial, "Noto Sans KR", sans-serif; }
+    .wrap { max-width: 1480px; margin: 0 auto; padding: 24px; }
+    .top { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:16px; }
+    h1 { margin: 0 0 8px; font-size: 26px; }
+    .desc { margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.6; }
+    .nav a, .linkButton { display:inline-flex; color:#dbeafe; text-decoration:none; border:1px solid #334155; border-radius:10px; padding:8px 10px; background:#111827; font-weight:800; }
+    .notice { border:1px solid #854d0e; background:#1c1917; color:#fde68a; padding:12px 14px; border-radius:14px; margin:14px 0 18px; line-height:1.55; font-size:13px; }
+    .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:end; margin-bottom:16px; border:1px solid #272b3a; background:#111827; border-radius:16px; padding:14px; }
+    label { display:flex; flex-direction:column; gap:6px; color:#a1a1aa; font-size:12px; font-weight:800; }
+    input, select { min-width:160px; border:1px solid #334155; background:#0f172a; color:#fff; border-radius:9px; padding:9px 10px; }
+    button { border:0; border-radius:9px; padding:10px 12px; background:#4f46e5; color:#fff; font-weight:900; cursor:pointer; }
+    .stats { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-bottom:16px; }
+    .stat { border:1px solid #272b3a; border-radius:14px; padding:14px; background:#111827; }
+    .stat span { display:block; color:#a1a1aa; font-size:12px; margin-bottom:6px; }
+    .stat strong { display:block; font-size:20px; }
+    .card { border:1px solid #272b3a; border-radius:16px; background:#111827; padding:16px; overflow:hidden; margin-bottom:14px; }
+    .card h2 { margin:0 0 6px; font-size:18px; }
+    .cardDesc { margin:0 0 12px; color:#a1a1aa; font-size:13px; line-height:1.5; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .tableWrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { border-bottom:1px solid #272b3a; padding:10px 8px; text-align:left; vertical-align:middle; }
+    th { color:#a1a1aa; font-size:12px; white-space:nowrap; }
+    td.axis { font-weight:900; color:#bfdbfe; white-space:nowrap; }
+    td.leader { font-weight:900; color:#fef3c7; }
+    td.num { text-align:right; white-space:nowrap; }
+    .compactTable { min-width: 620px; }
+    .matrixTable { min-width: 1180px; }
+    .matrixTable td, .matrixTable th { text-align:center; }
+    .matrixTable td.axis, .matrixTable th:first-child { text-align:left; position:sticky; left:0; background:#111827; z-index:1; }
+    .matrixTable .itemHead { min-width: 120px; white-space:normal; line-height:1.35; }
+    .maxCell { background:#312e81; color:#fff; font-weight:900; border-left:1px solid #6366f1; border-right:1px solid #6366f1; }
+    .totalCell { color:#e5e7eb; font-weight:900; }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .chips span { display:inline-flex; border:1px solid #334155; background:#0f172a; color:#dbeafe; border-radius:999px; padding:6px 9px; font-size:12px; }
+    .emptyBox { border:1px dashed #334155; color:#9ca3af; border-radius:12px; padding:18px; text-align:center; }
+    @media (max-width:1000px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } .grid { grid-template-columns:1fr; } .top { flex-direction:column; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="top">
+      <div>
+        <h1>던클리 서약별 요일/시간 통계</h1>
+        <p class="desc">
+          12개 서약을 기준으로 <b>무슨 요일에 어떤 서약이 가장 많이 집계됐는지</b>, <b>어떤 시간대에 어떤 서약이 가장 많이 집계됐는지</b> 확인하는 관리자 페이지입니다.<br>
+          현재 필터: ${weekKey === "all" ? "전체 기간" : escapeHtml(weekKey)} / ${source === "all" ? "전체 소스" : escapeHtml(source)}
+        </p>
+      </div>
+      <div class="nav"><a href="/${escapeHtml(adminPath)}/duncle">← 평균 관리자</a></div>
+    </div>
+
+    <div class="notice">
+      이 통계는 던클리에 등록된 유저의 타임라인 기록을 기반으로 한 단순 집계입니다.
+      실제 게임 내 드랍 확률이 요일이나 시간대에 따라 달라진다는 의미가 아닙니다.
+    </div>
+
+    <form class="filters" method="get" action="/${escapeHtml(adminPath)}/duncle/oath-stats">
+      <label>주차 필터
+        <input name="weekKey" value="${weekKey === "all" ? "all" : escapeHtml(weekKey)}" placeholder="all 또는 YYYY-MM-DD" />
+      </label>
+      <label>소스
+        <select name="source">
+          <option value="all" ${source === "all" ? "selected" : ""}>전체</option>
+          <option value="nexon" ${source === "nexon" ? "selected" : ""}>넥슨</option>
+          <option value="naver" ${source === "naver" ? "selected" : ""}>네이버</option>
+          <option value="unknown" ${source === "unknown" ? "selected" : ""}>unknown</option>
+        </select>
+      </label>
+      <button type="submit">조회</button>
+      <a class="linkButton" href="/${escapeHtml(adminPath)}/duncle/oath-stats?weekKey=${escapeHtml(currentWeekKey)}">이번 주 보기</a>
+      <a class="linkButton" href="/${escapeHtml(adminPath)}/duncle/oath-stats?weekKey=all">전체 보기</a>
+    </form>
+
+    <section class="stats">
+      <div class="stat"><span>서약 로그</span><strong>${stats.totalCount.toLocaleString()}개</strong></div>
+      <div class="stat"><span>참여 유저</span><strong>${stats.userCount.toLocaleString()}명</strong></div>
+      <div class="stat"><span>감지된 서약 종류</span><strong>${escapeHtml(itemCountLabel)}</strong></div>
+      <div class="stat"><span>넥슨 / 네이버</span><strong>${stats.nexonCount.toLocaleString()} / ${stats.naverCount.toLocaleString()}</strong></div>
+      <div class="stat"><span>최근 갱신</span><strong>${escapeHtml(stats.lastUpdatedAt || "-")}</strong></div>
+    </section>
+
+    <section class="card">
+      <h2>감지된 서약 목록</h2>
+      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 11종이 표시됩니다.</p>
+      <div class="chips">${detectedItems}</div>
+    </section>
+
+    <section class="grid">
+      <div class="card tableWrap">
+        <h2>요일별 가장 많이 집계된 서약</h2>
+        <p class="cardDesc">각 요일마다 12개 서약 중 가장 많이 나온 서약을 보여줍니다.</p>
+        ${renderLeaderTable(stats.weekdayItemLeaders, "요일")}
+      </div>
+      <div class="card tableWrap">
+        <h2>시간대별 가장 많이 집계된 서약</h2>
+        <p class="cardDesc">00시부터 23시까지, 각 시간대마다 가장 많이 나온 서약을 보여줍니다.</p>
+        ${renderLeaderTable(stats.hourItemLeaders, "시간대")}
+      </div>
+    </section>
+
+    <section class="card tableWrap">
+      <h2>요일 × 서약 상세표</h2>
+      <p class="cardDesc">행마다 가장 많이 나온 서약은 강조 표시됩니다.</p>
+      ${renderMatrixTable(stats.weekdayItemLeaders, stats.itemNames, "요일")}
+    </section>
+
+    <section class="card tableWrap">
+      <h2>시간대 × 서약 상세표</h2>
+      <p class="cardDesc">행마다 가장 많이 나온 서약은 강조 표시됩니다.</p>
+      ${renderMatrixTable(stats.hourItemLeaders, stats.itemNames, "시간대")}
+    </section>
+
+    <section class="card tableWrap">
+      <h2>최근 서약 로그</h2>
+      <table style="min-width:1050px">
+        <thead>
+          <tr>
+            <th>획득 시간</th>
+            <th>요일</th>
+            <th>시간대</th>
+            <th>서약명</th>
+            <th>등급</th>
+            <th>콘텐츠</th>
+            <th>소스</th>
+            <th>익명 ID</th>
+          </tr>
+        </thead>
+        <tbody>${recentRows || `<tr><td colspan="8">등록된 서약 로그가 없습니다.</td></tr>`}</tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function registerDuncleOathStatsFeature(app, db, options = {}) {
+  initDuncleOathStatsTables(db);
+
+  const adminPath = clampText(options.adminPath || process.env.DUNCLE_ADMIN_PATH || "duncle_hidden", 120);
+
+  app.options("/api/duncle/oath-drop-logs", (req, res) => {
+    setApiCors(req, res);
+    res.status(204).end();
+  });
+
+  app.get("/api/duncle/oath-stats", (req, res) => {
+    setApiCors(req, res);
+    const weekKeyRaw = String(req.query.weekKey || req.query.week_key || "all");
+    const sourceRaw = String(req.query.source || "all");
+    const weekKey = weekKeyRaw === "all" ? "all" : getWeekKey(weekKeyRaw);
+    const source = ["nexon", "naver", "unknown"].includes(sourceRaw) ? sourceRaw : "all";
+    res.json({ ok: true, weekKey, source, stats: getOathStats(db, { weekKey, source }) });
+  });
+
+  app.post("/api/duncle/oath-drop-logs", (req, res) => {
+    setApiCors(req, res);
+
+    try {
+      const result = saveOathDropLogs(db, {
+        anonymousId: req.body?.anonymousId || req.body?.anonymous_id,
+        source: req.body?.source,
+        weekKey: req.body?.weekKey || req.body?.week_key,
+        logs: req.body?.logs,
+      });
+
+      if (!result.ok) return res.status(result.status || 400).json(result);
+
+      return res.json({
+        ...result,
+        stats: getOathStats(db, { weekKey: result.weekKey || getCurrentWeekKeyKST() }),
+      });
+    } catch (error) {
+      console.error("[Duncle Oath Stats API]", error);
+      return res.status(500).json({ ok: false, message: "서약 드랍 로그 저장 중 서버 오류가 발생했습니다." });
+    }
+  });
+
+  app.get(`/${adminPath}/duncle/oath-stats`, (req, res) => {
+    res.send(renderOathStatsAdminPage(db, {
+      adminPath,
+      weekKey: req.query.weekKey || req.query.week_key || "all",
+      source: req.query.source || "all",
+    }));
+  });
+
+  console.log(`[Duncle] Oath item stats feature enabled. Admin: /${adminPath}/duncle/oath-stats`);
+}
+
+
+
+// =====================
 // Start
 // =====================
 seedDefaultRaids();
+
+// =====================
+// Duncle Oath Stats Feature
+// =====================
+registerDuncleOathStatsFeature(app, db, {
+  adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
+});
 
 // =====================
 // Homework Feature
