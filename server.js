@@ -224,6 +224,102 @@ ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
+
+// =====================
+// Duncle Admin Shortcut
+// =====================
+// 던클리 평균 드랍률 관리자 페이지에서 서약별 통계 페이지로 바로 이동할 수 있는 버튼을 주입합니다.
+// 기존 duncleDropRateFeature.js 파일을 수정하지 않고 server.js 한 파일만 교체해도 동작하도록 res.send를 감싸는 방식입니다.
+const DUNCLE_ADMIN_PATH_FOR_SHORTCUT = (
+  process.env.DUNCLE_ADMIN_PATH || "duncle_hidden"
+).replace(/^\/+|\/+$/g, "");
+
+function injectDuncleOathStatsShortcut(html) {
+  const raw = String(html || "");
+  if (!raw || raw.includes('data-duncle-oath-stats-shortcut="1"')) return raw;
+
+  const oathStatsHref = `/${DUNCLE_ADMIN_PATH_FOR_SHORTCUT}/duncle/oath-stats?weekKey=all&source=all`;
+  const shortcutLink = `<a data-duncle-oath-stats-shortcut="1" href="${oathStatsHref}" style="
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:42px;
+    padding:10px 16px;
+    border-radius:10px;
+    background:#111827;
+    border:1px solid #334155;
+    color:#e5e7eb;
+    font-size:14px;
+    font-weight:900;
+    line-height:1;
+    text-decoration:none;
+    white-space:nowrap;
+    box-shadow:none;
+  ">서약별 통계 →</a>`;
+
+  const titleRow = `<div data-duncle-oath-stats-shortcut-row="1" style="
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    margin:0 0 8px;
+    flex-wrap:wrap;
+  ">
+    <h1 style="margin:0;">던클리 평균 드랍율 관리자</h1>
+    ${shortcutLink}
+  </div>`;
+
+  // 가장 자연스러운 위치: 평균 관리자 제목과 같은 줄 우측에 배치합니다.
+  const h1Exact = /<h1[^>]*>\s*던클리 평균 드랍율 관리자\s*<\/h1>/i;
+  if (h1Exact.test(raw)) {
+    return raw.replace(h1Exact, titleRow);
+  }
+
+  // h1 태그가 아니거나 제목 주변 마크업이 바뀐 경우, 제목 텍스트 직전에 우측 정렬 버튼만 추가합니다.
+  const titleText = "던클리 평균 드랍율 관리자";
+  const titleIndex = raw.indexOf(titleText);
+  if (titleIndex >= 0) {
+    const buttonRow = `<div data-duncle-oath-stats-shortcut-row="1" style="display:flex;justify-content:flex-end;margin:0 0 12px;">${shortcutLink}</div>`;
+    return raw.slice(0, titleIndex) + buttonRow + raw.slice(titleIndex);
+  }
+
+  // 최후 fallback: body 바로 아래에 붙이되, sticky/fixed가 아닌 일반 우측 정렬 행으로만 표시합니다.
+  const fallbackRow = `<div data-duncle-oath-stats-shortcut-row="1" style="display:flex;justify-content:flex-end;max-width:1280px;margin:0 auto 14px;padding:0 8px;">${shortcutLink}</div>`;
+  const bodyOpenMatch = raw.match(/<body[^>]*>/i);
+  if (bodyOpenMatch && bodyOpenMatch.index != null) {
+    const insertAt = bodyOpenMatch.index + bodyOpenMatch[0].length;
+    return raw.slice(0, insertAt) + fallbackRow + raw.slice(insertAt);
+  }
+
+  return fallbackRow + raw;
+}
+
+app.use((req, res, next) => {
+  const targetPath = `/${DUNCLE_ADMIN_PATH_FOR_SHORTCUT}/duncle`;
+  const reqPath = String(req.path || "").replace(/\/+$/g, "");
+
+  if (req.method !== "GET" || reqPath !== targetPath) {
+    return next();
+  }
+
+  const originalSend = res.send.bind(res);
+  res.send = (body) => {
+    try {
+      if (typeof body === "string") {
+        return originalSend(injectDuncleOathStatsShortcut(body));
+      }
+      if (Buffer.isBuffer(body)) {
+        return originalSend(Buffer.from(injectDuncleOathStatsShortcut(body.toString("utf8")), "utf8"));
+      }
+    } catch (err) {
+      console.error("[Duncle] Failed to inject oath stats shortcut:", err);
+    }
+    return originalSend(body);
+  };
+
+  return next();
+});
+
 registerDuncleDropRateFeature(app, db, {
   adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
 });
