@@ -224,101 +224,6 @@ ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
-// =====================
-// Duncle Admin Shortcut
-// =====================
-// 던클리 평균 드랍률 관리자 페이지에서 서약별 통계 페이지로 바로 이동할 수 있는 버튼을 주입합니다.
-// 기존 duncleDropRateFeature.js 파일을 수정하지 않고 server.js 한 파일만 교체해도 동작하도록 res.send를 감싸는 방식입니다.
-const DUNCLE_ADMIN_PATH_FOR_SHORTCUT = (
-  process.env.DUNCLE_ADMIN_PATH || "duncle_hidden"
-).replace(/^\/+|\/+$/g, "");
-
-function injectDuncleOathStatsShortcut(html) {
-  const raw = String(html || "");
-  if (!raw || raw.includes('data-duncle-oath-stats-shortcut="1"')) return raw;
-
-  const oathStatsHref = `/${DUNCLE_ADMIN_PATH_FOR_SHORTCUT}/duncle/oath-stats?weekKey=all&source=all`;
-  const shortcutLink = `<a data-duncle-oath-stats-shortcut="1" href="${oathStatsHref}" style="
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    min-height:42px;
-    padding:10px 16px;
-    border-radius:10px;
-    background:#111827;
-    border:1px solid #334155;
-    color:#e5e7eb;
-    font-size:14px;
-    font-weight:900;
-    line-height:1;
-    text-decoration:none;
-    white-space:nowrap;
-    box-shadow:none;
-  ">서약별 통계 →</a>`;
-
-  const titleRow = `<div data-duncle-oath-stats-shortcut-row="1" style="
-    display:flex;
-    align-items:flex-start;
-    justify-content:space-between;
-    gap:16px;
-    margin:0 0 8px;
-    flex-wrap:wrap;
-  ">
-    <h1 style="margin:0;">던클리 평균 드랍율 관리자</h1>
-    ${shortcutLink}
-  </div>`;
-
-  // 가장 자연스러운 위치: 평균 관리자 제목과 같은 줄 우측에 배치합니다.
-  const h1Exact = /<h1[^>]*>\s*던클리 평균 드랍율 관리자\s*<\/h1>/i;
-  if (h1Exact.test(raw)) {
-    return raw.replace(h1Exact, titleRow);
-  }
-
-  // h1 태그가 아니거나 제목 주변 마크업이 바뀐 경우, 제목 텍스트 직전에 우측 정렬 버튼만 추가합니다.
-  const titleText = "던클리 평균 드랍율 관리자";
-  const titleIndex = raw.indexOf(titleText);
-  if (titleIndex >= 0) {
-    const buttonRow = `<div data-duncle-oath-stats-shortcut-row="1" style="display:flex;justify-content:flex-end;margin:0 0 12px;">${shortcutLink}</div>`;
-    return raw.slice(0, titleIndex) + buttonRow + raw.slice(titleIndex);
-  }
-
-  // 최후 fallback: body 바로 아래에 붙이되, sticky/fixed가 아닌 일반 우측 정렬 행으로만 표시합니다.
-  const fallbackRow = `<div data-duncle-oath-stats-shortcut-row="1" style="display:flex;justify-content:flex-end;max-width:1280px;margin:0 auto 14px;padding:0 8px;">${shortcutLink}</div>`;
-  const bodyOpenMatch = raw.match(/<body[^>]*>/i);
-  if (bodyOpenMatch && bodyOpenMatch.index != null) {
-    const insertAt = bodyOpenMatch.index + bodyOpenMatch[0].length;
-    return raw.slice(0, insertAt) + fallbackRow + raw.slice(insertAt);
-  }
-
-  return fallbackRow + raw;
-}
-
-app.use((req, res, next) => {
-  const targetPath = `/${DUNCLE_ADMIN_PATH_FOR_SHORTCUT}/duncle`;
-  const reqPath = String(req.path || "").replace(/\/+$/g, "");
-
-  if (req.method !== "GET" || reqPath !== targetPath) {
-    return next();
-  }
-
-  const originalSend = res.send.bind(res);
-  res.send = (body) => {
-    try {
-      if (typeof body === "string") {
-        return originalSend(injectDuncleOathStatsShortcut(body));
-      }
-      if (Buffer.isBuffer(body)) {
-        return originalSend(Buffer.from(injectDuncleOathStatsShortcut(body.toString("utf8")), "utf8"));
-      }
-    } catch (err) {
-      console.error("[Duncle] Failed to inject oath stats shortcut:", err);
-    }
-    return originalSend(body);
-  };
-
-  return next();
-});
-
 registerDuncleDropRateFeature(app, db, {
   adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
 });
@@ -4156,8 +4061,6 @@ function renderOathStatsAdminPage(db, options = {}) {
     h1 { margin: 0 0 8px; font-size: 26px; }
     .desc { margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.6; }
     .nav a, .linkButton { display:inline-flex; color:#dbeafe; text-decoration:none; border:1px solid #334155; border-radius:10px; padding:8px 10px; background:#111827; font-weight:800; }
-    .dangerButton { display:inline-flex; align-items:center; justify-content:center; border:1px solid rgba(239,68,68,.55); border-radius:10px; padding:9px 12px; background:rgba(127,29,29,.72); color:#fee2e2; font-weight:900; cursor:pointer; }
-    .dangerButton:hover { background:rgba(185,28,28,.82); border-color:#f87171; }
     .notice { border:1px solid #854d0e; background:#1c1917; color:#fde68a; padding:12px 14px; border-radius:14px; margin:14px 0 18px; line-height:1.55; font-size:13px; }
     .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:end; margin-bottom:16px; border:1px solid #272b3a; background:#111827; border-radius:16px; padding:14px; }
     label { display:flex; flex-direction:column; gap:6px; color:#a1a1aa; font-size:12px; font-weight:800; }
@@ -4226,11 +4129,6 @@ function renderOathStatsAdminPage(db, options = {}) {
       <a class="linkButton" href="/${escapeHtml(adminPath)}/duncle/oath-stats?weekKey=all">전체 보기</a>
     </form>
 
-    <form method="post" action="/${escapeHtml(adminPath)}/duncle/oath-stats/reset" style="margin: -4px 0 16px; display:flex; justify-content:flex-end;"
-      onsubmit="return confirm('서약 통계 조회 내역만 초기화할까요? 기존 던클리 평균 드랍률/랭킹 데이터는 유지됩니다.');">
-      <button class="dangerButton" type="submit">서약 통계 조회 내역 초기화</button>
-    </form>
-
     <section class="stats">
       <div class="stat"><span>서약 로그</span><strong>${stats.totalCount.toLocaleString()}개</strong></div>
       <div class="stat"><span>참여 유저</span><strong>${stats.userCount.toLocaleString()}명</strong></div>
@@ -4241,7 +4139,7 @@ function renderOathStatsAdminPage(db, options = {}) {
 
     <section class="card">
       <h2>감지된 서약 목록</h2>
-      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 11종이 표시됩니다.</p>
+      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 12종이 표시됩니다.</p>
       <div class="chips">${detectedItems}</div>
     </section>
 
@@ -4341,17 +4239,6 @@ function registerDuncleOathStatsFeature(app, db, options = {}) {
       weekKey: req.query.weekKey || req.query.week_key || "all",
       source: req.query.source || "all",
     }));
-  });
-
-  app.post(`/${adminPath}/duncle/oath-stats/reset`, (req, res) => {
-    try {
-      db.prepare("DELETE FROM duncle_oath_drop_logs").run();
-      db.prepare("DELETE FROM sqlite_sequence WHERE name='duncle_oath_drop_logs'").run();
-      return res.redirect(`/${adminPath}/duncle/oath-stats?weekKey=all&source=all`);
-    } catch (error) {
-      console.error("[Duncle Oath Stats Reset]", error);
-      return res.status(500).send("서약 통계 조회 내역 초기화 중 오류가 발생했습니다: " + String(error?.message || error));
-    }
   });
 
   console.log(`[Duncle] Oath item stats feature enabled. Admin: /${adminPath}/duncle/oath-stats`);
