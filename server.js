@@ -369,7 +369,7 @@ function cleanupCompletedNormalApplications(raidKey, dateKst) {
 
 function isPlaceholderLineupName(name) {
   const v = String(name || "").trim();
-  return !v || v === "선착순" || v === "닉네임" || v === "비활성" || v === "-";
+  return !v || v === "공대 신청" || v === "닉네임" || v === "비활성" || v === "-";
 }
 
 function findApplicationIdForManualSlot(raidKey, dateKst, nickname, role, usedByAppRole = new Map()) {
@@ -952,7 +952,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
     .slotInput{ border:1px solid rgba(71,85,105,.95); }
     .slotInput[disabled]{ opacity:.45; cursor:not-allowed; }
 
-    /* 일반 공대 편성표 - 관리자 화면 빈 슬롯 '선착순' 글자 초록색 */
+    /* 일반 공대 편성표 - 관리자 화면 빈 슬롯 '공대 신청' 글자 초록색 */
     .partyCard .slotInput::placeholder{
       color:#22c55e !important;
       opacity:1 !important;
@@ -2025,9 +2025,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="공대 신청"/>`;
       } else {
-        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">공대 신청</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
@@ -2037,9 +2037,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="공대 신청"/>`;
       } else {
-        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">공대 신청</div>`;
       }
     }
     html += `</div></div></div>`;
