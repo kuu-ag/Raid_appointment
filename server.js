@@ -380,7 +380,10 @@ function esc(v) {
 
 function getAdSensePublisherId() {
   if (!GOOGLE_ADSENSE_CLIENT) return "";
-  return GOOGLE_ADSENSE_CLIENT.replace(/^ca-/, "");
+  const raw = GOOGLE_ADSENSE_CLIENT.trim();
+  if (raw.startsWith("ca-pub-")) return raw.replace(/^ca-pub-/, "pub-");
+  if (raw.startsWith("pub-")) return raw;
+  return raw;
 }
 
 function getRaidOptions(includeInactive = false) {
@@ -1664,12 +1667,12 @@ app.get("/ads.txt", (req, res) => {
   res.type("text/plain; charset=utf-8");
 
   if (!publisherId) {
-    return res.send("# GOOGLE_ADSENSE_CLIENT 환경변수를 설정하면 ads.txt가 자동으로 생성됩니다.
-");
+    return res.send(
+      "# GOOGLE_ADSENSE_CLIENT 환경변수를 설정하면 ads.txt가 자동으로 생성됩니다.\n"
+    );
   }
 
-  return res.send(`google.com, ${publisherId}, DIRECT, f08c47fec0942fa0
-`);
+  return res.send(`google.com, ${publisherId}, DIRECT, f08c47fec0942fa0\n`);
 });
 
 // =====================
