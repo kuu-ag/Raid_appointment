@@ -30,7 +30,7 @@ const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 const IS_PROD = process.env.NODE_ENV === "production";
-const CONTACT_EMAIL = (process.env.CONTACT_EMAIL || "gyujinlee90@gmail.com").trim();
+const CONTACT_EMAIL = (process.env.CONTACT_EMAIL || "touen9972@gmail.com").trim();
 const ADSENSE_CLIENT = (process.env.GOOGLE_ADSENSE_CLIENT || process.env.ADSENSE_CLIENT || "").trim();
 
 // =====================
