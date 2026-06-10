@@ -30,6 +30,8 @@ const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 const IS_PROD = process.env.NODE_ENV === "production";
+const CONTACT_EMAIL = (process.env.CONTACT_EMAIL || "gyujinlee90@gmail.com").trim();
+const ADSENSE_CLIENT = (process.env.GOOGLE_ADSENSE_CLIENT || process.env.ADSENSE_CLIENT || "").trim();
 
 // =====================
 // Options
@@ -589,6 +591,9 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <a href="/check" class="side-btn">예약 확인</a>
         <a href="/observer" class="side-btn">데본베일 관측기</a>
         <a href="/observer/homework" class="side-btn">숙제현황</a>
+        <a href="/about" class="side-btn">사이트 소개</a>
+        <a href="/privacy" class="side-btn">개인정보처리방침</a>
+        <a href="/contact" class="side-btn">문의</a>
       </aside>
     `;
   }
@@ -607,6 +612,9 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <button type="button" class="side-btn" onclick="openModal('modal-custom-raid')">커스텀 레이드 추가</button>
         <a href="/observer" class="side-btn">데본베일 관측기</a>
         <a href="/observer/homework" class="side-btn">숙제현황</a>
+        <a href="/about" class="side-btn">사이트 소개</a>
+        <a href="/privacy" class="side-btn">개인정보처리방침</a>
+        <a href="/contact" class="side-btn">문의</a>
         <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
         <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
       </aside>
@@ -629,7 +637,10 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
       <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
       <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
       <a href="/observer" class="side-btn">데본베일 관측기</a>
-        <a href="/observer/homework" class="side-btn">숙제현황</a>
+      <a href="/observer/homework" class="side-btn">숙제현황</a>
+      <a href="/about" class="side-btn">사이트 소개</a>
+      <a href="/privacy" class="side-btn">개인정보처리방침</a>
+      <a href="/contact" class="side-btn">문의</a>
       <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
     </aside>
   `;
@@ -649,6 +660,11 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${esc(title)}</title>
+  ${
+    ADSENSE_CLIENT
+      ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${esc(ADSENSE_CLIENT)}" crossorigin="anonymous"></script>`
+      : ""
+  }
   <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
@@ -1595,6 +1611,92 @@ function requireAdmin(req, res, next) {
 
 app.get(/^\/admin(?:\/.*)?$/, (req, res) => {
   return res.status(404).send("Not Found");
+});
+
+// =====================
+// Site Info / AdSense Policy Pages
+// =====================
+app.get("/about", (req, res) => {
+  res.send(
+    layout(
+      `
+      <div class="box">
+        <div style="font-weight:900;font-size:22px;margin-bottom:10px;">사이트 소개</div>
+        <div class="muted">
+          DevonVail RAID는 레이드 예약, 공대 편성표, 데본베일 관측기, 숙제현황 기능을 제공하는 개인 제작 편의성 사이트입니다.<br/><br/>
+          데본베일 관측기는 던전앤파이터 캐릭터 타임라인 기록을 기준으로 드랍 기록과 주간 콘텐츠 현황을 확인할 수 있도록 돕는 기능입니다.<br/><br/>
+          숙제현황은 저장된 캐릭터 목록을 기준으로 주간 콘텐츠 클리어 총합을 요약해 보여줍니다.<br/><br/>
+          본 사이트는 개인이 제작한 비공식 편의성 사이트이며, NEXON 및 NEOPLE과 직접적인 관련이 없습니다.
+        </div>
+      </div>
+      `,
+      "사이트 소개"
+    )
+  );
+});
+
+app.get("/privacy", (req, res) => {
+  res.send(
+    layout(
+      `
+      <div class="box">
+        <div style="font-weight:900;font-size:22px;margin-bottom:10px;">개인정보처리방침</div>
+        <div class="muted">
+          본 사이트는 서비스 제공을 위해 사용자가 입력한 예약 정보, 쿠키, 접속 로그 등을 처리할 수 있습니다.<br/><br/>
+
+          <b>1. 처리하는 정보</b><br/>
+          레이드 예약 기능 이용 시 치지직 닉네임, 모험단 이름, 예약 수량, 신청 상태, 코멘트 등의 정보가 저장될 수 있습니다.<br/>
+          관리자 기능 이용 시 관리자 인증을 위한 쿠키가 사용될 수 있습니다.<br/>
+          사이트 안정성 확인을 위해 서버 접속 로그가 남을 수 있습니다.<br/><br/>
+
+          <b>2. 이용 목적</b><br/>
+          수집된 정보는 레이드 예약 접수, 예약 확인, 공대 편성표 표시, 사이트 오류 확인 및 서비스 개선 목적으로 사용됩니다.<br/><br/>
+
+          <b>3. 쿠키 및 광고</b><br/>
+          본 사이트는 Google AdSense 등 제3자 광고 서비스를 사용할 수 있습니다.
+          Google 및 제3자 광고 사업자는 쿠키를 사용하여 사용자의 이전 방문 기록을 기반으로 광고를 게재할 수 있습니다.<br/>
+          사용자는 브라우저 설정을 통해 쿠키 저장을 거부하거나 삭제할 수 있습니다.<br/><br/>
+
+          <b>4. 보관 및 삭제</b><br/>
+          예약 정보와 통계 정보는 서비스 운영 목적상 필요한 기간 동안 보관될 수 있으며, 운영상 불필요하다고 판단되는 경우 삭제될 수 있습니다.<br/><br/>
+
+          <b>5. 문의</b><br/>
+          개인정보 및 사이트 이용 관련 문의는 아래 이메일로 연락해 주세요.<br/>
+          이메일: ${esc(CONTACT_EMAIL)}
+        </div>
+      </div>
+      `,
+      "개인정보처리방침"
+    )
+  );
+});
+
+app.get("/contact", (req, res) => {
+  res.send(
+    layout(
+      `
+      <div class="box">
+        <div style="font-weight:900;font-size:22px;margin-bottom:10px;">문의</div>
+        <div class="muted">
+          사이트 이용 중 오류, 문의, 개선 제안이 있다면 아래 이메일로 연락해 주세요.<br/><br/>
+          이메일: ${esc(CONTACT_EMAIL)}<br/><br/>
+          오류 제보 시 접속한 페이지 주소, 발생 시간, 오류 화면을 함께 보내주시면 확인에 도움이 됩니다.
+        </div>
+      </div>
+      `,
+      "문의"
+    )
+  );
+});
+
+app.get("/ads.txt", (req, res) => {
+  const publisherId = ADSENSE_CLIENT.replace(/^ca-/, "").trim();
+  if (!publisherId || !/^pub-\d+$/.test(publisherId)) {
+    return res.status(404).type("text/plain").send("AdSense publisher id is not configured.");
+  }
+  return res
+    .type("text/plain")
+    .send(`google.com, ${publisherId}, DIRECT, f08c47fec0942fa0\n`);
 });
 
 // =====================
