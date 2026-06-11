@@ -323,8 +323,25 @@ function renderHomeworkPage(summary) {
     .join("");
 
   const errorNotice = summary.errorCount
-    ? `<div class="homework-alert">일부 캐릭터 조회 실패: ${esc(summary.errorCount)}개 · API 응답/캐릭터명/서버명을 확인해 주세요.</div>`
-    : "";
+  ? `
+    <div class="homework-alert">
+      일부 캐릭터 조회 실패: ${esc(summary.errorCount)}개<br/>
+      ${summary.errors && summary.errors.length
+        ? `
+          <div style="margin-top:8px;line-height:1.7;">
+            ${summary.errors.map((e) => `
+              <div>
+                - ${esc(e.serverId || "-")} / ${esc(e.characterName || "-")}
+                <span style="color:#fcd34d;">(${esc(e.reason || "조회 실패")})</span>
+              </div>
+            `).join("")}
+          </div>
+        `
+        : `API 응답/캐릭터명/서버명을 확인해 주세요.`
+      }
+    </div>
+  `
+  : "";
 
   return `<!doctype html>
 <html lang="ko">
