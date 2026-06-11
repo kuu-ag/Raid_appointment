@@ -617,6 +617,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <button type="button" class="side-btn" onclick="openModal('modal-custom-raid')">커스텀 레이드 추가</button>
         <a href="/observer" class="side-btn">데본베일 관측기</a>
         <a href="/observer/homework" class="side-btn">숙제현황</a>
+        <a href="${esc(ADMIN_BASE)}/observer/cleanup" class="side-btn">관측기 정리</a>
         <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
         <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
       </aside>
@@ -639,7 +640,8 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
       <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
       <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
       <a href="/observer" class="side-btn">데본베일 관측기</a>
-        <a href="/observer/homework" class="side-btn">숙제현황</a>
+      <a href="/observer/homework" class="side-btn">숙제현황</a>
+      <a href="${esc(ADMIN_BASE)}/observer/cleanup" class="side-btn">관측기 정리</a>
       <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
     </aside>
   `;
@@ -1673,6 +1675,222 @@ app.get("/ads.txt", (req, res) => {
   }
 
   return res.send(`google.com, ${publisherId}, DIRECT, f08c47fec0942fa0\n`);
+});
+
+
+// =====================
+// Observer Character Cleanup
+// =====================
+// 관측기 갱신에 남아 있는 예전 캐릭터를 DB에서 삭제하기 위한 관리자 도구입니다.
+// timelineFeature.js 내부 테이블명이 바뀌어도 동작하도록 server_id / character_name 계열 컬럼을 가진 테이블을 자동 탐색합니다.
+function sqlQuoteIdent(value) {
+  return `"${String(value || "").replaceAll('"', '""')}"`;
+}
+
+function splitCleanupNames(value) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(/[\n,]+/g)
+        .map((v) => v.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function getObserverCharacterTables() {
+  const tableRows = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC`)
+    .all();
+
+  const characterColumnCandidates = ["character_name", "characterName", "char_name", "charName", "name"];
+  const serverColumnCandidates = ["server_id", "serverId", "server", "server_name", "serverName"];
+  const result = [];
+
+  for (const t of tableRows) {
+    const tableName = String(t.name || "");
+    const cols = db.prepare(`PRAGMA table_info(${sqlQuoteIdent(tableName)})`).all();
+    const colNames = cols.map((c) => String(c.name || ""));
+    const characterColumn = characterColumnCandidates.find((c) => colNames.includes(c));
+    const serverColumn = serverColumnCandidates.find((c) => colNames.includes(c));
+
+    if (!tableName || !characterColumn || !serverColumn) continue;
+
+    result.push({
+      tableName,
+      serverColumn,
+      characterColumn,
+    });
+  }
+
+  return result;
+}
+
+function getObserverCleanupRows({ serverId = "cain", names = [] } = {}) {
+  const tables = getObserverCharacterTables();
+  const rows = [];
+
+  for (const t of tables) {
+    const where = [];
+    const params = [];
+
+    if (serverId) {
+      where.push(`${sqlQuoteIdent(t.serverColumn)} = ?`);
+      params.push(serverId);
+    }
+
+    if (names.length) {
+      where.push(`${sqlQuoteIdent(t.characterColumn)} IN (${names.map(() => "?").join(",")})`);
+      params.push(...names);
+    } else {
+      where.push("1=0");
+    }
+
+    const sql = `
+      SELECT
+        ${sqlQuoteIdent(t.serverColumn)} AS server_id,
+        ${sqlQuoteIdent(t.characterColumn)} AS character_name
+      FROM ${sqlQuoteIdent(t.tableName)}
+      WHERE ${where.join(" AND ")}
+      ORDER BY ${sqlQuoteIdent(t.characterColumn)} ASC
+      LIMIT 200
+    `;
+
+    const found = db.prepare(sql).all(...params);
+    for (const r of found) {
+      rows.push({
+        tableName: t.tableName,
+        serverId: r.server_id,
+        characterName: r.character_name,
+      });
+    }
+  }
+
+  return { tables, rows };
+}
+
+function deleteObserverCleanupRows({ serverId = "cain", names = [] } = {}) {
+  const tables = getObserverCharacterTables();
+  const deleted = [];
+  let total = 0;
+
+  if (!names.length) return { total, deleted, tables };
+
+  for (const t of tables) {
+    const where = [];
+    const params = [];
+
+    if (serverId) {
+      where.push(`${sqlQuoteIdent(t.serverColumn)} = ?`);
+      params.push(serverId);
+    }
+
+    where.push(`${sqlQuoteIdent(t.characterColumn)} IN (${names.map(() => "?").join(",")})`);
+    params.push(...names);
+
+    const sql = `DELETE FROM ${sqlQuoteIdent(t.tableName)} WHERE ${where.join(" AND ")}`;
+    const result = db.prepare(sql).run(...params);
+    const changes = Number(result?.changes || 0);
+    total += changes;
+    if (changes > 0) deleted.push({ tableName: t.tableName, changes });
+  }
+
+  return { total, deleted, tables };
+}
+
+function renderObserverCleanupPage({ serverId = "cain", namesText = "", message = "" } = {}) {
+  const names = splitCleanupNames(namesText);
+  const preview = getObserverCleanupRows({ serverId, names });
+  const tableChips = preview.tables.length
+    ? preview.tables.map((t) => `<span class="chip">${esc(t.tableName)} · ${esc(t.serverColumn)}/${esc(t.characterColumn)}</span>`).join(" ")
+    : `<span class="chip">대상 테이블 없음</span>`;
+
+  const rowHtml = preview.rows.length
+    ? preview.rows.map((r) => `
+        <tr>
+          <td>${esc(r.tableName)}</td>
+          <td>${esc(r.serverId)}</td>
+          <td>${esc(r.characterName)}</td>
+        </tr>
+      `).join("")
+    : `<tr><td colspan="3" class="center muted">입력한 캐릭터와 일치하는 관측기 DB 데이터가 없습니다.</td></tr>`;
+
+  return layout(
+    `
+    <div class="box">
+      <div class="row sp">
+        <div>
+          <div style="font-weight:900;font-size:22px;margin-bottom:6px;">관측기 캐릭터 정리</div>
+          <div class="muted">trackedcharacters.json에서 제거했지만 관측기 DB에 남아 있는 캐릭터를 삭제합니다.</div>
+        </div>
+        <div class="row">
+          <a class="btn btnGhost" href="/observer">관측기</a>
+          <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/raid">관리자 로비</a>
+        </div>
+      </div>
+
+      ${message ? `<div class="divider"></div><div class="ok">${esc(message)}</div>` : ""}
+
+      <div class="divider"></div>
+      <form method="GET" action="${esc(ADMIN_BASE)}/observer/cleanup" class="box" style="background:rgba(2,6,23,.26);">
+        <div class="muted" style="margin-bottom:8px;">삭제 전 확인할 캐릭터명을 줄바꿈 또는 쉼표로 입력하세요.</div>
+        <div class="row" style="align-items:flex-start;">
+          <div style="width:160px;max-width:100%;">
+            <label class="muted">서버</label>
+            <input name="server_id" value="${esc(serverId)}" placeholder="cain" />
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <label class="muted">캐릭터명</label>
+            <textarea name="names" rows="5" placeholder="보구보고\n안잡음">${esc(namesText)}</textarea>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn btnPrimary" type="submit">조회</button>
+        </div>
+      </form>
+
+      <div class="divider"></div>
+      <div class="muted" style="margin-bottom:8px;">자동 탐색된 대상 테이블</div>
+      <div class="row">${tableChips}</div>
+
+      <div class="divider"></div>
+      <table>
+        <tr>
+          <th>테이블</th>
+          <th>서버</th>
+          <th>캐릭터명</th>
+        </tr>
+        ${rowHtml}
+      </table>
+
+      <div class="divider"></div>
+      <form method="POST" action="${esc(ADMIN_BASE)}/observer/cleanup/delete" onsubmit="return confirm('조회된 관측기 DB 캐릭터 데이터를 삭제하시겠습니까?');">
+        <input type="hidden" name="server_id" value="${esc(serverId)}" />
+        <textarea name="names" style="display:none;">${esc(namesText)}</textarea>
+        <button class="btn btnDanger" type="submit" ${names.length ? "" : "disabled"}>입력 캐릭터 DB 삭제</button>
+        <span class="muted"> 삭제 후 관측기 갱신을 다시 실행하세요.</span>
+      </form>
+    </div>
+    `,
+    "관측기 캐릭터 정리",
+    { isAdmin: true, activeRaid: "admin_lobby" }
+  );
+}
+
+app.get(`${ADMIN_BASE}/observer/cleanup`, requireAdmin, (req, res) => {
+  const serverId = String(req.query.server_id || "cain").trim() || "cain";
+  const namesText = String(req.query.names || "");
+  const message = String(req.query.message || "");
+  res.send(renderObserverCleanupPage({ serverId, namesText, message }));
+});
+
+app.post(`${ADMIN_BASE}/observer/cleanup/delete`, requireAdmin, (req, res) => {
+  const serverId = String(req.body.server_id || "cain").trim() || "cain";
+  const namesText = String(req.body.names || "");
+  const names = splitCleanupNames(namesText);
+  const result = deleteObserverCleanupRows({ serverId, names });
+  const message = `삭제 완료: 총 ${result.total}건 삭제됨`;
+  return res.redirect(`${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`);
 });
 
 // =====================
@@ -2927,7 +3145,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "방구", "데본베일", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "박종민", "박종민", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
