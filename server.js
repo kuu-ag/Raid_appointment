@@ -579,7 +579,7 @@ function buildRaidCard(r, href) {
 // Layout
 // =====================
 function buildSidebar(activeRaid = "", isAdmin = false) {
-  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
+  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.gif";
 
   if (!isAdmin) {
     return `
@@ -609,7 +609,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
     return `
       <aside class="sidebar">
         <div class="thumbnail">
-          <img src="/images/streamer_profile.png" alt="관리자 썸네일"
+          <img src="/images/streamer_profile.gif" alt="관리자 썸네일"
                onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
         </div>
         <button type="button" class="side-btn" onclick="openModal('modal-auth')">인증키 설정</button>
