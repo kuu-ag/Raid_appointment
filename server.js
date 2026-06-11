@@ -1841,7 +1841,7 @@ function renderObserverCleanupPage({ serverId = "cain", namesText = "", message 
           </div>
           <div style="flex:1;min-width:260px;">
             <label class="muted">캐릭터명</label>
-            <textarea name="names" rows="5" placeholder="보구보고\n안잡음">${esc(namesText)}</textarea>
+            <textarea name="names" rows="5" placeholder="삭제된 캐릭터의 닉네임을 입력해주세요.\nex)데본베일\n암종호">${esc(namesText)}</textarea>
           </div>
         </div>
         <div class="row" style="margin-top:12px;">
