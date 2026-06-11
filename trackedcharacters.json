@@ -51,7 +51,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[퍽]",
+    "character_name": "데본베일[키]",
     "memo": ""
   },
   {
@@ -116,7 +116,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본수명40초",
+    "character_name": "데본지루40분",
     "memo": ""
   },
   {
@@ -151,7 +151,7 @@
   },
   {
     "server_id": "cain",
-    "character_name": "데본베일[블]",
+    "character_name": "버피3만데본",
     "memo": ""
   },
   {
@@ -441,11 +441,6 @@
   },
   {
     "server_id": "cain",
-    "character_name": "보쿠노피코",
-    "memo": ""
-  },
-  {
-    "server_id": "cain",
     "character_name": "데본베일[쾅]",
     "memo": ""
   },
@@ -481,11 +476,6 @@
   },
   {
     "server_id": "cain",
-    "character_name": "안잡음",
-    "memo": ""
-  },
-  {
-    "server_id": "cain",
     "character_name": "뿌잉뽀잉",
     "memo": ""
   },
@@ -497,6 +487,11 @@
   {
     "server_id": "cain",
     "character_name": "월드컵",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "데본베일[팍]",
     "memo": ""
   },
   {
@@ -561,22 +556,37 @@
   },
   {
     "server_id": "cain",
-    "character_name": "차가운아줌마",
+    "character_name": "퍽종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운늙은이",
+    "character_name": "브종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운외숙모",
+    "character_name": "엘종호",
     "memo": ""
   },
   {
     "server_id": "cain",
-    "character_name": "차가운핑크남",
+    "character_name": "뿌잉뽀잉런처",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "뿌잉뽀잉요원",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "뿌잉뽀잉홀리",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "뿌잉뽀잉마도",
     "memo": ""
   },
   {
@@ -584,9 +594,4 @@
     "character_name": "차가운성녀님",
     "memo": ""
   },
-  {
-    "server_id": "cain",
-    "character_name": "차가운여동생",
-    "memo": ""
-  }
 ]
