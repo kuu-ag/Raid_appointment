@@ -1880,10 +1880,6 @@ function addObserverCleanupRows({ serverId = "cain", names = [], memo = "" } = {
 function renderObserverCleanupPage({ serverId = "cain", namesText = "", message = "" } = {}) {
   const names = splitCleanupNames(namesText);
   const preview = getObserverCleanupRows({ serverId, names });
-  const tableChips = preview.tables.length
-    ? preview.tables.map((t) => `<span class="chip">${esc(t.tableName)} · ${esc(t.serverColumn)}/${esc(t.characterColumn)}</span>`).join(" ")
-    : `<span class="chip">대상 테이블 없음</span>`;
-
   const rowHtml = preview.rows.length
     ? preview.rows.map((r) => `
         <tr>
@@ -1930,21 +1926,13 @@ function renderObserverCleanupPage({ serverId = "cain", namesText = "", message 
       </form>
 
       <div class="divider"></div>
-      <div class="muted" style="margin-bottom:8px;">자동 탐색된 대상 테이블</div>
-      <div class="row">${tableChips}</div>
-
-      <div class="divider"></div>
       <form method="POST" action="${esc(ADMIN_BASE)}/observer/cleanup/add" class="box" style="background:rgba(2,6,23,.26);" onsubmit="return confirm('입력한 캐릭터를 관측기 DB에 추가하시겠습니까?');">
         <div style="font-weight:900;font-size:18px;margin-bottom:6px;">관측기 캐릭터 추가</div>
-        <div class="muted" style="margin-bottom:10px;">trackedcharacters.json에 추가한 캐릭터를 관측기 DB에도 수동으로 등록합니다. 보통 대상 테이블은 자동 선택된 첫 번째 테이블을 사용하면 됩니다.</div>
+        <div class="muted" style="margin-bottom:10px;">trackedcharacters.json에 추가한 캐릭터를 관측기 DB에도 수동으로 등록합니다. 대상 테이블은 자동으로 전체 적용됩니다.</div>
         <div class="row" style="align-items:flex-start;">
           <div style="width:160px;max-width:100%;">
             <label class="muted">서버</label>
             <input name="server_id" value="${esc(serverId)}" placeholder="cain" />
-          </div>
-          <div style="width:280px;max-width:100%;">
-            <label class="muted">대상 테이블</label>
-            <select name="table_name">${addTableOptions}</select>
           </div>
           <div style="flex:1;min-width:260px;">
             <label class="muted">추가할 캐릭터명</label>
@@ -1952,7 +1940,7 @@ function renderObserverCleanupPage({ serverId = "cain", namesText = "", message 
           </div>
         </div>
         <div class="row" style="margin-top:12px;">
-          <button class="btn btnPrimary" type="submit" ${preview.tables.length ? "" : "disabled"}>입력 캐릭터 DB 추가</button>
+          <button class="btn btnPrimary" type="submit" ${preview.tables.length ? "" : "disabled"}>입력 캐릭터 DB 전체 추가</button>
           <span class="muted">중복 캐릭터는 건너뜁니다. 추가 후 관측기 갱신을 다시 실행하세요.</span>
         </div>
       </form>
