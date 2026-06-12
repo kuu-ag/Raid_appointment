@@ -2520,9 +2520,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="공대신청"/>`;
       } else {
-        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">공대신청</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
@@ -2532,9 +2532,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="공대신청"/>`;
       } else {
-        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">공대신청</div>`;
       }
     }
     html += `</div></div></div>`;
@@ -3248,7 +3248,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "박종민", "박종민", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "방귀", "방귀", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
