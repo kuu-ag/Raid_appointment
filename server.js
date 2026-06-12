@@ -1798,6 +1798,83 @@ function deleteObserverCleanupRows({ serverId = "cain", names = [] } = {}) {
   return { total, deleted, tables };
 }
 
+
+function observerInsertDefaultValue(col) {
+  const name = String(col.name || "");
+  const type = String(col.type || "").toUpperCase();
+  const now = nowISO();
+
+  if (/created_at|createdAt|updated_at|updatedAt|checked_at|checkedAt|registered_at|registeredAt/i.test(name)) return now;
+  if (/memo|comment|note|request_note/i.test(name)) return "";
+  if (/character_id|characterId|char_id|charId/i.test(name)) return "";
+  if (/count|cnt|total|cleared|active|enabled|is_/i.test(name)) return 0;
+  if (type.includes("INT") || type.includes("REAL") || type.includes("NUM")) return 0;
+  return "";
+}
+
+function addObserverCleanupRows({ tableName = "", serverId = "cain", names = [], memo = "" } = {}) {
+  const tables = getObserverCharacterTables();
+  const target = tables.find((t) => t.tableName === tableName) || tables[0] || null;
+  if (!target) return { total: 0, skipped: 0, added: [], tables, error: "추가 가능한 관측기 테이블을 찾지 못했습니다." };
+  if (!names.length) return { total: 0, skipped: 0, added: [], tables, error: "추가할 캐릭터명을 입력해 주세요." };
+
+  const cols = db.prepare(`PRAGMA table_info(${sqlQuoteIdent(target.tableName)})`).all();
+  const colNames = cols.map((c) => String(c.name || ""));
+  const added = [];
+  let skipped = 0;
+
+  const hasMemo = colNames.includes("memo");
+  const hasCreatedAt = colNames.includes("created_at");
+  const hasUpdatedAt = colNames.includes("updated_at");
+
+  for (const characterName of names) {
+    const exists = db.prepare(
+      `SELECT COUNT(*) AS cnt FROM ${sqlQuoteIdent(target.tableName)} WHERE ${sqlQuoteIdent(target.serverColumn)}=? AND ${sqlQuoteIdent(target.characterColumn)}=?`
+    ).get(serverId, characterName);
+
+    if (Number(exists?.cnt || 0) > 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const insertCols = [];
+    const values = [];
+
+    function setCol(colName, value) {
+      if (!colNames.includes(colName)) return;
+      if (insertCols.includes(colName)) return;
+      insertCols.push(colName);
+      values.push(value);
+    }
+
+    setCol(target.serverColumn, serverId);
+    setCol(target.characterColumn, characterName);
+    if (hasMemo) setCol("memo", memo);
+    if (hasCreatedAt) setCol("created_at", nowISO());
+    if (hasUpdatedAt) setCol("updated_at", nowISO());
+
+    for (const col of cols) {
+      const colName = String(col.name || "");
+      if (!colName || insertCols.includes(colName)) continue;
+      if (Number(col.pk || 0) === 1) continue;
+      if (col.dflt_value !== null && col.dflt_value !== undefined) continue;
+      if (Number(col.notnull || 0) !== 1) continue;
+      setCol(colName, observerInsertDefaultValue(col));
+    }
+
+    if (!insertCols.length) {
+      skipped += 1;
+      continue;
+    }
+
+    const sql = `INSERT INTO ${sqlQuoteIdent(target.tableName)} (${insertCols.map(sqlQuoteIdent).join(", ")}) VALUES (${insertCols.map(() => "?").join(", ")})`;
+    db.prepare(sql).run(...values);
+    added.push({ tableName: target.tableName, serverId, characterName });
+  }
+
+  return { total: added.length, skipped, added, tables, tableName: target.tableName };
+}
+
 function renderObserverCleanupPage({ serverId = "cain", namesText = "", message = "" } = {}) {
   const names = splitCleanupNames(namesText);
   const preview = getObserverCleanupRows({ serverId, names });
@@ -1814,6 +1891,10 @@ function renderObserverCleanupPage({ serverId = "cain", namesText = "", message 
         </tr>
       `).join("")
     : `<tr><td colspan="3" class="center muted">입력한 캐릭터와 일치하는 관측기 DB 데이터가 없습니다.</td></tr>`;
+
+  const addTableOptions = preview.tables.length
+    ? preview.tables.map((t) => `<option value="${esc(t.tableName)}">${esc(t.tableName)} · ${esc(t.serverColumn)}/${esc(t.characterColumn)}</option>`).join("")
+    : `<option value="">추가 가능한 테이블 없음</option>`;
 
   return layout(
     `
@@ -1841,7 +1922,7 @@ function renderObserverCleanupPage({ serverId = "cain", namesText = "", message 
           </div>
           <div style="flex:1;min-width:260px;">
             <label class="muted">캐릭터명</label>
-            <textarea name="names" rows="5" placeholder="삭제된 캐릭터의 닉네임을 입력해주세요.\nex)데본베일\n암종호">${esc(namesText)}</textarea>
+            <textarea name="names" rows="5" placeholder="보구보고\n안잡음">${esc(namesText)}</textarea>
           </div>
         </div>
         <div class="row" style="margin-top:12px;">
@@ -1852,6 +1933,30 @@ function renderObserverCleanupPage({ serverId = "cain", namesText = "", message 
       <div class="divider"></div>
       <div class="muted" style="margin-bottom:8px;">자동 탐색된 대상 테이블</div>
       <div class="row">${tableChips}</div>
+
+      <div class="divider"></div>
+      <form method="POST" action="${esc(ADMIN_BASE)}/observer/cleanup/add" class="box" style="background:rgba(2,6,23,.26);" onsubmit="return confirm('입력한 캐릭터를 관측기 DB에 추가하시겠습니까?');">
+        <div style="font-weight:900;font-size:18px;margin-bottom:6px;">관측기 캐릭터 추가</div>
+        <div class="muted" style="margin-bottom:10px;">trackedcharacters.json에 추가한 캐릭터를 관측기 DB에도 수동으로 등록합니다. 보통 대상 테이블은 자동 선택된 첫 번째 테이블을 사용하면 됩니다.</div>
+        <div class="row" style="align-items:flex-start;">
+          <div style="width:160px;max-width:100%;">
+            <label class="muted">서버</label>
+            <input name="server_id" value="${esc(serverId)}" placeholder="cain" />
+          </div>
+          <div style="width:280px;max-width:100%;">
+            <label class="muted">대상 테이블</label>
+            <select name="table_name">${addTableOptions}</select>
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <label class="muted">추가할 캐릭터명</label>
+            <textarea name="names" rows="5" placeholder="새 캐릭터명\n여러 명이면 줄바꿈 또는 쉼표로 입력"></textarea>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn btnPrimary" type="submit" ${preview.tables.length ? "" : "disabled"}>입력 캐릭터 DB 추가</button>
+          <span class="muted">중복 캐릭터는 건너뜁니다. 추가 후 관측기 갱신을 다시 실행하세요.</span>
+        </div>
+      </form>
 
       <div class="divider"></div>
       <table>
@@ -1890,6 +1995,18 @@ app.post(`${ADMIN_BASE}/observer/cleanup/delete`, requireAdmin, (req, res) => {
   const names = splitCleanupNames(namesText);
   const result = deleteObserverCleanupRows({ serverId, names });
   const message = `삭제 완료: 총 ${result.total}건 삭제됨`;
+  return res.redirect(`${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`);
+});
+
+app.post(`${ADMIN_BASE}/observer/cleanup/add`, requireAdmin, (req, res) => {
+  const serverId = String(req.body.server_id || "cain").trim() || "cain";
+  const namesText = String(req.body.names || "");
+  const tableName = String(req.body.table_name || "").trim();
+  const names = splitCleanupNames(namesText);
+  const result = addObserverCleanupRows({ tableName, serverId, names });
+  const message = result.error
+    ? `추가 실패: ${result.error}`
+    : `추가 완료: ${result.total}건 추가됨${result.skipped ? ` / 중복 ${result.skipped}건 건너뜀` : ""}${result.tableName ? ` / 대상 ${result.tableName}` : ""}`;
   return res.redirect(`${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`);
 });
 
