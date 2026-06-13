@@ -513,7 +513,7 @@ function buildRaidCard(r, href) {
 // Layout
 // =====================
 function buildSidebar(activeRaid = "", isAdmin = false) {
-  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
+  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.gif";
 
   if (!isAdmin) {
     return `
