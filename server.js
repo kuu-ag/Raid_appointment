@@ -4147,6 +4147,15 @@ function renderOathStatsAdminPage(db, options = {}) {
   `).join("");
 
   const detectedItems = stats.itemNames.map((name) => `<span>${escapeHtml(name)}</span>`).join("") || `<span>집계 전</span>`;
+  const overallItemRows = stats.items.length
+    ? stats.items.map((row, index) => `
+      <tr>
+        <td class="num">${index + 1}</td>
+        <td class="leader">${escapeHtml(row.itemName)}</td>
+        <td class="num">${Number(row.count || 0).toLocaleString()}개</td>
+      </tr>
+    `).join("")
+    : `<tr><td colspan="3" class="center muted">집계된 서약 기록이 없습니다.</td></tr>`;
 
   return `<!doctype html>
 <html lang="ko">
@@ -4244,6 +4253,21 @@ function renderOathStatsAdminPage(db, options = {}) {
       <div class="chips">${detectedItems}</div>
     </section>
 
+    <section class="card tableWrap">
+      <h2>전체 서약 순위</h2>
+      <p class="cardDesc">관리자 확인용 전체 서약 집계 순위입니다. 공개 조회 페이지에는 표시되지 않습니다.</p>
+      <table class="compactTable">
+        <thead>
+          <tr>
+            <th class="center">순위</th>
+            <th>서약명</th>
+            <th class="center">집계 수</th>
+          </tr>
+        </thead>
+        <tbody>${overallItemRows}</tbody>
+      </table>
+    </section>
+
     <section class="grid">
       <div class="card tableWrap">
         <h2>요일별 가장 많이 집계된 서약</h2>
@@ -4299,16 +4323,6 @@ function renderOathStatsPublicPage(db, options = {}) {
   const weekKey = weekKeyRaw === "all" ? "all" : getWeekKey(weekKeyRaw);
   const source = ["nexon", "naver", "unknown"].includes(sourceRaw) ? sourceRaw : "all";
   const stats = getOathStats(db, { weekKey, source });
-
-  const itemRows = stats.items.length
-    ? stats.items.map((row, index) => `
-      <div class="rankRow">
-        <div class="rankNo">${index + 1}</div>
-        <div class="rankName">${escapeHtml(row.itemName)}</div>
-        <div class="rankCount">${Number(row.count || 0).toLocaleString()}개</div>
-      </div>
-    `).join("")
-    : `<div class="empty">집계된 서약 기록이 없습니다.</div>`;
 
   const renderAxisCards = (rows) => rows.map((row) => {
     const topItems = Array.isArray(row.topItems) ? row.topItems.slice(0, 3) : [];
@@ -4373,11 +4387,6 @@ function renderOathStatsPublicPage(db, options = {}) {
       <h1>던클리 서약 종합</h1>
       <p class="desc">던클리에 등록된 타임라인 기록을 기준으로, 어떤 서약이 많이 집계됐는지 조회하는 페이지입니다.</p>
       <div class="notice">해당 통계는 단순 집계이며, 실제 게임 내 드랍 확률이 요일이나 시간대에 따라 달라진다는 의미가 아닙니다.</div>
-    </section>
-
-    <section class="section">
-      <div class="sectionTitle"><h2>전체 서약 순위</h2><span class="sub">전체 TOP</span></div>
-      <div class="rankList">${itemRows}</div>
     </section>
 
     <section class="section">
