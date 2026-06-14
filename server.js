@@ -2754,7 +2754,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "정상화", "정상화", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "데창섭", "데창섭", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -4140,7 +4140,7 @@ function renderOathStatsAdminPage(db, options = {}) {
 
     <section class="card">
       <h2>감지된 서약 목록</h2>
-      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 11종이 표시됩니다.</p>
+      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 12종이 표시됩니다.</p>
       <div class="chips">${detectedItems}</div>
     </section>
 
@@ -4192,6 +4192,108 @@ function renderOathStatsAdminPage(db, options = {}) {
 </html>`;
 }
 
+
+function renderOathStatsPublicPage(db, options = {}) {
+  const weekKeyRaw = String(options.weekKey || "all");
+  const sourceRaw = String(options.source || "all");
+  const weekKey = weekKeyRaw === "all" ? "all" : getWeekKey(weekKeyRaw);
+  const source = ["nexon", "naver", "unknown"].includes(sourceRaw) ? sourceRaw : "all";
+  const stats = getOathStats(db, { weekKey, source });
+
+  const itemRows = stats.items.length
+    ? stats.items.map((row, index) => `
+      <div class="rankRow">
+        <div class="rankNo">${index + 1}</div>
+        <div class="rankName">${escapeHtml(row.itemName)}</div>
+        <div class="rankCount">${Number(row.count || 0).toLocaleString()}개</div>
+      </div>
+    `).join("")
+    : `<div class="empty">집계된 서약 기록이 없습니다.</div>`;
+
+  const renderAxisCards = (rows) => rows.map((row) => {
+    const topItems = Array.isArray(row.topItems) ? row.topItems.slice(0, 3) : [];
+    const inner = topItems.length
+      ? topItems.map((item, index) => `
+        <div class="miniRank">
+          <span class="miniNo">${index + 1}</span>
+          <span class="miniName">${escapeHtml(item.itemName)}</span>
+          <span class="miniCount">${Number(item.count || 0).toLocaleString()}개</span>
+        </div>
+      `).join("")
+      : `<div class="empty miniEmpty">집계 없음</div>`;
+    return `
+      <article class="axisCard">
+        <div class="axisHead">
+          <strong>${escapeHtml(row.label)}</strong>
+        </div>
+        ${inner}
+      </article>
+    `;
+  }).join("");
+
+  return `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>던클리 서약 종합</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; background:#080b12; color:#f8fafc; font-family: Arial, "Noto Sans KR", sans-serif; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 18px 48px; }
+    .hero { border:1px solid #27324a; background:linear-gradient(180deg,#111827,#0b1020); border-radius:22px; padding:24px; margin-bottom:18px; }
+    h1 { margin:0 0 8px; font-size:28px; letter-spacing:-.04em; }
+    .desc { margin:0; color:#a8b3cf; line-height:1.65; font-size:14px; }
+    .notice { margin-top:14px; border:1px solid #854d0e; background:#1c1917; color:#fde68a; border-radius:14px; padding:12px 14px; font-size:13px; line-height:1.55; }
+    .section { border:1px solid #27324a; background:#111827; border-radius:20px; padding:18px; margin-top:16px; }
+    .sectionTitle { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:14px; }
+    h2 { margin:0; font-size:19px; letter-spacing:-.03em; }
+    .sub { color:#93a4c8; font-size:13px; }
+    .rankList { display:grid; gap:8px; }
+    .rankRow { display:grid; grid-template-columns:38px minmax(0,1fr) auto; gap:10px; align-items:center; border:1px solid #26324b; background:#0b1224; border-radius:14px; padding:12px; }
+    .rankNo { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#4338ca; color:white; font-weight:900; }
+    .rankName { min-width:0; font-weight:900; line-height:1.35; word-break:keep-all; overflow-wrap:anywhere; }
+    .rankCount { color:#bfdbfe; font-weight:900; white-space:nowrap; }
+    .axisGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .hourGrid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .axisCard { border:1px solid #26324b; background:#0b1224; border-radius:16px; padding:14px; min-width:0; }
+    .axisHead { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; color:#fff; }
+    .miniRank { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:8px; align-items:start; padding:9px 0; border-top:1px solid rgba(148,163,184,.14); }
+    .miniNo { width:23px; height:23px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; background:#312e81; color:#fff; font-weight:900; font-size:12px; }
+    .miniName { min-width:0; font-weight:800; line-height:1.35; word-break:keep-all; overflow-wrap:anywhere; }
+    .miniCount { color:#bfdbfe; font-weight:900; white-space:nowrap; }
+    .empty { color:#94a3b8; padding:12px; border:1px dashed #334155; border-radius:12px; text-align:center; }
+    .miniEmpty { margin-top:8px; }
+    @media (max-width:900px) { .axisGrid, .hourGrid { grid-template-columns:1fr; } .wrap { padding:18px 12px 36px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>던클리 서약 종합</h1>
+      <p class="desc">던클리에 등록된 타임라인 기록을 기준으로, 어떤 서약이 많이 집계됐는지 조회하는 페이지입니다.</p>
+      <div class="notice">해당 통계는 단순 집계이며, 실제 게임 내 드랍 확률이 요일이나 시간대에 따라 달라진다는 의미가 아닙니다.</div>
+    </section>
+
+    <section class="section">
+      <div class="sectionTitle"><h2>전체 서약 순위</h2><span class="sub">전체 TOP</span></div>
+      <div class="rankList">${itemRows}</div>
+    </section>
+
+    <section class="section">
+      <div class="sectionTitle"><h2>요일별 서약 순위</h2><span class="sub">요일별 TOP 3</span></div>
+      <div class="axisGrid">${renderAxisCards(stats.weekdayItemLeaders)}</div>
+    </section>
+
+    <section class="section">
+      <div class="sectionTitle"><h2>시간대별 서약 순위</h2><span class="sub">00시 ~ 24시, 1시간 단위</span></div>
+      <div class="axisGrid hourGrid">${renderAxisCards(stats.hourItemLeaders)}</div>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
 function registerDuncleOathStatsFeature(app, db, options = {}) {
   initDuncleOathStatsTables(db);
 
@@ -4232,6 +4334,13 @@ function registerDuncleOathStatsFeature(app, db, options = {}) {
       console.error("[Duncle Oath Stats API]", error);
       return res.status(500).json({ ok: false, message: "서약 드랍 로그 저장 중 서버 오류가 발생했습니다." });
     }
+  });
+
+  app.get("/duncle/oath-stats", (req, res) => {
+    res.send(renderOathStatsPublicPage(db, {
+      weekKey: req.query.weekKey || req.query.week_key || "all",
+      source: req.query.source || "all",
+    }));
   });
 
   app.get(`/${adminPath}/duncle/oath-stats`, (req, res) => {
