@@ -15,6 +15,7 @@ import { registerHomeworkFeature } from "./homeworkFeature.js";
 dotenv.config();
 
 const app = express();
+app.use(express.static(path.join(__dirname, "public")));
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
@@ -109,7 +110,6 @@ const DEFAULT_RAIDS = [
 // =====================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use(express.static(path.join(__dirname, "public")));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data.sqlite");
 const db = new Database(DB_PATH);
 
@@ -224,45 +224,43 @@ ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
-
-// =====================
-// Duncle average admin -> public oath stats shortcut
-// =====================
 const DUNCLE_STATS_ADMIN_PATH = (process.env.DUNCLE_ADMIN_PATH || "duncle_hidden").replace(/^\/+|\/+$/g, "");
+const DUNCLE_OATH_ADMIN_URL = `/${DUNCLE_STATS_ADMIN_PATH}/duncle/oath-stats?weekKey=all&source=all`;
 
-function installDuncleOathShortcutButton(app, adminPath) {
-  const targetPath = `/${adminPath}/duncle`;
-  app.use((req, res, next) => {
-    if (req.method !== "GET" || req.path !== targetPath) return next();
-
-    const originalSend = res.send.bind(res);
-    res.send = (body) => {
-      if (typeof body === "string" && !body.includes("data-duncle-oath-shortcut")) {
-        const buttonHtml = `
-          <a data-duncle-oath-shortcut="1"
-             href="/duncle/oath-stats?weekKey=all&source=all"
-             style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border-radius:10px;border:1px solid rgba(148,163,255,.35);background:#111827;color:#dbeafe;text-decoration:none;font-size:13px;font-weight:900;white-space:nowrap;">
-            서약 종합 보기 →
-          </a>
-        `;
-
-        body = body.replace(
-          /<h1([^>]*)>(던클리 평균[^<]*관리자)<\/h1>/,
-          `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;"><h1$1 style="margin:0;">$2</h1>${buttonHtml}</div>`
-        );
-
-        if (!body.includes("data-duncle-oath-shortcut")) {
-          body = body.replace(/<body([^>]*)>/, `<body$1><div style="max-width:1100px;margin:16px auto 0;padding:0 16px;display:flex;justify-content:flex-end;">${buttonHtml}</div>`);
-        }
-      }
-      return originalSend(body);
-    };
-
+// 던클리 평균 드랍률 관리자 페이지의 서약 통계 버튼이
+// 공개 조회 페이지(/duncle/oath-stats)가 아니라 관리자 페이지로 이동하도록 보정합니다.
+app.use((req, res, next) => {
+  if (req.method !== "GET" || req.path !== `/${DUNCLE_STATS_ADMIN_PATH}/duncle`) {
     return next();
-  });
-}
+  }
 
-installDuncleOathShortcutButton(app, DUNCLE_STATS_ADMIN_PATH);
+  const originalSend = res.send.bind(res);
+  res.send = (body) => {
+    if (typeof body !== "string") return originalSend(body);
+
+    let html = body
+      .replaceAll('href="/duncle/oath-stats?weekKey=all&source=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
+      .replaceAll('href="/duncle/oath-stats?weekKey=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
+      .replaceAll('href="/duncle/oath-stats"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
+      .replaceAll('href="https://www.devonraid.xyz/duncle/oath-stats?weekKey=all&source=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
+      .replaceAll('href="https://www.devonraid.xyz/duncle/oath-stats?weekKey=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
+      .replaceAll('href="https://www.devonraid.xyz/duncle/oath-stats"', `href="${DUNCLE_OATH_ADMIN_URL}"`);
+
+    // 버튼이 아예 없는 server.js와 조합되어도 평균 관리자에서 바로 이동할 수 있게 보강합니다.
+    if (!html.includes(DUNCLE_OATH_ADMIN_URL) && html.includes("던클리 평균 드랍")) {
+      const btn = `<a href="${DUNCLE_OATH_ADMIN_URL}" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#111827;color:#dbeafe;text-decoration:none;font-weight:800;white-space:nowrap;">서약별 통계 →</a>`;
+
+      html = html.replace(
+        /<h1>(던클리 평균 드랍[^<]*관리자)<\/h1>/,
+        `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;"><h1 style="margin:0;">$1</h1>${btn}</div>`
+      );
+    }
+
+    return originalSend(html);
+  };
+
+  return next();
+});
 
 registerDuncleDropRateFeature(app, db, {
   adminPath: DUNCLE_STATS_ADMIN_PATH,
@@ -513,7 +511,7 @@ function buildRaidCard(r, href) {
 // Layout
 // =====================
 function buildSidebar(activeRaid = "", isAdmin = false) {
-  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.gif";
+  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
 
   if (!isAdmin) {
     return `
@@ -2065,9 +2063,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="공대신청"/>`;
       } else {
-        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">공대신청</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
@@ -2077,9 +2075,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="공대신청"/>`;
       } else {
-        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">공대신청</div>`;
       }
     }
     html += `</div></div></div>`;
@@ -2793,7 +2791,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "박종민", "박종민", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "데창섭", "데창섭", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -3612,6 +3610,7 @@ const DUNCLE_OATH_ITEM_KEYS = DUNCLE_OATH_ITEM_NAMES.map((name) => ({ name, key:
 function normalizeKnownOathItemName(value) {
   const key = normalizeOathItemKey(value);
   if (!key) return "";
+  if (key === normalizeOathItemKey("근원에 닿는 자연 서약")) return "근원에 닿은 자연 서약";
   const exact = DUNCLE_OATH_ITEM_KEYS.find((row) => row.key === key);
   if (exact) return exact.name;
   const included = DUNCLE_OATH_ITEM_KEYS.find((row) => key.includes(row.key) || row.key.includes(key));
@@ -4231,102 +4230,6 @@ function renderOathStatsAdminPage(db, options = {}) {
 </html>`;
 }
 
-
-function renderPublicTopItems(row, limit = 3) {
-  const topItems = Array.isArray(row.topItems) ? row.topItems.slice(0, limit) : [];
-  if (!topItems.length) return `<div class="pubRankEmpty">집계 없음</div>`;
-  return topItems.map((item, index) => `
-    <div class="pubRank rank${index + 1}">
-      <span class="pubBadge">${index + 1}</span>
-      <span class="pubName">${escapeHtml(item.itemName)}</span>
-      <span class="pubCount">${Number(item.count || 0).toLocaleString()}개</span>
-    </div>
-  `).join("");
-}
-
-function renderPublicAxisCards(rows, title) {
-  return rows.map((row) => `
-    <article class="pubAxisCard">
-      <div class="pubAxisHead">
-        <strong>${escapeHtml(row.label)}</strong>
-        <span>${Number(row.total || 0).toLocaleString()}개</span>
-      </div>
-      <div class="pubRanks">${renderPublicTopItems(row, 3)}</div>
-    </article>
-  `).join("") || `<div class="pubEmpty">${escapeHtml(title)} 집계가 없습니다.</div>`;
-}
-
-function renderPublicItemCards(items) {
-  const rows = Array.isArray(items) ? items.slice(0, 12) : [];
-  if (!rows.length) return `<div class="pubEmpty">집계된 서약 기록이 없습니다.</div>`;
-  return rows.map((row, index) => `
-    <article class="pubItemCard rank${index + 1}">
-      <span class="pubBadge">${index + 1}</span>
-      <strong>${escapeHtml(row.itemName)}</strong>
-      <em>${Number(row.count || 0).toLocaleString()}개</em>
-    </article>
-  `).join("");
-}
-
-function renderOathStatsPublicPage(db, options = {}) {
-  const requestedWeekKey = String(options.weekKey || "all");
-  const requestedSource = String(options.source || "all");
-  const weekKey = requestedWeekKey === "all" ? "all" : getWeekKey(requestedWeekKey);
-  const source = ["nexon", "naver", "unknown"].includes(requestedSource) ? requestedSource : "all";
-  const stats = getOathStats(db, { weekKey, source });
-  const currentWeekKey = getCurrentWeekKeyKST();
-  const pageUrl = `/duncle/oath-stats?weekKey=${encodeURIComponent(weekKey)}&source=${encodeURIComponent(source)}`;
-
-  return `<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <title>던클리 서약 종합 통계</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="던클리 이용자 기록 기반 서약별 요일/시간대 TOP 3 통계" />
-  <style>
-    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at top left,rgba(124,58,237,.16),transparent 30%),#080b12;color:#f4f4f5;font-family:Arial,'Noto Sans KR',sans-serif} a{color:inherit;text-decoration:none}.wrap{max-width:1180px;margin:0 auto;padding:24px 18px 42px}.hero{border:1px solid #272b3a;border-radius:22px;background:linear-gradient(180deg,rgba(17,24,39,.96),rgba(15,23,42,.96));padding:22px;margin-bottom:16px}.heroTop{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}.hero h1{margin:0 0 8px;font-size:28px;letter-spacing:-.5px}.hero p{margin:0;color:#a1a1aa;font-size:14px;line-height:1.65}.buttons{display:flex;gap:8px;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid #334155;border-radius:12px;background:#111827;color:#dbeafe;padding:10px 12px;font-size:13px;font-weight:900}.btn.primary{background:#4f46e5;border-color:#6366f1;color:white}.notice{border:1px solid #854d0e;background:#1c1917;color:#fde68a;border-radius:16px;padding:12px 14px;margin:14px 0;font-size:13px;line-height:1.6}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.stat{border:1px solid #272b3a;background:#111827;border-radius:16px;padding:14px}.stat span{display:block;color:#a1a1aa;font-size:12px;font-weight:800;margin-bottom:6px}.stat strong{display:block;font-size:22px}.section{border:1px solid #272b3a;background:#111827;border-radius:20px;padding:16px;margin-bottom:14px}.sectionHead{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-bottom:12px}.section h2{margin:0;font-size:18px}.sectionHead span{color:#a1a1aa;font-size:12px;font-weight:800}.axisGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.hourGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.pubAxisCard,.pubItemCard{border:1px solid #272b3a;background:#0f172a;border-radius:16px;padding:12px;min-width:0}.pubAxisHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.pubAxisHead strong{font-size:15px;color:#bfdbfe}.pubAxisHead span{font-size:12px;color:#a5b4fc;font-weight:900;white-space:nowrap}.pubRanks{display:flex;flex-direction:column;gap:8px}.pubRank{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-areas:'badge name' 'badge count';column-gap:9px;row-gap:3px;border:1px solid rgba(148,163,255,.14);background:rgba(2,6,23,.35);border-radius:12px;padding:9px}.pubBadge{grid-area:badge;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:999px;background:#1f2937;color:#dbeafe;font-weight:900;font-size:12px}.rank1 .pubBadge{background:#7c3aed;color:white}.pubName{grid-area:name;min-width:0;word-break:keep-all;overflow-wrap:anywhere;font-size:13px;font-weight:900;line-height:1.35}.pubCount{grid-area:count;color:#a5b4fc;font-size:12px;font-weight:900}.pubRankEmpty,.pubEmpty{border:1px dashed #334155;border-radius:12px;padding:13px;text-align:center;color:#71717a;font-size:13px}.itemGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.pubItemCard{display:grid;grid-template-columns:28px minmax(0,1fr);grid-template-areas:'badge name' 'badge count';gap:4px 9px}.pubItemCard strong{grid-area:name;font-size:13px;line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}.pubItemCard em{grid-area:count;color:#a5b4fc;font-style:normal;font-size:12px;font-weight:900}.footer{color:#71717a;font-size:12px;line-height:1.55;text-align:center;margin-top:20px}@media(max-width:900px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.axisGrid,.hourGrid,.itemGrid{grid-template-columns:1fr}.hero h1{font-size:23px}.wrap{padding:16px 12px 32px}}
-  </style>
-</head>
-<body>
-  <main class="wrap">
-    <section class="hero">
-      <div class="heroTop">
-        <div>
-          <h1>던클리 서약 종합 통계</h1>
-          <p>던클리 이용자들이 등록한 타임라인 기록을 기반으로, 요일별/시간대별로 많이 집계된 태초 서약 TOP 3를 조회하는 공개 페이지입니다.<br>현재 기준: <b>${weekKey === "all" ? "전체 기간" : escapeHtml(weekKey)}</b> / <b>${source === "all" ? "전체 소스" : escapeHtml(source)}</b></p>
-        </div>
-        <div class="buttons">
-          <a class="btn primary" href="/duncle/oath-stats?weekKey=all&source=all">전체 보기</a>
-          <a class="btn" href="/duncle/oath-stats?weekKey=${escapeHtml(currentWeekKey)}&source=all">이번 주 보기</a>
-        </div>
-      </div>
-    </section>
-
-    <div class="notice">이 통계는 던클리에 등록된 이용자 기록을 기준으로 한 단순 집계입니다. 실제 게임 내 드랍 확률이 요일이나 시간대에 따라 달라진다는 의미가 아닙니다.</div>
-
-
-    <section class="section">
-      <div class="sectionHead"><h2>전체 서약 순위</h2><span>TOP 12</span></div>
-      <div class="itemGrid">${renderPublicItemCards(stats.items)}</div>
-    </section>
-
-    <section class="section">
-      <div class="sectionHead"><h2>요일별 서약 순위</h2><span>각 요일 TOP 3</span></div>
-      <div class="axisGrid">${renderPublicAxisCards(stats.weekdayItemLeaders, '요일별')}</div>
-    </section>
-
-    <section class="section">
-      <div class="sectionHead"><h2>시간대별 서약 순위</h2><span>00시~24시 1시간 단위 TOP 3</span></div>
-      <div class="hourGrid">${renderPublicAxisCards(stats.hourItemLeaders, '시간대별')}</div>
-    </section>
-
-    <div class="footer">DNF Weekly Counter · 비공식 편의성 통계 페이지 · 조회 전용</div>
-  </main>
-</body>
-</html>`;
-}
-
 function registerDuncleOathStatsFeature(app, db, options = {}) {
   initDuncleOathStatsTables(db);
 
@@ -4344,18 +4247,6 @@ function registerDuncleOathStatsFeature(app, db, options = {}) {
     const weekKey = weekKeyRaw === "all" ? "all" : getWeekKey(weekKeyRaw);
     const source = ["nexon", "naver", "unknown"].includes(sourceRaw) ? sourceRaw : "all";
     res.json({ ok: true, weekKey, source, stats: getOathStats(db, { weekKey, source }) });
-  });
-
-
-  app.get("/duncle/oath-stats", (req, res) => {
-    res.send(renderOathStatsPublicPage(db, {
-      weekKey: req.query.weekKey || req.query.week_key || "all",
-      source: req.query.source || "all",
-    }));
-  });
-
-  app.get("/duncle/oath-stats/public", (req, res) => {
-    res.redirect(`/duncle/oath-stats?weekKey=${encodeURIComponent(String(req.query.weekKey || req.query.week_key || "all"))}&source=${encodeURIComponent(String(req.query.source || "all"))}`);
   });
 
   app.post("/api/duncle/oath-drop-logs", (req, res) => {
@@ -4389,7 +4280,7 @@ function registerDuncleOathStatsFeature(app, db, options = {}) {
     }));
   });
 
-  console.log(`[Duncle] Oath item stats feature enabled. Admin: /${adminPath}/duncle/oath-stats | Public: /duncle/oath-stats`);
+  console.log(`[Duncle] Oath item stats feature enabled. Admin: /${adminPath}/duncle/oath-stats`);
 }
 
 
@@ -4403,7 +4294,7 @@ seedDefaultRaids();
 // Duncle Oath Stats Feature
 // =====================
 registerDuncleOathStatsFeature(app, db, {
-  adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
+  adminPath: DUNCLE_STATS_ADMIN_PATH,
 });
 
 // =====================
