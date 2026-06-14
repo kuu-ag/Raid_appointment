@@ -225,6 +225,95 @@ ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
+
+// =====================
+// Duncle average admin shortcut
+// 평균 드랍률 관리자 페이지에서 관리자용 서약 통계 페이지로 이동하는 버튼을 주입합니다.
+// 공개 조회 페이지(/duncle/oath-stats)는 별도 전용 링크로만 접속하도록 두고,
+// 평균 관리자 버튼은 관리자 경로의 서약 통계로만 이동합니다.
+// =====================
+function injectDuncleOathAdminShortcut(html, adminPath) {
+  if (typeof html !== "string") return html;
+  if (html.includes("duncle-oath-admin-shortcut")) return html;
+
+  const safeAdminPath = String(adminPath || "duncle_hidden").replace(/^\/+|\/+$/g, "");
+  const href = `/${safeAdminPath}/duncle/oath-stats?weekKey=all&source=all`;
+
+  const css = `
+    .duncle-admin-title-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      flex-wrap:wrap;
+      margin:0 0 10px;
+    }
+    .duncle-admin-title-row h1{
+      margin:0 !important;
+    }
+    .duncle-oath-admin-shortcut{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:40px;
+      padding:0 15px;
+      border-radius:10px;
+      border:1px solid rgba(148,163,255,.38);
+      background:rgba(15,23,42,.72);
+      color:#f8fafc !important;
+      font-size:14px;
+      font-weight:800;
+      text-decoration:none !important;
+      white-space:nowrap;
+    }
+    .duncle-oath-admin-shortcut:hover{
+      background:rgba(79,70,229,.42);
+      border-color:#818cf8;
+      transform:translateY(-1px);
+    }
+  `;
+
+  if (html.includes("</style>")) {
+    html = html.replace("</style>", `${css}
+  </style>`);
+  }
+
+  const button = `<a class="duncle-oath-admin-shortcut" href="${href}">서약별 통계 →</a>`;
+  const titleRegex = /<h1([^>]*)>(\s*던클리 평균 드랍[률율] 관리자\s*)<\/h1>/;
+
+  if (titleRegex.test(html)) {
+    return html.replace(titleRegex, `<div class="duncle-admin-title-row"><h1$1>$2</h1>${button}</div>`);
+  }
+
+  // 제목 구조가 바뀌었을 때도 버튼이 사라지지 않도록 본문 상단에 보조 삽입합니다.
+  if (html.includes("<body>")) {
+    return html.replace("<body>", `<body><div style="max-width:1440px;margin:18px auto 0;padding:0 32px;text-align:right;">${button}</div>`);
+  }
+
+  return html;
+}
+
+function installDuncleAverageAdminShortcut(app) {
+  const duncleAdminPath = String(process.env.DUNCLE_ADMIN_PATH || "duncle_hidden").replace(/^\/+|\/+$/g, "");
+  const averageAdminPath = `/${duncleAdminPath}/duncle`;
+
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path !== averageAdminPath) return next();
+
+    const originalSend = res.send.bind(res);
+    res.send = (body) => {
+      if (typeof body === "string") {
+        body = injectDuncleOathAdminShortcut(body, duncleAdminPath);
+      }
+      return originalSend(body);
+    };
+
+    return next();
+  });
+}
+
+installDuncleAverageAdminShortcut(app);
+
 registerDuncleDropRateFeature(app, db, {
   adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
 });
