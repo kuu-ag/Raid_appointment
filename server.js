@@ -14,6 +14,9 @@ import { registerHomeworkFeature } from "./homeworkFeature.js";
 
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 app.use(express.static(path.join(__dirname, "public")));
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -108,8 +111,6 @@ const DEFAULT_RAIDS = [
 // =====================
 // DB init
 // =====================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data.sqlite");
 const db = new Database(DB_PATH);
 
@@ -224,46 +225,8 @@ ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
-const DUNCLE_STATS_ADMIN_PATH = (process.env.DUNCLE_ADMIN_PATH || "duncle_hidden").replace(/^\/+|\/+$/g, "");
-const DUNCLE_OATH_ADMIN_URL = `/${DUNCLE_STATS_ADMIN_PATH}/duncle/oath-stats?weekKey=all&source=all`;
-
-// 던클리 평균 드랍률 관리자 페이지의 서약 통계 버튼이
-// 공개 조회 페이지(/duncle/oath-stats)가 아니라 관리자 페이지로 이동하도록 보정합니다.
-app.use((req, res, next) => {
-  if (req.method !== "GET" || req.path !== `/${DUNCLE_STATS_ADMIN_PATH}/duncle`) {
-    return next();
-  }
-
-  const originalSend = res.send.bind(res);
-  res.send = (body) => {
-    if (typeof body !== "string") return originalSend(body);
-
-    let html = body
-      .replaceAll('href="/duncle/oath-stats?weekKey=all&source=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
-      .replaceAll('href="/duncle/oath-stats?weekKey=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
-      .replaceAll('href="/duncle/oath-stats"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
-      .replaceAll('href="https://www.devonraid.xyz/duncle/oath-stats?weekKey=all&source=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
-      .replaceAll('href="https://www.devonraid.xyz/duncle/oath-stats?weekKey=all"', `href="${DUNCLE_OATH_ADMIN_URL}"`)
-      .replaceAll('href="https://www.devonraid.xyz/duncle/oath-stats"', `href="${DUNCLE_OATH_ADMIN_URL}"`);
-
-    // 버튼이 아예 없는 server.js와 조합되어도 평균 관리자에서 바로 이동할 수 있게 보강합니다.
-    if (!html.includes(DUNCLE_OATH_ADMIN_URL) && html.includes("던클리 평균 드랍")) {
-      const btn = `<a href="${DUNCLE_OATH_ADMIN_URL}" style="display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid #334155;background:#111827;color:#dbeafe;text-decoration:none;font-weight:800;white-space:nowrap;">서약별 통계 →</a>`;
-
-      html = html.replace(
-        /<h1>(던클리 평균 드랍[^<]*관리자)<\/h1>/,
-        `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;"><h1 style="margin:0;">$1</h1>${btn}</div>`
-      );
-    }
-
-    return originalSend(html);
-  };
-
-  return next();
-});
-
 registerDuncleDropRateFeature(app, db, {
-  adminPath: DUNCLE_STATS_ADMIN_PATH,
+  adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
 });
 
 function seedDefaultRaids() {
@@ -2791,7 +2754,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "데창섭", "데창섭", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "정상화", "정상화", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -3587,7 +3550,7 @@ const DUNCLE_OATH_ITEM_NAMES = [
   "태동하는 울림의 무리 서약",
   "찬란한 신념의 정화 서약",
   "태초에 고동치는 마력 서약",
-  "근원에 닿은 자연 서약",
+  "근원에 닿는 자연 서약",
   "초월하는 한계 서약",
   "세계를 태우는 용투 서약",
   "현실이 된 이상 속 황금 서약",
@@ -3610,7 +3573,6 @@ const DUNCLE_OATH_ITEM_KEYS = DUNCLE_OATH_ITEM_NAMES.map((name) => ({ name, key:
 function normalizeKnownOathItemName(value) {
   const key = normalizeOathItemKey(value);
   if (!key) return "";
-  if (key === normalizeOathItemKey("근원에 닿는 자연 서약")) return "근원에 닿은 자연 서약";
   const exact = DUNCLE_OATH_ITEM_KEYS.find((row) => row.key === key);
   if (exact) return exact.name;
   const included = DUNCLE_OATH_ITEM_KEYS.find((row) => key.includes(row.key) || row.key.includes(key));
@@ -4178,7 +4140,7 @@ function renderOathStatsAdminPage(db, options = {}) {
 
     <section class="card">
       <h2>감지된 서약 목록</h2>
-      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 12종이 표시됩니다.</p>
+      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 11종이 표시됩니다.</p>
       <div class="chips">${detectedItems}</div>
     </section>
 
@@ -4294,7 +4256,7 @@ seedDefaultRaids();
 // Duncle Oath Stats Feature
 // =====================
 registerDuncleOathStatsFeature(app, db, {
-  adminPath: DUNCLE_STATS_ADMIN_PATH,
+  adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
 });
 
 // =====================
