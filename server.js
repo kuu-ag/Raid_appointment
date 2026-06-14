@@ -2026,9 +2026,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const bName = data.buffers[b] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(bName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="공대신청"/>`;
+        else html += `<input class="slotInput" name="b_${p}_${b}" value="${esc(bName)}" placeholder="선착순"/>`;
       } else {
-        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">공대신청</div>`;
+        html += bName ? `<div class="slotStatic">${esc(bName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div><div class="slotDivider"></div>`;
@@ -2038,9 +2038,9 @@ function renderPartyCards({ raidKey, partyMap, cfg, editable, adminMode, disable
       const dName = data.dealers[d] || "";
       if (editable && adminMode) {
         if (disableInputs) html += `<input class="slotInput" value="${esc(dName)}" placeholder="비활성" disabled/>`;
-        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="공대신청"/>`;
+        else html += `<input class="slotInput" name="d_${p}_${d}" value="${esc(dName)}" placeholder="선착순"/>`;
       } else {
-        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">공대신청</div>`;
+        html += dName ? `<div class="slotStatic">${esc(dName)}</div>` : `<div class="slotStatic slotEmpty">선착순</div>`;
       }
     }
     html += `</div></div></div>`;
@@ -2754,7 +2754,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "데창섭", "데창섭", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "박종민", "박종민", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -3550,7 +3550,7 @@ const DUNCLE_OATH_ITEM_NAMES = [
   "태동하는 울림의 무리 서약",
   "찬란한 신념의 정화 서약",
   "태초에 고동치는 마력 서약",
-  "근원에 닿는 자연 서약",
+  "근원에 닿은 자연 서약",
   "초월하는 한계 서약",
   "세계를 태우는 용투 서약",
   "현실이 된 이상 속 황금 서약",
@@ -3573,6 +3573,17 @@ const DUNCLE_OATH_ITEM_KEYS = DUNCLE_OATH_ITEM_NAMES.map((name) => ({ name, key:
 function normalizeKnownOathItemName(value) {
   const key = normalizeOathItemKey(value);
   if (!key) return "";
+
+  const aliasMap = new Map([
+    [normalizeOathItemKey("근원에 닿는 자연 서약"), "근원에 닿은 자연 서약"],
+    [normalizeOathItemKey("근원에 닿은 자연의 서약"), "근원에 닿은 자연 서약"],
+    [normalizeOathItemKey("근원에 닿는 자연의 서약"), "근원에 닿은 자연 서약"],
+  ]);
+
+  for (const [aliasKey, canonicalName] of aliasMap.entries()) {
+    if (key === aliasKey || key.includes(aliasKey) || aliasKey.includes(key)) return canonicalName;
+  }
+
   const exact = DUNCLE_OATH_ITEM_KEYS.find((row) => row.key === key);
   if (exact) return exact.name;
   const included = DUNCLE_OATH_ITEM_KEYS.find((row) => key.includes(row.key) || row.key.includes(key));
