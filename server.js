@@ -1814,67 +1814,137 @@ function observerInsertDefaultValue(col) {
 
 function addObserverCleanupRows({ serverId = "cain", names = [], memo = "" } = {}) {
   const tables = getObserverCharacterTables();
-  if (!tables.length) return { total: 0, skipped: 0, added: [], tables, error: "추가 가능한 관측기 테이블을 찾지 못했습니다." };
-  if (!names.length) return { total: 0, skipped: 0, added: [], tables, error: "추가할 캐릭터명을 입력해 주세요." };
+
+  if (!tables.length) {
+    return {
+      total: 0,
+      skipped: 0,
+      failed: 0,
+      added: [],
+      failedRows: [],
+      tables,
+      error: "추가 가능한 관측기 테이블을 찾지 못했습니다.",
+    };
+  }
+
+  if (!names.length) {
+    return {
+      total: 0,
+      skipped: 0,
+      failed: 0,
+      added: [],
+      failedRows: [],
+      tables,
+      error: "추가할 캐릭터명을 입력해 주세요.",
+    };
+  }
 
   const added = [];
+  const failedRows = [];
   let skipped = 0;
 
   for (const target of tables) {
-    const cols = db.prepare(`PRAGMA table_info(${sqlQuoteIdent(target.tableName)})`).all();
-    const colNames = cols.map((c) => String(c.name || ""));
+    let cols = [];
 
+    try {
+      cols = db.prepare(`PRAGMA table_info(${sqlQuoteIdent(target.tableName)})`).all();
+    } catch (error) {
+      for (const characterName of names) {
+        failedRows.push({
+          tableName: target.tableName,
+          serverId,
+          characterName,
+          reason: error.message || "테이블 정보 조회 실패",
+        });
+      }
+      continue;
+    }
+
+    const colNames = cols.map((c) => String(c.name || ""));
     const hasMemo = colNames.includes("memo");
     const hasCreatedAt = colNames.includes("created_at");
     const hasUpdatedAt = colNames.includes("updated_at");
 
     for (const characterName of names) {
-      const exists = db.prepare(
-        `SELECT COUNT(*) AS cnt FROM ${sqlQuoteIdent(target.tableName)} WHERE ${sqlQuoteIdent(target.serverColumn)}=? AND ${sqlQuoteIdent(target.characterColumn)}=?`
-      ).get(serverId, characterName);
+      try {
+        const exists = db.prepare(
+          `SELECT COUNT(*) AS cnt
+           FROM ${sqlQuoteIdent(target.tableName)}
+           WHERE ${sqlQuoteIdent(target.serverColumn)} = ?
+             AND ${sqlQuoteIdent(target.characterColumn)} = ?`
+        ).get(serverId, characterName);
 
-      if (Number(exists?.cnt || 0) > 0) {
-        skipped += 1;
-        continue;
+        if (Number(exists?.cnt || 0) > 0) {
+          skipped += 1;
+          continue;
+        }
+
+        const insertCols = [];
+        const values = [];
+
+        function setCol(colName, value) {
+          if (!colNames.includes(colName)) return;
+          if (insertCols.includes(colName)) return;
+          insertCols.push(colName);
+          values.push(value);
+        }
+
+        setCol(target.serverColumn, serverId);
+        setCol(target.characterColumn, characterName);
+
+        if (hasMemo) setCol("memo", memo);
+        if (hasCreatedAt) setCol("created_at", nowISO());
+        if (hasUpdatedAt) setCol("updated_at", nowISO());
+
+        for (const col of cols) {
+          const colName = String(col.name || "");
+          if (!colName || insertCols.includes(colName)) continue;
+          if (Number(col.pk || 0) === 1) continue;
+          if (col.dflt_value !== null && col.dflt_value !== undefined) continue;
+          if (Number(col.notnull || 0) !== 1) continue;
+
+          setCol(colName, observerInsertDefaultValue(col));
+        }
+
+        if (!insertCols.length) {
+          skipped += 1;
+          continue;
+        }
+
+        const sql = `
+          INSERT INTO ${sqlQuoteIdent(target.tableName)}
+            (${insertCols.map(sqlQuoteIdent).join(", ")})
+          VALUES
+            (${insertCols.map(() => "?").join(", ")})
+        `;
+
+        db.prepare(sql).run(...values);
+
+        added.push({
+          tableName: target.tableName,
+          serverId,
+          characterName,
+        });
+      } catch (error) {
+        failedRows.push({
+          tableName: target.tableName,
+          serverId,
+          characterName,
+          reason: error.message || "INSERT 실패",
+        });
       }
-
-      const insertCols = [];
-      const values = [];
-
-      function setCol(colName, value) {
-        if (!colNames.includes(colName)) return;
-        if (insertCols.includes(colName)) return;
-        insertCols.push(colName);
-        values.push(value);
-      }
-
-      setCol(target.serverColumn, serverId);
-      setCol(target.characterColumn, characterName);
-      if (hasMemo) setCol("memo", memo);
-      if (hasCreatedAt) setCol("created_at", nowISO());
-      if (hasUpdatedAt) setCol("updated_at", nowISO());
-
-      for (const col of cols) {
-        const colName = String(col.name || "");
-        if (!colName || insertCols.includes(colName)) continue;
-        if (Number(col.pk || 0) === 1) continue;
-        if (col.dflt_value !== null && col.dflt_value !== undefined) continue;
-        if (Number(col.notnull || 0) !== 1) continue;
-        setCol(colName, observerInsertDefaultValue(col));
-      }
-
-      if (!insertCols.length) {
-        skipped += 1;
-        continue;
-      }
-
-      const sql = `INSERT INTO ${sqlQuoteIdent(target.tableName)} (${insertCols.map(sqlQuoteIdent).join(", ")}) VALUES (${insertCols.map(() => "?").join(", ")})`;
-      db.prepare(sql).run(...values);
-      added.push({ tableName: target.tableName, serverId, characterName });
     }
   }
 
-  return { total: added.length, skipped, added, tables, tableNames: tables.map((t) => t.tableName) };
+  return {
+    total: added.length,
+    skipped,
+    failed: failedRows.length,
+    added,
+    failedRows,
+    tables,
+    tableNames: Array.from(new Set(added.map((r) => r.tableName))),
+  };
 }
 
 function renderObserverCleanupPage({ serverId = "cain", namesText = "", message = "" } = {}) {
@@ -1991,12 +2061,21 @@ app.post(`${ADMIN_BASE}/observer/cleanup/add`, requireAdmin, (req, res) => {
   const serverId = String(req.body.server_id || "cain").trim() || "cain";
   const namesText = String(req.body.names || "");
   const names = splitCleanupNames(namesText);
+
   const result = addObserverCleanupRows({ serverId, names });
+
   const message = result.error
     ? `추가 실패: ${result.error}`
-    : `추가 완료: 총 ${result.total}건 추가됨${result.skipped ? ` / 중복 ${result.skipped}건 건너뜀` : ""}`;
-  return res.redirect(`${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`);
+    : `추가 완료: ${result.total}건 추가됨`
+      + `${result.skipped ? ` / 중복 ${result.skipped}건 건너뜀` : ""}`
+      + `${result.failed ? ` / 실패 ${result.failed}건` : ""}`
+      + `${result.tableNames?.length ? ` / 성공 테이블 ${result.tableNames.join(", ")}` : ""}`;
+
+  return res.redirect(
+    `${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`
+  );
 });
+
 
 // =====================
 // Viewer: main
