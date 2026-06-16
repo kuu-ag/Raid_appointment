@@ -661,7 +661,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${esc(title)}</title>
-  ${GOOGLE_ADSENSE_CLIENT ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${esc(GOOGLE_ADSENSE_CLIENT)}" crossorigin="anonymous"></script>` : ""}
+  ${GOOGLE_ADSENSE_CLIENT && !isAdmin ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${esc(GOOGLE_ADSENSE_CLIENT)}" crossorigin="anonymous"></script>` : ""}
   <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
