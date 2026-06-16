@@ -14,11 +14,8 @@ import { registerHomeworkFeature } from "./homeworkFeature.js";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static("public"));
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
@@ -33,6 +30,8 @@ const ADMIN_KEY = (process.env.ADMIN_KEY || "").trim();
 const ADMIN_PATH = (process.env.ADMIN_PATH || "devon_path_f23d12").trim();
 const ADMIN_BASE = "/" + ADMIN_PATH;
 const IS_PROD = process.env.NODE_ENV === "production";
+const GOOGLE_ADSENSE_CLIENT = (process.env.GOOGLE_ADSENSE_CLIENT || "").trim();
+const CONTACT_EMAIL = (process.env.CONTACT_EMAIL || "touen9972@gmail.com").trim();
 
 // =====================
 // Options
@@ -111,6 +110,8 @@ const DEFAULT_RAIDS = [
 // =====================
 // DB init
 // =====================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data.sqlite");
 const db = new Database(DB_PATH);
 
@@ -227,92 +228,99 @@ ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
 
 
 // =====================
-// Duncle average admin shortcut
-// 평균 드랍률 관리자 페이지에서 관리자용 서약 통계 페이지로 이동하는 버튼을 주입합니다.
-// 공개 조회 페이지(/duncle/oath-stats)는 별도 전용 링크로만 접속하도록 두고,
-// 평균 관리자 버튼은 관리자 경로의 서약 통계로만 이동합니다.
+// Duncle Admin Shortcut
 // =====================
-function injectDuncleOathAdminShortcut(html, adminPath) {
-  if (typeof html !== "string") return html;
-  if (html.includes("duncle-oath-admin-shortcut")) return html;
+// 던클리 평균 드랍률 관리자 페이지에서 서약별 통계 페이지로 바로 이동할 수 있는 버튼을 주입합니다.
+// 기존 duncleDropRateFeature.js 파일을 수정하지 않고 server.js 한 파일만 교체해도 동작하도록 res.send를 감싸는 방식입니다.
+const DUNCLE_ADMIN_PATH_FOR_SHORTCUT = (
+  process.env.DUNCLE_ADMIN_PATH || "duncle_hidden"
+).replace(/^\/+|\/+$/g, "");
 
-  const safeAdminPath = String(adminPath || "duncle_hidden").replace(/^\/+|\/+$/g, "");
-  const href = `/${safeAdminPath}/duncle/oath-stats?weekKey=all&source=all`;
+function injectDuncleOathStatsShortcut(html) {
+  const raw = String(html || "");
+  if (!raw || raw.includes('data-duncle-oath-stats-shortcut="1"')) return raw;
 
-  const css = `
-    .duncle-admin-title-row{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:14px;
-      flex-wrap:wrap;
-      margin:0 0 10px;
-    }
-    .duncle-admin-title-row h1{
-      margin:0 !important;
-    }
-    .duncle-oath-admin-shortcut{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      min-height:40px;
-      padding:0 15px;
-      border-radius:10px;
-      border:1px solid rgba(148,163,255,.38);
-      background:rgba(15,23,42,.72);
-      color:#f8fafc !important;
-      font-size:14px;
-      font-weight:800;
-      text-decoration:none !important;
-      white-space:nowrap;
-    }
-    .duncle-oath-admin-shortcut:hover{
-      background:rgba(79,70,229,.42);
-      border-color:#818cf8;
-      transform:translateY(-1px);
-    }
-  `;
+  const oathStatsHref = `/${DUNCLE_ADMIN_PATH_FOR_SHORTCUT}/duncle/oath-stats?weekKey=all&source=all`;
+  const shortcutLink = `<a data-duncle-oath-stats-shortcut="1" href="${oathStatsHref}" style="
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:42px;
+    padding:10px 16px;
+    border-radius:10px;
+    background:#111827;
+    border:1px solid #334155;
+    color:#e5e7eb;
+    font-size:14px;
+    font-weight:900;
+    line-height:1;
+    text-decoration:none;
+    white-space:nowrap;
+    box-shadow:none;
+  ">서약별 통계 →</a>`;
 
-  if (html.includes("</style>")) {
-    html = html.replace("</style>", `${css}
-  </style>`);
+  const titleRow = `<div data-duncle-oath-stats-shortcut-row="1" style="
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    margin:0 0 8px;
+    flex-wrap:wrap;
+  ">
+    <h1 style="margin:0;">던클리 평균 드랍율 관리자</h1>
+    ${shortcutLink}
+  </div>`;
+
+  // 가장 자연스러운 위치: 평균 관리자 제목과 같은 줄 우측에 배치합니다.
+  const h1Exact = /<h1[^>]*>\s*던클리 평균 드랍율 관리자\s*<\/h1>/i;
+  if (h1Exact.test(raw)) {
+    return raw.replace(h1Exact, titleRow);
   }
 
-  const button = `<a class="duncle-oath-admin-shortcut" href="${href}">서약별 통계 →</a>`;
-  const titleRegex = /<h1([^>]*)>(\s*던클리 평균 드랍[률율] 관리자\s*)<\/h1>/;
-
-  if (titleRegex.test(html)) {
-    return html.replace(titleRegex, `<div class="duncle-admin-title-row"><h1$1>$2</h1>${button}</div>`);
+  // h1 태그가 아니거나 제목 주변 마크업이 바뀐 경우, 제목 텍스트 직전에 우측 정렬 버튼만 추가합니다.
+  const titleText = "던클리 평균 드랍율 관리자";
+  const titleIndex = raw.indexOf(titleText);
+  if (titleIndex >= 0) {
+    const buttonRow = `<div data-duncle-oath-stats-shortcut-row="1" style="display:flex;justify-content:flex-end;margin:0 0 12px;">${shortcutLink}</div>`;
+    return raw.slice(0, titleIndex) + buttonRow + raw.slice(titleIndex);
   }
 
-  // 제목 구조가 바뀌었을 때도 버튼이 사라지지 않도록 본문 상단에 보조 삽입합니다.
-  if (html.includes("<body>")) {
-    return html.replace("<body>", `<body><div style="max-width:1440px;margin:18px auto 0;padding:0 32px;text-align:right;">${button}</div>`);
+  // 최후 fallback: body 바로 아래에 붙이되, sticky/fixed가 아닌 일반 우측 정렬 행으로만 표시합니다.
+  const fallbackRow = `<div data-duncle-oath-stats-shortcut-row="1" style="display:flex;justify-content:flex-end;max-width:1280px;margin:0 auto 14px;padding:0 8px;">${shortcutLink}</div>`;
+  const bodyOpenMatch = raw.match(/<body[^>]*>/i);
+  if (bodyOpenMatch && bodyOpenMatch.index != null) {
+    const insertAt = bodyOpenMatch.index + bodyOpenMatch[0].length;
+    return raw.slice(0, insertAt) + fallbackRow + raw.slice(insertAt);
   }
 
-  return html;
+  return fallbackRow + raw;
 }
 
-function installDuncleAverageAdminShortcut(app) {
-  const duncleAdminPath = String(process.env.DUNCLE_ADMIN_PATH || "duncle_hidden").replace(/^\/+|\/+$/g, "");
-  const averageAdminPath = `/${duncleAdminPath}/duncle`;
+app.use((req, res, next) => {
+  const targetPath = `/${DUNCLE_ADMIN_PATH_FOR_SHORTCUT}/duncle`;
+  const reqPath = String(req.path || "").replace(/\/+$/g, "");
 
-  app.use((req, res, next) => {
-    if (req.method !== "GET" || req.path !== averageAdminPath) return next();
-
-    const originalSend = res.send.bind(res);
-    res.send = (body) => {
-      if (typeof body === "string") {
-        body = injectDuncleOathAdminShortcut(body, duncleAdminPath);
-      }
-      return originalSend(body);
-    };
-
+  if (req.method !== "GET" || reqPath !== targetPath) {
     return next();
-  });
-}
+  }
 
-installDuncleAverageAdminShortcut(app);
+  const originalSend = res.send.bind(res);
+  res.send = (body) => {
+    try {
+      if (typeof body === "string") {
+        return originalSend(injectDuncleOathStatsShortcut(body));
+      }
+      if (Buffer.isBuffer(body)) {
+        return originalSend(Buffer.from(injectDuncleOathStatsShortcut(body.toString("utf8")), "utf8"));
+      }
+    } catch (err) {
+      console.error("[Duncle] Failed to inject oath stats shortcut:", err);
+    }
+    return originalSend(body);
+  };
+
+  return next();
+});
 
 registerDuncleDropRateFeature(app, db, {
   adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
@@ -368,6 +376,14 @@ function esc(v) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function getAdSensePublisherId() {
+  if (!GOOGLE_ADSENSE_CLIENT) return "";
+  const raw = GOOGLE_ADSENSE_CLIENT.trim();
+  if (raw.startsWith("ca-pub-")) return raw.replace(/^ca-pub-/, "pub-");
+  if (raw.startsWith("pub-")) return raw;
+  return raw;
 }
 
 function getRaidOptions(includeInactive = false) {
@@ -563,7 +579,7 @@ function buildRaidCard(r, href) {
 // Layout
 // =====================
 function buildSidebar(activeRaid = "", isAdmin = false) {
-  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.png";
+  const thumbImg = activeRaid ? raidImage(activeRaid) : "/images/streamer_profile.gif";
 
   if (!isAdmin) {
     return `
@@ -593,7 +609,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
     return `
       <aside class="sidebar">
         <div class="thumbnail">
-          <img src="/images/streamer_profile.png" alt="관리자 썸네일"
+          <img src="/images/streamer_profile.gif" alt="관리자 썸네일"
                onerror="this.style.display='none'; this.parentNode.innerHTML='<div class=&quot;thumb-fallback&quot;>관리자 패널</div>';">
         </div>
         <button type="button" class="side-btn" onclick="openModal('modal-auth')">인증키 설정</button>
@@ -601,6 +617,7 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
         <button type="button" class="side-btn" onclick="openModal('modal-custom-raid')">커스텀 레이드 추가</button>
         <a href="/observer" class="side-btn">데본베일 관측기</a>
         <a href="/observer/homework" class="side-btn">숙제현황</a>
+        <a href="${esc(ADMIN_BASE)}/observer/cleanup" class="side-btn">관측기 정리</a>
         <a href="${esc(ADMIN_BASE)}/raid" class="side-btn">레이드 선택</a>
         <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
       </aside>
@@ -623,7 +640,8 @@ function buildSidebar(activeRaid = "", isAdmin = false) {
       <a href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(activeRaid)}&sort=grade" class="side-btn">신청 목록</a>
       <a href="${esc(ADMIN_BASE)}/lineup?raid=${encodeURIComponent(activeRaid)}" class="side-btn">편성표 관리</a>
       <a href="/observer" class="side-btn">데본베일 관측기</a>
-        <a href="/observer/homework" class="side-btn">숙제현황</a>
+      <a href="/observer/homework" class="side-btn">숙제현황</a>
+      <a href="${esc(ADMIN_BASE)}/observer/cleanup" class="side-btn">관측기 정리</a>
       <a href="${esc(ADMIN_BASE)}/logout" class="side-btn side-btn-danger">로그아웃</a>
     </aside>
   `;
@@ -643,6 +661,7 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${esc(title)}</title>
+  ${GOOGLE_ADSENSE_CLIENT ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${esc(GOOGLE_ADSENSE_CLIENT)}" crossorigin="anonymous"></script>` : ""}
   <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
@@ -715,6 +734,28 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       color:var(--text-main);
       background:rgba(38,40,77,.75);
       white-space:nowrap;
+    }
+    .header-links{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .header-link{
+      border:1px solid var(--border-glow);
+      padding:9px 14px;
+      border-radius:10px;
+      font-size:13px;
+      font-weight:700;
+      color:var(--text-main);
+      background:rgba(38,40,77,.75);
+      white-space:nowrap;
+      transition:.15s ease;
+    }
+    .header-link:hover{
+      background:var(--border-glow);
+      border-color:var(--accent);
     }
 
     .content-wrapper{
@@ -1550,7 +1591,10 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
         <h1>DevonVail RAID</h1>
         <p>레이드 예약 사이트 ${isAdmin ? '<span style="color:#fca5a5;font-weight:700;">[관리자 모드]</span>' : ''}</p>
       </div>
-      <div class="made-by">Made by 🧭</div>
+      <div class="header-links">
+        <a class="header-link" href="/privacy">개인정보처리방침</a>
+        <div class="made-by">Made by 🧭</div>
+      </div>
     </header>
 
     <div class="content-wrapper">
@@ -1589,6 +1633,369 @@ function requireAdmin(req, res, next) {
 
 app.get(/^\/admin(?:\/.*)?$/, (req, res) => {
   return res.status(404).send("Not Found");
+});
+
+// =====================
+// Public policy pages for AdSense
+// =====================
+app.get("/privacy", (req, res) => {
+  res.send(
+    layout(
+      `
+      <div class="box">
+        <div style="font-weight:900;font-size:22px;margin-bottom:10px;">개인정보처리방침</div>
+        <div class="muted" style="line-height:1.8;">
+          본 사이트는 레이드 예약, 공대 편성표, 데본베일 관측기 기능 제공을 위해 사용자가 입력한 예약 정보와 접속 로그, 쿠키 정보를 처리할 수 있습니다.<br/><br/>
+
+          사용자가 입력한 치지직 닉네임, 모험단 이름, 레이드 신청 정보는 예약 확인과 공대 편성표 제공을 위해 사용됩니다.<br/><br/>
+
+          본 사이트는 Google AdSense 등 제3자 광고 서비스를 사용할 수 있습니다. 이 과정에서 Google 및 제3자 광고 사업자는 쿠키를 사용하여 사용자의 이전 방문 기록을 기반으로 광고를 게재할 수 있습니다.<br/><br/>
+
+          사용자는 브라우저 설정을 통해 쿠키 저장을 거부하거나 삭제할 수 있습니다.<br/><br/>
+
+          본 사이트는 개인이 제작한 비공식 편의성 사이트이며, NEXON 및 NEOPLE과 직접적인 관련이 없습니다.<br/><br/>
+
+          문의: ${esc(CONTACT_EMAIL)}
+        </div>
+      </div>
+      `,
+      "개인정보처리방침"
+    )
+  );
+});
+
+app.get("/ads.txt", (req, res) => {
+  const publisherId = getAdSensePublisherId();
+  res.type("text/plain; charset=utf-8");
+
+  if (!publisherId) {
+    return res.send(
+      "# GOOGLE_ADSENSE_CLIENT 환경변수를 설정하면 ads.txt가 자동으로 생성됩니다.\n"
+    );
+  }
+
+  return res.send(`google.com, ${publisherId}, DIRECT, f08c47fec0942fa0\n`);
+});
+
+
+// =====================
+// Observer Character Cleanup
+// =====================
+// 관측기 갱신에 남아 있는 예전 캐릭터를 DB에서 삭제하기 위한 관리자 도구입니다.
+// timelineFeature.js 내부 테이블명이 바뀌어도 동작하도록 server_id / character_name 계열 컬럼을 가진 테이블을 자동 탐색합니다.
+function sqlQuoteIdent(value) {
+  return `"${String(value || "").replaceAll('"', '""')}"`;
+}
+
+function splitCleanupNames(value) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(/[\n,]+/g)
+        .map((v) => v.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function getObserverCharacterTables() {
+  const tableRows = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC`)
+    .all();
+
+  const characterColumnCandidates = ["character_name", "characterName", "char_name", "charName", "name"];
+  const serverColumnCandidates = ["server_id", "serverId", "server", "server_name", "serverName"];
+  const result = [];
+
+  for (const t of tableRows) {
+    const tableName = String(t.name || "");
+    const cols = db.prepare(`PRAGMA table_info(${sqlQuoteIdent(tableName)})`).all();
+    const colNames = cols.map((c) => String(c.name || ""));
+    const characterColumn = characterColumnCandidates.find((c) => colNames.includes(c));
+    const serverColumn = serverColumnCandidates.find((c) => colNames.includes(c));
+
+    if (!tableName || !characterColumn || !serverColumn) continue;
+
+    result.push({
+      tableName,
+      serverColumn,
+      characterColumn,
+    });
+  }
+
+  return result;
+}
+
+function getObserverCleanupRows({ serverId = "cain", names = [] } = {}) {
+  const tables = getObserverCharacterTables();
+  const rows = [];
+
+  for (const t of tables) {
+    const where = [];
+    const params = [];
+
+    if (serverId) {
+      where.push(`${sqlQuoteIdent(t.serverColumn)} = ?`);
+      params.push(serverId);
+    }
+
+    if (names.length) {
+      where.push(`${sqlQuoteIdent(t.characterColumn)} IN (${names.map(() => "?").join(",")})`);
+      params.push(...names);
+    } else {
+      where.push("1=0");
+    }
+
+    const sql = `
+      SELECT
+        ${sqlQuoteIdent(t.serverColumn)} AS server_id,
+        ${sqlQuoteIdent(t.characterColumn)} AS character_name
+      FROM ${sqlQuoteIdent(t.tableName)}
+      WHERE ${where.join(" AND ")}
+      ORDER BY ${sqlQuoteIdent(t.characterColumn)} ASC
+      LIMIT 200
+    `;
+
+    const found = db.prepare(sql).all(...params);
+    for (const r of found) {
+      rows.push({
+        tableName: t.tableName,
+        serverId: r.server_id,
+        characterName: r.character_name,
+      });
+    }
+  }
+
+  return { tables, rows };
+}
+
+function deleteObserverCleanupRows({ serverId = "cain", names = [] } = {}) {
+  const tables = getObserverCharacterTables();
+  const deleted = [];
+  let total = 0;
+
+  if (!names.length) return { total, deleted, tables };
+
+  for (const t of tables) {
+    const where = [];
+    const params = [];
+
+    if (serverId) {
+      where.push(`${sqlQuoteIdent(t.serverColumn)} = ?`);
+      params.push(serverId);
+    }
+
+    where.push(`${sqlQuoteIdent(t.characterColumn)} IN (${names.map(() => "?").join(",")})`);
+    params.push(...names);
+
+    const sql = `DELETE FROM ${sqlQuoteIdent(t.tableName)} WHERE ${where.join(" AND ")}`;
+    const result = db.prepare(sql).run(...params);
+    const changes = Number(result?.changes || 0);
+    total += changes;
+    if (changes > 0) deleted.push({ tableName: t.tableName, changes });
+  }
+
+  return { total, deleted, tables };
+}
+
+
+function observerInsertDefaultValue(col) {
+  const name = String(col.name || "");
+  const type = String(col.type || "").toUpperCase();
+  const now = nowISO();
+
+  if (/created_at|createdAt|updated_at|updatedAt|checked_at|checkedAt|registered_at|registeredAt/i.test(name)) return now;
+  if (/memo|comment|note|request_note/i.test(name)) return "";
+  if (/character_id|characterId|char_id|charId/i.test(name)) return "";
+  if (/count|cnt|total|cleared|active|enabled|is_/i.test(name)) return 0;
+  if (type.includes("INT") || type.includes("REAL") || type.includes("NUM")) return 0;
+  return "";
+}
+
+function addObserverCleanupRows({ serverId = "cain", names = [], memo = "" } = {}) {
+  const tables = getObserverCharacterTables();
+  if (!tables.length) return { total: 0, skipped: 0, added: [], tables, error: "추가 가능한 관측기 테이블을 찾지 못했습니다." };
+  if (!names.length) return { total: 0, skipped: 0, added: [], tables, error: "추가할 캐릭터명을 입력해 주세요." };
+
+  const added = [];
+  let skipped = 0;
+
+  for (const target of tables) {
+    const cols = db.prepare(`PRAGMA table_info(${sqlQuoteIdent(target.tableName)})`).all();
+    const colNames = cols.map((c) => String(c.name || ""));
+
+    const hasMemo = colNames.includes("memo");
+    const hasCreatedAt = colNames.includes("created_at");
+    const hasUpdatedAt = colNames.includes("updated_at");
+
+    for (const characterName of names) {
+      const exists = db.prepare(
+        `SELECT COUNT(*) AS cnt FROM ${sqlQuoteIdent(target.tableName)} WHERE ${sqlQuoteIdent(target.serverColumn)}=? AND ${sqlQuoteIdent(target.characterColumn)}=?`
+      ).get(serverId, characterName);
+
+      if (Number(exists?.cnt || 0) > 0) {
+        skipped += 1;
+        continue;
+      }
+
+      const insertCols = [];
+      const values = [];
+
+      function setCol(colName, value) {
+        if (!colNames.includes(colName)) return;
+        if (insertCols.includes(colName)) return;
+        insertCols.push(colName);
+        values.push(value);
+      }
+
+      setCol(target.serverColumn, serverId);
+      setCol(target.characterColumn, characterName);
+      if (hasMemo) setCol("memo", memo);
+      if (hasCreatedAt) setCol("created_at", nowISO());
+      if (hasUpdatedAt) setCol("updated_at", nowISO());
+
+      for (const col of cols) {
+        const colName = String(col.name || "");
+        if (!colName || insertCols.includes(colName)) continue;
+        if (Number(col.pk || 0) === 1) continue;
+        if (col.dflt_value !== null && col.dflt_value !== undefined) continue;
+        if (Number(col.notnull || 0) !== 1) continue;
+        setCol(colName, observerInsertDefaultValue(col));
+      }
+
+      if (!insertCols.length) {
+        skipped += 1;
+        continue;
+      }
+
+      const sql = `INSERT INTO ${sqlQuoteIdent(target.tableName)} (${insertCols.map(sqlQuoteIdent).join(", ")}) VALUES (${insertCols.map(() => "?").join(", ")})`;
+      db.prepare(sql).run(...values);
+      added.push({ tableName: target.tableName, serverId, characterName });
+    }
+  }
+
+  return { total: added.length, skipped, added, tables, tableNames: tables.map((t) => t.tableName) };
+}
+
+function renderObserverCleanupPage({ serverId = "cain", namesText = "", message = "" } = {}) {
+  const names = splitCleanupNames(namesText);
+  const preview = getObserverCleanupRows({ serverId, names });
+  const rowHtml = preview.rows.length
+    ? preview.rows.map((r) => `
+        <tr>
+          <td>${esc(r.tableName)}</td>
+          <td>${esc(r.serverId)}</td>
+          <td>${esc(r.characterName)}</td>
+        </tr>
+      `).join("")
+    : `<tr><td colspan="3" class="center muted">입력한 캐릭터와 일치하는 관측기 DB 데이터가 없습니다.</td></tr>`;
+
+
+  return layout(
+    `
+    <div class="box">
+      <div class="row sp">
+        <div>
+          <div style="font-weight:900;font-size:22px;margin-bottom:6px;">관측기 캐릭터 정리</div>
+          <div class="muted">trackedcharacters.json과 관측기 DB 사이의 캐릭터를 추가하거나 삭제합니다.</div>
+        </div>
+        <div class="row">
+          <a class="btn btnGhost" href="/observer">관측기</a>
+          <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/raid">관리자 로비</a>
+        </div>
+      </div>
+
+      ${message ? `<div class="divider"></div><div class="ok">${esc(message)}</div>` : ""}
+
+      <div class="divider"></div>
+      <form method="GET" action="${esc(ADMIN_BASE)}/observer/cleanup" class="box" style="background:rgba(2,6,23,.26);">
+        <div class="muted" style="margin-bottom:8px;">삭제 전 확인할 캐릭터명을 줄바꿈 또는 쉼표로 입력하세요.</div>
+        <div class="row" style="align-items:flex-start;">
+          <div style="width:160px;max-width:100%;">
+            <label class="muted">서버</label>
+            <input name="server_id" value="${esc(serverId)}" placeholder="cain" />
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <label class="muted">캐릭터명</label>
+            <textarea name="names" rows="5" placeholder="닉네임 변경 또는 삭제된 캐릭터의 닉네임을 적어주세요.\n데본베일\n암종호">${esc(namesText)}</textarea>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn btnPrimary" type="submit">조회</button>
+        </div>
+      </form>
+
+      <div class="divider"></div>
+      <form method="POST" action="${esc(ADMIN_BASE)}/observer/cleanup/add" class="box" style="background:rgba(2,6,23,.26);" onsubmit="return confirm('입력한 캐릭터를 관측기 DB에 추가하시겠습니까?');">
+        <div style="font-weight:900;font-size:18px;margin-bottom:6px;">관측기 캐릭터 추가</div>
+        <div class="muted" style="margin-bottom:10px;">trackedcharacters.json에 추가한 캐릭터를 관측기 DB에도 수동으로 등록합니다. 자동 탐색된 모든 관측기 대상 테이블에 함께 추가됩니다.</div>
+        <div class="row" style="align-items:flex-start;">
+          <div style="width:160px;max-width:100%;">
+            <label class="muted">서버</label>
+            <input name="server_id" value="${esc(serverId)}" placeholder="cain" />
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <label class="muted">추가할 캐릭터명</label>
+            <textarea name="names" rows="5" placeholder="추가할 캐릭터의 닉네임을 작성해주세요.
+데본베일
+암종호"></textarea>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px;">
+          <button class="btn btnPrimary" type="submit" ${preview.tables.length ? "" : "disabled"}>입력 캐릭터 DB 전체 추가</button>
+          <span class="muted">중복 캐릭터는 건너뜁니다. 추가 후 관측기 갱신을 다시 실행하세요.</span>
+        </div>
+      </form>
+
+      <div class="divider"></div>
+      <table>
+        <tr>
+          <th>테이블</th>
+          <th>서버</th>
+          <th>캐릭터명</th>
+        </tr>
+        ${rowHtml}
+      </table>
+
+      <div class="divider"></div>
+      <form method="POST" action="${esc(ADMIN_BASE)}/observer/cleanup/delete" onsubmit="return confirm('조회된 관측기 DB 캐릭터 데이터를 삭제하시겠습니까?');">
+        <input type="hidden" name="server_id" value="${esc(serverId)}" />
+        <textarea name="names" style="display:none;">${esc(namesText)}</textarea>
+        <button class="btn btnDanger" type="submit" ${names.length ? "" : "disabled"}>입력 캐릭터 DB 삭제</button>
+        <span class="muted"> 삭제 후 관측기 갱신을 다시 실행하세요.</span>
+      </form>
+    </div>
+    `,
+    "관측기 캐릭터 정리",
+    { isAdmin: true, activeRaid: "admin_lobby" }
+  );
+}
+
+app.get(`${ADMIN_BASE}/observer/cleanup`, requireAdmin, (req, res) => {
+  const serverId = String(req.query.server_id || "cain").trim() || "cain";
+  const namesText = String(req.query.names || "");
+  const message = String(req.query.message || "");
+  res.send(renderObserverCleanupPage({ serverId, namesText, message }));
+});
+
+app.post(`${ADMIN_BASE}/observer/cleanup/delete`, requireAdmin, (req, res) => {
+  const serverId = String(req.body.server_id || "cain").trim() || "cain";
+  const namesText = String(req.body.names || "");
+  const names = splitCleanupNames(namesText);
+  const result = deleteObserverCleanupRows({ serverId, names });
+  const message = `삭제 완료: 총 ${result.total}건 삭제됨`;
+  return res.redirect(`${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`);
+});
+
+app.post(`${ADMIN_BASE}/observer/cleanup/add`, requireAdmin, (req, res) => {
+  const serverId = String(req.body.server_id || "cain").trim() || "cain";
+  const namesText = String(req.body.names || "");
+  const names = splitCleanupNames(namesText);
+  const result = addObserverCleanupRows({ serverId, names });
+  const message = result.error
+    ? `추가 실패: ${result.error}`
+    : `추가 완료: 총 ${result.total}건 추가됨${result.skipped ? ` / 중복 ${result.skipped}건 건너뜀` : ""}`;
+  return res.redirect(`${ADMIN_BASE}/observer/cleanup?server_id=${encodeURIComponent(serverId)}&names=${encodeURIComponent(namesText)}&message=${encodeURIComponent(message)}`);
 });
 
 // =====================
@@ -3663,15 +4070,11 @@ function normalizeKnownOathItemName(value) {
   const key = normalizeOathItemKey(value);
   if (!key) return "";
 
-  const aliasMap = new Map([
+  // 과거 오표기 데이터도 정확한 명칭으로 묶어서 집계합니다.
+  const legacyAliases = new Map([
     [normalizeOathItemKey("근원에 닿는 자연 서약"), "근원에 닿은 자연 서약"],
-    [normalizeOathItemKey("근원에 닿은 자연의 서약"), "근원에 닿은 자연 서약"],
-    [normalizeOathItemKey("근원에 닿는 자연의 서약"), "근원에 닿은 자연 서약"],
   ]);
-
-  for (const [aliasKey, canonicalName] of aliasMap.entries()) {
-    if (key === aliasKey || key.includes(aliasKey) || aliasKey.includes(key)) return canonicalName;
-  }
+  if (legacyAliases.has(key)) return legacyAliases.get(key);
 
   const exact = DUNCLE_OATH_ITEM_KEYS.find((row) => row.key === key);
   if (exact) return exact.name;
@@ -4147,15 +4550,6 @@ function renderOathStatsAdminPage(db, options = {}) {
   `).join("");
 
   const detectedItems = stats.itemNames.map((name) => `<span>${escapeHtml(name)}</span>`).join("") || `<span>집계 전</span>`;
-  const overallItemRows = stats.items.length
-    ? stats.items.map((row, index) => `
-      <tr>
-        <td class="num">${index + 1}</td>
-        <td class="leader">${escapeHtml(row.itemName)}</td>
-        <td class="num">${Number(row.count || 0).toLocaleString()}개</td>
-      </tr>
-    `).join("")
-    : `<tr><td colspan="3" class="center muted">집계된 서약 기록이 없습니다.</td></tr>`;
 
   return `<!doctype html>
 <html lang="ko">
@@ -4253,21 +4647,6 @@ function renderOathStatsAdminPage(db, options = {}) {
       <div class="chips">${detectedItems}</div>
     </section>
 
-    <section class="card tableWrap">
-      <h2>전체 서약 순위</h2>
-      <p class="cardDesc">관리자 확인용 전체 서약 집계 순위입니다. 공개 조회 페이지에는 표시되지 않습니다.</p>
-      <table class="compactTable">
-        <thead>
-          <tr>
-            <th class="center">순위</th>
-            <th>서약명</th>
-            <th class="center">집계 수</th>
-          </tr>
-        </thead>
-        <tbody>${overallItemRows}</tbody>
-      </table>
-    </section>
-
     <section class="grid">
       <div class="card tableWrap">
         <h2>요일별 가장 많이 집계된 서약</h2>
@@ -4316,93 +4695,6 @@ function renderOathStatsAdminPage(db, options = {}) {
 </html>`;
 }
 
-
-function renderOathStatsPublicPage(db, options = {}) {
-  const weekKeyRaw = String(options.weekKey || "all");
-  const sourceRaw = String(options.source || "all");
-  const weekKey = weekKeyRaw === "all" ? "all" : getWeekKey(weekKeyRaw);
-  const source = ["nexon", "naver", "unknown"].includes(sourceRaw) ? sourceRaw : "all";
-  const stats = getOathStats(db, { weekKey, source });
-
-  const renderAxisCards = (rows) => rows.map((row) => {
-    const topItems = Array.isArray(row.topItems) ? row.topItems.slice(0, 3) : [];
-    const inner = topItems.length
-      ? topItems.map((item, index) => `
-        <div class="miniRank">
-          <span class="miniNo">${index + 1}</span>
-          <span class="miniName">${escapeHtml(item.itemName)}</span>
-          <span class="miniCount">${Number(item.count || 0).toLocaleString()}개</span>
-        </div>
-      `).join("")
-      : `<div class="empty miniEmpty">집계 없음</div>`;
-    return `
-      <article class="axisCard">
-        <div class="axisHead">
-          <strong>${escapeHtml(row.label)}</strong>
-        </div>
-        ${inner}
-      </article>
-    `;
-  }).join("");
-
-  return `<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <title>던클리 서약 종합</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    * { box-sizing: border-box; }
-    body { margin:0; background:#080b12; color:#f8fafc; font-family: Arial, "Noto Sans KR", sans-serif; }
-    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 18px 48px; }
-    .hero { border:1px solid #27324a; background:linear-gradient(180deg,#111827,#0b1020); border-radius:22px; padding:24px; margin-bottom:18px; }
-    h1 { margin:0 0 8px; font-size:28px; letter-spacing:-.04em; }
-    .desc { margin:0; color:#a8b3cf; line-height:1.65; font-size:14px; }
-    .notice { margin-top:14px; border:1px solid #854d0e; background:#1c1917; color:#fde68a; border-radius:14px; padding:12px 14px; font-size:13px; line-height:1.55; }
-    .section { border:1px solid #27324a; background:#111827; border-radius:20px; padding:18px; margin-top:16px; }
-    .sectionTitle { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:14px; }
-    h2 { margin:0; font-size:19px; letter-spacing:-.03em; }
-    .sub { color:#93a4c8; font-size:13px; }
-    .rankList { display:grid; gap:8px; }
-    .rankRow { display:grid; grid-template-columns:38px minmax(0,1fr) auto; gap:10px; align-items:center; border:1px solid #26324b; background:#0b1224; border-radius:14px; padding:12px; }
-    .rankNo { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#4338ca; color:white; font-weight:900; }
-    .rankName { min-width:0; font-weight:900; line-height:1.35; word-break:keep-all; overflow-wrap:anywhere; }
-    .rankCount { color:#bfdbfe; font-weight:900; white-space:nowrap; }
-    .axisGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-    .hourGrid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-    .axisCard { border:1px solid #26324b; background:#0b1224; border-radius:16px; padding:14px; min-width:0; }
-    .axisHead { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; color:#fff; }
-    .miniRank { display:grid; grid-template-columns:28px minmax(0,1fr) auto; gap:8px; align-items:start; padding:9px 0; border-top:1px solid rgba(148,163,184,.14); }
-    .miniNo { width:23px; height:23px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; background:#312e81; color:#fff; font-weight:900; font-size:12px; }
-    .miniName { min-width:0; font-weight:800; line-height:1.35; word-break:keep-all; overflow-wrap:anywhere; }
-    .miniCount { color:#bfdbfe; font-weight:900; white-space:nowrap; }
-    .empty { color:#94a3b8; padding:12px; border:1px dashed #334155; border-radius:12px; text-align:center; }
-    .miniEmpty { margin-top:8px; }
-    @media (max-width:900px) { .axisGrid, .hourGrid { grid-template-columns:1fr; } .wrap { padding:18px 12px 36px; } }
-  </style>
-</head>
-<body>
-  <main class="wrap">
-    <section class="hero">
-      <h1>던클리 서약 종합</h1>
-      <p class="desc">던클리에 등록된 타임라인 기록을 기준으로, 어떤 서약이 많이 집계됐는지 조회하는 페이지입니다.</p>
-      <div class="notice">해당 통계는 단순 집계이며, 실제 게임 내 드랍 확률이 요일이나 시간대에 따라 달라진다는 의미가 아닙니다.</div>
-    </section>
-
-    <section class="section">
-      <div class="sectionTitle"><h2>요일별 서약 순위</h2><span class="sub">요일별 TOP 3</span></div>
-      <div class="axisGrid">${renderAxisCards(stats.weekdayItemLeaders)}</div>
-    </section>
-
-    <section class="section">
-      <div class="sectionTitle"><h2>시간대별 서약 순위</h2><span class="sub">00시 ~ 24시, 1시간 단위</span></div>
-      <div class="axisGrid hourGrid">${renderAxisCards(stats.hourItemLeaders)}</div>
-    </section>
-  </main>
-</body>
-</html>`;
-}
-
 function registerDuncleOathStatsFeature(app, db, options = {}) {
   initDuncleOathStatsTables(db);
 
@@ -4443,13 +4735,6 @@ function registerDuncleOathStatsFeature(app, db, options = {}) {
       console.error("[Duncle Oath Stats API]", error);
       return res.status(500).json({ ok: false, message: "서약 드랍 로그 저장 중 서버 오류가 발생했습니다." });
     }
-  });
-
-  app.get("/duncle/oath-stats", (req, res) => {
-    res.send(renderOathStatsPublicPage(db, {
-      weekKey: req.query.weekKey || req.query.week_key || "all",
-      source: req.query.source || "all",
-    }));
   });
 
   app.get(`/${adminPath}/duncle/oath-stats`, (req, res) => {
