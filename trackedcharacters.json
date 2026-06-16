@@ -576,6 +576,16 @@
   },
   {
     "server_id": "cain",
+    "character_name": "퍽종호",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "브종호",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
     "character_name": "뿌잉뽀잉런처",
     "memo": ""
   },
@@ -597,6 +607,21 @@
   {
     "server_id": "cain",
     "character_name": "뿌잉뽀잉라핌",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "뿌잉뽀잉데몬",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "뿌잉뽀잉브레",
+    "memo": ""
+  },
+  {
+    "server_id": "cain",
+    "character_name": "뿌잉뽀잉인파",
     "memo": ""
   }
 ]
