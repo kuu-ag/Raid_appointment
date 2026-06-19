@@ -3329,7 +3329,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "박종민", "박종민", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "정상화", "정상화", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
