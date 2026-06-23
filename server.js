@@ -14,8 +14,11 @@ import { registerHomeworkFeature } from "./homeworkFeature.js";
 
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "public")));
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: true }));
@@ -108,8 +111,6 @@ const DEFAULT_RAIDS = [
 // =====================
 // DB init
 // =====================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data.sqlite");
 const db = new Database(DB_PATH);
 
@@ -223,6 +224,50 @@ ensureColumn("raids", "sort_order", "sort_order INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 ensureColumn("raids", "is_custom", "is_custom INTEGER NOT NULL DEFAULT 0");
 ensureColumn("raids", "created_at", "created_at TEXT NOT NULL DEFAULT ''");
+
+
+function installDuncleAdminOathShortcut(app, adminPath) {
+  const cleanAdminPath = String(adminPath || "duncle_hidden").replace(/^\/+|\/+$/g, "");
+  const avgAdminPath = `/${cleanAdminPath}/duncle`;
+  const oathAdminUrl = `/${cleanAdminPath}/duncle/oath-stats?weekKey=all&source=all`;
+
+  app.use((req, res, next) => {
+    const requestPath = String(req.path || "").replace(/\/+$/g, "") || "/";
+    if (req.method !== "GET" || requestPath !== avgAdminPath) return next();
+
+    const originalSend = res.send.bind(res);
+    res.send = (body) => {
+      let html = typeof body === "string" ? body : body?.toString?.() ?? body;
+
+      if (typeof html === "string" && html.includes("던클리 평균") && !html.includes(oathAdminUrl)) {
+        const buttonHtml = `<a class="duncle-oath-admin-shortcut" href="${oathAdminUrl}">서약별 통계 →</a>`;
+        const styleHtml = `<style>
+          .duncle-admin-title-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px;}
+          .duncle-oath-admin-shortcut{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:1px solid #334155;border-radius:10px;padding:10px 14px;background:#111827;color:#dbeafe;font-weight:900;white-space:nowrap;}
+          .duncle-oath-admin-shortcut:hover{background:#1e293b;border-color:#6366f1;color:#fff;}
+          @media(max-width:720px){.duncle-admin-title-row{align-items:flex-start;flex-direction:column}.duncle-oath-admin-shortcut{width:100%;}}
+        </style>`;
+
+        html = html.includes("</head>") ? html.replace("</head>", `${styleHtml}</head>`) : `${styleHtml}${html}`;
+
+        const titleRegex = /(<h1[^>]*>[^<]*던클리 평균[^<]*<\/h1>)/;
+        if (titleRegex.test(html)) {
+          html = html.replace(titleRegex, `<div class="duncle-admin-title-row">$1${buttonHtml}</div>`);
+        } else if (html.includes("<body>")) {
+          html = html.replace("<body>", `<body><div style="max-width:1480px;margin:16px auto 0;padding:0 24px;text-align:right;">${buttonHtml}</div>`);
+        } else {
+          html = `${buttonHtml}${html}`;
+        }
+      }
+
+      return originalSend(html);
+    };
+
+    return next();
+  });
+}
+
+installDuncleAdminOathShortcut(app, process.env.DUNCLE_ADMIN_PATH || "duncle_hidden");
 
 registerDuncleDropRateFeature(app, db, {
   adminPath: process.env.DUNCLE_ADMIN_PATH || "duncle_hidden",
@@ -3549,7 +3594,7 @@ const DUNCLE_OATH_ITEM_NAMES = [
   "태동하는 울림의 무리 서약",
   "찬란한 신념의 정화 서약",
   "태초에 고동치는 마력 서약",
-  "근원에 닿는 자연 서약",
+  "근원에 닿은 자연 서약",
   "초월하는 한계 서약",
   "세계를 태우는 용투 서약",
   "현실이 된 이상 속 황금 서약",
@@ -3569,11 +3614,24 @@ function normalizeOathItemKey(value) {
 
 const DUNCLE_OATH_ITEM_KEYS = DUNCLE_OATH_ITEM_NAMES.map((name) => ({ name, key: normalizeOathItemKey(name) }));
 
+const DUNCLE_OATH_ITEM_ALIAS_MAP = new Map([
+  ["근원에 닿는 자연 서약", "근원에 닿은 자연 서약"],
+  ["근원에 닿은 자연의 서약", "근원에 닿은 자연 서약"],
+  ["근원에 닿는 자연의 서약", "근원에 닿은 자연 서약"],
+  ["근원에 닿은 자연", "근원에 닿은 자연 서약"],
+  ["근원에 닿는 자연", "근원에 닿은 자연 서약"],
+].map(([alias, canonical]) => [normalizeOathItemKey(alias), canonical]));
+
 function normalizeKnownOathItemName(value) {
   const key = normalizeOathItemKey(value);
   if (!key) return "";
+
+  const alias = DUNCLE_OATH_ITEM_ALIAS_MAP.get(key);
+  if (alias) return alias;
+
   const exact = DUNCLE_OATH_ITEM_KEYS.find((row) => row.key === key);
   if (exact) return exact.name;
+
   const included = DUNCLE_OATH_ITEM_KEYS.find((row) => key.includes(row.key) || row.key.includes(key));
   return included ? included.name : "";
 }
@@ -4139,7 +4197,7 @@ function renderOathStatsAdminPage(db, options = {}) {
 
     <section class="card">
       <h2>감지된 서약 목록</h2>
-      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 11종이 표시됩니다.</p>
+      <p class="cardDesc">DB에 저장된 서약명을 기준으로 자동 구성됩니다. 정상적으로 쌓이면 12종이 표시됩니다.</p>
       <div class="chips">${detectedItems}</div>
     </section>
 
