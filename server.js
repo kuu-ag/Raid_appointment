@@ -57,13 +57,23 @@ const GRADE_SORT = {
 
 const DEFAULT_RAIDS = [
   {
-    raid_key: "dirige",
-    label: "디레지에",
-    img: "/images/dirige.png",
+    raid_key: "mikaela",
+    label: "미카엘라",
+    img: "/images/mikaela.png",
     default_buffer_slots: 3,
     default_dealer_slots: 9,
     raid_type: "normal",
     sort_order: 1,
+    is_custom: 0,
+  },
+  {
+    raid_key: "mikaela-hard",
+    label: "미카엘라 : 하드",
+    img: "/images/mikaela_hard.png",
+    default_buffer_slots: 3,
+    default_dealer_slots: 9,
+    raid_type: "normal",
+    sort_order: 2,
     is_custom: 0,
   },
   {
@@ -73,7 +83,7 @@ const DEFAULT_RAIDS = [
     default_buffer_slots: 3,
     default_dealer_slots: 9,
     raid_type: "normal",
-    sort_order: 2,
+    sort_order: 3,
     is_custom: 0,
   },
   {
@@ -83,7 +93,7 @@ const DEFAULT_RAIDS = [
     default_buffer_slots: 2,
     default_dealer_slots: 6,
     raid_type: "normal",
-    sort_order: 3,
+    sort_order: 4,
     is_custom: 0,
   },
   {
@@ -93,7 +103,7 @@ const DEFAULT_RAIDS = [
     default_buffer_slots: 3,
     default_dealer_slots: 9,
     raid_type: "normal",
-    sort_order: 4,
+    sort_order: 5,
     is_custom: 0,
   },
   {
@@ -103,7 +113,7 @@ const DEFAULT_RAIDS = [
     default_buffer_slots: 0,
     default_dealer_slots: 0,
     raid_type: "updoong",
-    sort_order: 5,
+    sort_order: 6,
     is_custom: 0,
   },
 ];
@@ -301,6 +311,9 @@ function seedDefaultRaids() {
       nowISO()
     );
   }
+
+  // 기존 DB에 남아 있을 수 있는 디레지에 일반 모드는 기본 목록에서 숨깁니다.
+  db.prepare(`UPDATE raids SET is_active=0 WHERE raid_key='dirige' AND is_custom=0`).run();
 }
 
 // =====================
