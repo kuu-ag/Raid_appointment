@@ -424,6 +424,79 @@ function cleanupCompletedNormalApplications(raidKey, dateKst) {
   return Number(result?.changes || 0);
 }
 
+function markNormalPartiesCompletedUntil(raidKey, dateKst, untilPartyIndex) {
+  const raid = raidByKey(raidKey, true);
+  const limit = Math.max(1, Math.min(999, Math.floor(Number(untilPartyIndex || 0))));
+  if (!raid || raid.raid_type === "updoong" || !limit) return { disabledCount: 0, deletedLineups: 0 };
+
+  const seatRows = db
+    .prepare(
+      `
+      SELECT application_id, role, COUNT(*) AS cnt
+      FROM raid_lineups
+      WHERE raid_key=?
+        AND date_kst=?
+        AND party_index BETWEEN 1 AND ?
+        AND application_id IS NOT NULL
+      GROUP BY application_id, role
+    `
+    )
+    .all(raidKey, dateKst, limit);
+
+  const usageMap = new Map();
+  for (const row of seatRows) {
+    const appId = row.application_id;
+    if (!appId) continue;
+    if (!usageMap.has(appId)) usageMap.set(appId, { usedBuffers: 0, usedDealers: 0 });
+    const u = usageMap.get(appId);
+    if (row.role === "buffer") u.usedBuffers += row.cnt || 0;
+    else u.usedDealers += row.cnt || 0;
+  }
+
+  for (const [appId, u] of usageMap.entries()) {
+    const appRow = db.prepare(`SELECT dealer_count, buffer_count FROM applications WHERE id=?`).get(appId);
+    if (!appRow) continue;
+
+    const newDealer = Math.max(0, Number(appRow.dealer_count || 0) - (u.usedDealers || 0));
+    const newBuffer = Math.max(0, Number(appRow.buffer_count || 0) - (u.usedBuffers || 0));
+    db.prepare(`UPDATE applications SET dealer_count=?, buffer_count=? WHERE id=?`).run(newDealer, newBuffer, appId);
+  }
+
+  const insertDisabled = db.prepare(
+    `
+    INSERT INTO raid_disabled_parties(date_kst, raid_key, party_index)
+    VALUES(?, ?, ?)
+    ON CONFLICT(date_kst, raid_key, party_index) DO NOTHING
+  `
+  );
+
+  let disabledCount = 0;
+  const tx = db.transaction(() => {
+    for (let p = 1; p <= limit; p++) {
+      const result = insertDisabled.run(dateKst, raidKey, p);
+      disabledCount += Number(result?.changes || 0);
+    }
+  });
+  tx();
+
+  const deleted = db
+    .prepare(
+      `
+      DELETE FROM raid_lineups
+      WHERE raid_key=?
+        AND date_kst=?
+        AND party_index BETWEEN 1 AND ?
+    `
+    )
+    .run(raidKey, dateKst, limit);
+
+  cleanupCompletedNormalApplications(raidKey, dateKst);
+
+  return {
+    disabledCount,
+    deletedLineups: Number(deleted?.changes || 0),
+  };
+}
 
 function isPlaceholderLineupName(name) {
   const v = String(name || "").trim();
@@ -1442,6 +1515,28 @@ function layout(body, title = "레이드 예약 사이트", options = {}) {
       if(!f) return;
       const raidInput = document.getElementById("deleteRaidInput");
       const partyInput = document.getElementById("deletePartyIndexInput");
+      if(!raidInput || !partyInput) return;
+      raidInput.value = raidKey;
+      partyInput.value = String(partyIndex);
+      f.submit();
+    }
+    function deletePartiesUntil(raidKey){
+      const raw = prompt("몇 기수까지 삭제할까요?\\n예) 40을 입력하면 1기수부터 40기수까지 삭제됩니다.");
+      if(raw === null) return;
+
+      const partyIndex = parseInt(String(raw).trim(), 10);
+      if(!Number.isInteger(partyIndex) || partyIndex < 1){
+        alert("1 이상의 정수를 입력해 주세요.");
+        return;
+      }
+
+      const msg = "1기수부터 " + partyIndex + "기수까지 삭제하시겠습니까?\\n(해당 범위에 배치된 인원은 진행 처리되고, 공대 진행도 초기화 전까지 해당 기수는 비활성 상태가 됩니다.)";
+      if(!confirm(msg)) return;
+
+      const f = document.getElementById("deletePartiesUntilForm");
+      if(!f) return;
+      const raidInput = document.getElementById("deletePartiesUntilRaidInput");
+      const partyInput = document.getElementById("deletePartiesUntilIndexInput");
       if(!raidInput || !partyInput) return;
       raidInput.value = raidKey;
       partyInput.value = String(partyIndex);
@@ -2811,7 +2906,7 @@ app.post(`${ADMIN_BASE}/streamer-reserve`, requireAdmin, (req, res) => {
        confirmed, is_streamer)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0)
   `
-  ).run(nowISO(), dateKst, raid, "streamer", "향수사요", "향수사요", dealer_count, buffer_count);
+  ).run(nowISO(), dateKst, raid, "streamer", "데본베일", "데본베일", dealer_count, buffer_count);
 
   return res.redirect(`${ADMIN_BASE}/raid`);
 });
@@ -3231,6 +3326,7 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
           </div>
           <div class="row">
             <a class="btn btnGhost" href="${esc(ADMIN_BASE)}/list?raid=${encodeURIComponent(raid)}&sort=grade">신청목록</a>
+            <button class="btn btnDanger" type="button" onclick="deletePartiesUntil('${esc(raid)}')">기수삭제</button>
             <form method="POST" action="${esc(ADMIN_BASE)}/lineup/reset" style="margin:0;display:inline;">
               <input type="hidden" name="raid" value="${esc(raid)}"/>
               <button class="btn btnDanger" type="submit"
@@ -3255,6 +3351,11 @@ app.get(`${ADMIN_BASE}/lineup`, requireAdmin, (req, res) => {
         <form id="deletePartyForm" method="POST" action="${esc(ADMIN_BASE)}/lineup/delete-party" style="display:none;">
           <input type="hidden" id="deleteRaidInput" name="raid" value="${esc(raid)}"/>
           <input type="hidden" id="deletePartyIndexInput" name="party_index" value=""/>
+        </form>
+
+        <form id="deletePartiesUntilForm" method="POST" action="${esc(ADMIN_BASE)}/lineup/delete-parties-until" style="display:none;">
+          <input type="hidden" id="deletePartiesUntilRaidInput" name="raid" value="${esc(raid)}"/>
+          <input type="hidden" id="deletePartiesUntilIndexInput" name="party_index" value=""/>
         </form>
       </div>
     `,
@@ -3384,6 +3485,22 @@ app.post(`${ADMIN_BASE}/lineup/save-up`, requireAdmin, (req, res) => {
   }
 
   return res.redirect(`${ADMIN_BASE}/lineup?raid=updoong`);
+});
+
+app.post(`${ADMIN_BASE}/lineup/delete-parties-until`, requireAdmin, (req, res) => {
+  const raid = String(req.body.raid || "");
+  if (!raidByKey(raid)) return res.redirect(`${ADMIN_BASE}/raid`);
+  if (raidDisplayType(raid) === "updoong") return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+
+  const partyIndex = Math.floor(Number(req.body.party_index || 0));
+  if (!Number.isInteger(partyIndex) || partyIndex < 1) {
+    return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
+  }
+
+  const dateKst = getActiveDay(raid);
+  markNormalPartiesCompletedUntil(raid, dateKst, partyIndex);
+
+  return res.redirect(`${ADMIN_BASE}/lineup?raid=${encodeURIComponent(raid)}`);
 });
 
 app.post(`${ADMIN_BASE}/lineup/delete-party`, requireAdmin, (req, res) => {
